@@ -3,8 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 
 // Defense-in-depth for /profile Server Actions, same rationale as requireAdmin(): proxy.ts
 // already gates /profile by route, but Server Actions are independently POST-reachable.
-// Unlike requireAdmin, no role check — any active, authenticated profile qualifies (all four
+// Unlike requireAdmin, no role check — any active, authenticated person qualifies (all four
 // roles have /profile access).
+//
+// Returns BOTH ids, and callers must not mix them up: `personId` is the FK value to write into
+// any `person_id` column (educational_documents, dependents, etc). `authUserId` is the raw
+// Supabase auth id — storage bucket policies check `(storage.foldername(name))[1] = auth.uid()`
+// and were not changed by the persons/user_accounts split, so any storage path built from the
+// current user must keep using `authUserId`, not `personId`.
 export async function requireActiveUser() {
   const supabase = await createClient();
   const {
@@ -12,15 +18,15 @@ export async function requireActiveUser() {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, status")
-    .eq("id", user.id)
+  const { data: account } = await supabase
+    .from("user_accounts")
+    .select("person_id, status, persons(status)")
+    .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  if (!profile || profile.status !== "Active") {
+  if (!account || account.status !== "Active" || account.persons?.status !== "Active") {
     throw new Error("Forbidden");
   }
 
-  return { supabase, userId: profile.id };
+  return { supabase, personId: account.person_id as string, authUserId: user.id };
 }

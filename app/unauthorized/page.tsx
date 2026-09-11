@@ -18,21 +18,21 @@ export default async function UnauthorizedPage({
   let roleName = "Pending";
 
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name, role_id")
-      .eq("id", user.id)
+    const { data: account } = await supabase
+      .from("user_accounts")
+      .select("person_id, email, persons(full_name)")
+      .eq("auth_user_id", user.id)
       .maybeSingle();
 
-    displayName = profile?.display_name ?? user.email ?? "Unknown user";
+    displayName = account?.persons?.full_name ?? account?.email ?? user.email ?? "Unknown user";
 
-    if (profile?.role_id) {
-      const { data: role } = await supabase
-        .from("roles")
-        .select("name")
-        .eq("id", profile.role_id)
-        .maybeSingle();
-      roleName = role?.name ?? "Pending";
+    if (account?.person_id) {
+      const { data: roleRows } = await supabase
+        .from("user_roles")
+        .select("roles(name)")
+        .eq("person_id", account.person_id);
+      const names = (roleRows ?? []).map((r) => r.roles?.name).filter(Boolean);
+      roleName = names[0] ?? "Pending";
     }
   }
 

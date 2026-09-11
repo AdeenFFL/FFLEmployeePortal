@@ -1,0 +1,64 @@
+# Fauji Food Employee Portal — Code Ownership
+# Fill in real GitHub/GitLab usernames or team handles before committing.
+# More-specific paths further down override less-specific ones above them —
+# keep the shared/base-app rules at the top, module folders below.
+
+# ---------------------------------------------------------------------------
+# Shared files — changes here affect every module. Core/platform team review
+# required regardless of who authors the change (SOP Section 9.1).
+# ---------------------------------------------------------------------------
+/proxy.ts                          @core-platform-team
+/lib/auth/                         @core-platform-team
+/lib/supabase/                     @core-platform-team
+/types/database.ts                 @core-platform-team
+/app/(protected)/sidebar.tsx       @core-platform-team
+/app/(protected)/topbar.tsx        @core-platform-team
+/app/(protected)/layout.tsx        @core-platform-team
+/app/auth/                         @core-platform-team
+/app/login/                        @core-platform-team
+/supabase/migrations/0001_init_auth.sql              @core-platform-team
+/supabase/migrations/0002_admin_module.sql           @core-platform-team
+/supabase/migrations/0007_org_hierarchy.sql          @core-platform-team
+/supabase/migrations/0008_org_hierarchy_fix_and_identity_split.sql @core-platform-team
+# Any NEW core-schema migration a module team proposes still needs to land in
+# a file core-platform-team is codeowner of — add new 00XX_core_*.sql patterns
+# here as they're created, or adopt a naming convention (00XX_core_*.sql) and
+# replace the two explicit lines above with a single glob: 0*_core_*.sql
+
+# ---------------------------------------------------------------------------
+# Base app surfaces — shared, not module-specific, still core team's call
+# ---------------------------------------------------------------------------
+/app/(protected)/admin/            @core-platform-team
+/app/(protected)/profile/          @core-platform-team
+/app/(protected)/company-updates/  @core-platform-team
+/app/(protected)/home/             @core-platform-team
+
+# ---------------------------------------------------------------------------
+# Module folders — each team owns its own, no cross-review required for
+# changes contained entirely within it (SOP Section 9.1)
+# ---------------------------------------------------------------------------
+/app/(protected)/fps/   @fps-team
+/app/(protected)/mess/  @mess-team
+/app/(protected)/hse/   @hse-team
+/app/(protected)/hr/    @hr-team
+/app/(protected)/it/    @it-team
+/app/(protected)/ai/    @ai-team
+
+# ---------------------------------------------------------------------------
+# Module-owned Supabase schemas/migrations — mirror the module folders above.
+# Add explicit lines per new migration file as each module creates them.
+# ---------------------------------------------------------------------------
+# /supabase/migrations/00XX_fps_*.sql   @fps-team
+# /supabase/migrations/00XX_mess_*.sql  @mess-team
+# /supabase/migrations/00XX_hse_*.sql   @hse-team
+# /supabase/migrations/00XX_hr_*.sql    @hr-team
+# /supabase/migrations/00XX_it_*.sql    @it-team
+# /supabase/migrations/00XX_ai_*.sql    @ai-team
+
+# ---------------------------------------------------------------------------
+# Shared UI primitives — additive changes don't need cross-team review by
+# convention, but CODEOWNERS can't express "additive only" — default to core
+# team as a light-touch reviewer; teams can request a faster path if this
+# becomes a bottleneck.
+# ---------------------------------------------------------------------------
+/components/  @core-platform-team

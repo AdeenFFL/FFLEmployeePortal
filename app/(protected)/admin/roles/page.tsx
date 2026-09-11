@@ -32,15 +32,21 @@ export default async function AdminRolesPage({
         .eq("role_id", selectedRoleId)
     : { data: [] };
 
-  const { data: profiles } = await supabase.from("profiles").select("id, display_name, role_id");
-  const displayNameById = new Map((profiles ?? []).map((p) => [p.id, p.display_name]));
+  const { data: persons } = await supabase.from("persons").select("id, full_name");
+  const displayNameById = new Map((persons ?? []).map((p) => [p.id, p.full_name]));
 
   // Per-role user count, for the role list's subtitle (falls back to this when the role has no
-  // hand-written description).
+  // hand-written description). Reads user_roles rather than a single role_id column now that a
+  // person can hold more than one role — the count is "how many people hold this role", which
+  // may double-count a person who holds it twice (shouldn't happen, but not enforced by a
+  // uniqueness constraint on user_roles).
+  const { data: roleAssignments } = await supabase.from("user_roles").select("role_id");
   const userCountByRoleId = new Map<string, number>();
-  for (const p of profiles ?? []) {
-    if (!p.role_id) continue;
-    userCountByRoleId.set(p.role_id, (userCountByRoleId.get(p.role_id) ?? 0) + 1);
+  for (const assignment of roleAssignments ?? []) {
+    userCountByRoleId.set(
+      assignment.role_id,
+      (userCountByRoleId.get(assignment.role_id) ?? 0) + 1,
+    );
   }
 
   const grantByPermissionId = new Map((grants ?? []).map((g) => [g.permission_id, g]));

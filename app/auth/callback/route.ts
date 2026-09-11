@@ -1,7 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ROLE_HOME_PATH } from "@/lib/auth/roles";
+import { ROLE_HOME_PATH, ROLE_PRIORITY } from "@/lib/auth/roles";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
@@ -32,27 +32,30 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  let { data: profile } = await supabase
-    .from("profiles")
-    .select("role_id, status")
-    .eq("id", user.id)
-    .maybeSingle();
-
   const admin = createAdminClient();
 
-  // F-03: no self-registration. First-ever login creates a profile row rather than granting
-  // access automatically — unless an Admin pre-provisioned this email via the invited_users
-  // staging table (SCR-33 "Add New User"), in which case its role/department/site apply
-  // immediately instead of landing on /pending-setup.
-  if (!profile) {
+  let { data: account } = await supabase
+    .from("user_accounts")
+    .select("person_id, status")
+    .eq("auth_user_id", user.id)
+    .maybeSingle();
+
+  let personId: string;
+  let accountStatus: string;
+
+  // F-03: no self-registration. First-ever login creates a persons + user_accounts row rather
+  // than granting access automatically — unless an Admin pre-provisioned this email via the
+  // invited_users staging table (SCR-33 "Add New User"), in which case its role/department/site
+  // apply immediately instead of landing on /pending-setup.
+  if (!account) {
     const displayName =
       (user.user_metadata?.full_name as string | undefined) ??
       (user.user_metadata?.name as string | undefined) ??
       user.email ??
       "Unknown User";
 
-    // Store the profile email normalized so later admin-side lookups by email (e.g. checking
-    // whether a real profile already exists for an invite) match reliably regardless of the
+    // Store the login email normalized so later admin-side lookups by email (e.g. checking
+    // whether a real account already exists for an invite) match reliably regardless of the
     // casing Azure AD/Google happens to return.
     const normalizedEmail = user.email!.trim().toLowerCase();
 
@@ -64,64 +67,100 @@ export async function GET(request: NextRequest) {
       .eq("email", normalizedEmail)
       .maybeSingle();
 
-    const { data: created, error: insertError } = await admin
-      .from("profiles")
+    const { data: createdPerson, error: personError } = await admin
+      .from("persons")
       .insert({
-        id: user.id,
-        email: normalizedEmail,
-        display_name: displayName, // real OAuth name always wins over anything on the invite
-        role_id: invitation?.role_id ?? null,
+        full_name: displayName, // real OAuth name always wins over anything on the invite
         status: invitation?.status ?? "Active",
-        department: invitation?.department ?? null,
-        site: invitation?.site ?? null,
         notes: invitation?.notes ?? null,
         employee_code: invitation?.employee_code ?? null,
         designation: invitation?.designation ?? null,
         date_of_joining: invitation?.date_of_joining ?? null,
-        last_login_at: new Date().toISOString(),
       })
-      .select("role_id, status")
+      .select("id, status")
       .single();
 
-    if (insertError) {
+    if (personError || !createdPerson) {
       return NextResponse.redirect(
         new URL("/login?error=provisioning_failed", request.url),
       );
     }
-    profile = created;
+
+    const { data: createdAccount, error: accountError } = await admin
+      .from("user_accounts")
+      .insert({
+        person_id: createdPerson.id,
+        auth_user_id: user.id,
+        email: normalizedEmail,
+        auth_method: "microsoft",
+        last_login_at: new Date().toISOString(),
+      })
+      .select("person_id, status")
+      .single();
+
+    if (accountError || !createdAccount) {
+      // Don't leave an orphaned persons row with no account behind.
+      await admin.from("persons").delete().eq("id", createdPerson.id);
+      return NextResponse.redirect(
+        new URL("/login?error=provisioning_failed", request.url),
+      );
+    }
+
+    if (invitation?.role_id) {
+      const { error: roleError } = await admin.from("user_roles").insert({
+        person_id: createdPerson.id,
+        role_id: invitation.role_id,
+      });
+      if (roleError) {
+        await admin.from("user_accounts").delete().eq("person_id", createdPerson.id);
+        await admin.from("persons").delete().eq("id", createdPerson.id);
+        return NextResponse.redirect(
+          new URL("/login?error=provisioning_failed", request.url),
+        );
+      }
+    }
 
     // Best-effort consume. If this fails the row lingers harmlessly — the admin users screen
-    // hides any invitation whose email already has a real profile, so it never resurfaces.
+    // hides any invitation whose email already has a real account, so it never resurfaces.
     if (invitation) {
       await admin.from("invited_users").delete().eq("email", normalizedEmail);
     }
+
+    account = createdAccount;
+    personId = createdAccount.person_id;
+    accountStatus = createdAccount.status;
   } else {
     await admin
-      .from("profiles")
+      .from("user_accounts")
       .update({ last_login_at: new Date().toISOString() })
-      .eq("id", user.id);
+      .eq("auth_user_id", user.id);
+
+    personId = account.person_id;
+    accountStatus = account.status;
   }
 
-  if (profile.status !== "Active") {
+  if (accountStatus !== "Active") {
     return NextResponse.redirect(
       new URL("/unauthorized?reason=inactive", request.url),
     );
   }
 
-  if (!profile.role_id) {
+  const { data: roleRows } = await supabase
+    .from("user_roles")
+    .select("roles(name)")
+    .eq("person_id", personId);
+
+  const roleNames = (roleRows ?? []).map((r) => r.roles?.name).filter(Boolean) as string[];
+
+  if (roleNames.length === 0) {
     return NextResponse.redirect(new URL("/pending-setup", request.url));
   }
 
-  const { data: role } = await supabase
-    .from("roles")
-    .select("name")
-    .eq("id", profile.role_id)
-    .maybeSingle();
-
   // Falls back to /home for any role name not in the map (e.g. a custom role created via
   // "Duplicate Role") — "unknown_role" stays reserved for the genuine data-integrity case where
-  // role_id points at nothing.
-  const homePath = role ? (ROLE_HOME_PATH[role.name] ?? "/home") : undefined;
+  // a person has role rows that don't resolve to any known role name.
+  const priorityRole = ROLE_PRIORITY.find((r) => roleNames.includes(r));
+  const homePath = priorityRole ? (ROLE_HOME_PATH[priorityRole] ?? "/home") : undefined;
 
   return NextResponse.redirect(
     new URL(homePath ?? "/login?error=unknown_role", request.url),

@@ -20,7 +20,7 @@ function readOrgUnitFormFields(formData: FormData) {
 }
 
 export async function createOrUpdateOrgUnit(type: OrgUnitType, formData: FormData) {
-  const { supabase, adminProfileId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requireAdmin();
   const path = PATH_BY_TYPE[type];
   const id = String(formData.get("id") ?? "").trim() || null;
   const fields = readOrgUnitFormFields(formData);
@@ -35,7 +35,7 @@ export async function createOrUpdateOrgUnit(type: OrgUnitType, formData: FormDat
     if (error) throw new Error(error.message);
     await logAuditEvent({
       supabase,
-      actorId: adminProfileId,
+      actorId: personId,
       actorLabel,
       module: "admin",
       action: "MODIFIED",
@@ -46,7 +46,7 @@ export async function createOrUpdateOrgUnit(type: OrgUnitType, formData: FormDat
     if (error) throw new Error(error.message);
     await logAuditEvent({
       supabase,
-      actorId: adminProfileId,
+      actorId: personId,
       actorLabel,
       module: "admin",
       action: "CREATED",
@@ -58,7 +58,7 @@ export async function createOrUpdateOrgUnit(type: OrgUnitType, formData: FormDat
 }
 
 export async function setOrgUnitStatus(type: OrgUnitType, id: string, isActive: boolean) {
-  const { supabase, adminProfileId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requireAdmin();
 
   const { data: unit } = await supabase
     .from("org_units")
@@ -74,7 +74,7 @@ export async function setOrgUnitStatus(type: OrgUnitType, id: string, isActive: 
 
   await logAuditEvent({
     supabase,
-    actorId: adminProfileId,
+    actorId: personId,
     actorLabel,
     module: "admin",
     action: "MODIFIED",

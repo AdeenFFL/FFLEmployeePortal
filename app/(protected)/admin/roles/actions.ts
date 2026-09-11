@@ -21,7 +21,7 @@ export async function saveRolePermissions(
   roleId: string,
   changes: { permissionId: string; granted: boolean }[],
 ) {
-  const { supabase, adminProfileId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requireAdmin();
   if (changes.length === 0) return;
 
   const { data: role } = await supabase
@@ -64,7 +64,7 @@ export async function saveRolePermissions(
 
     await logAuditEvent({
       supabase,
-      actorId: adminProfileId,
+      actorId: personId,
       actorLabel,
       module: "admin",
       action: "MODIFIED",
@@ -85,7 +85,7 @@ export async function saveRolePermissions(
 // privileges, only their page visibility. Making those checks permission-driven instead of
 // name-driven is a bigger change than this button.
 export async function duplicateRole(roleId: string) {
-  const { supabase, adminProfileId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requireAdmin();
 
   const { data: source } = await supabase
     .from("roles")
@@ -122,7 +122,7 @@ export async function duplicateRole(roleId: string) {
 
   await logAuditEvent({
     supabase,
-    actorId: adminProfileId,
+    actorId: personId,
     actorLabel,
     module: "admin",
     action: "CREATED",
@@ -134,7 +134,7 @@ export async function duplicateRole(roleId: string) {
 }
 
 export async function renameRole(formData: FormData) {
-  const { supabase, adminProfileId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requireAdmin();
 
   const id = String(formData.get("id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
@@ -154,7 +154,7 @@ export async function renameRole(formData: FormData) {
 
   await logAuditEvent({
     supabase,
-    actorId: adminProfileId,
+    actorId: personId,
     actorLabel,
     module: "admin",
     action: "MODIFIED",
@@ -165,7 +165,7 @@ export async function renameRole(formData: FormData) {
 }
 
 export async function deleteRole(id: string) {
-  const { supabase, adminProfileId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requireAdmin();
 
   const { data: role } = await supabase
     .from("roles")
@@ -176,7 +176,7 @@ export async function deleteRole(id: string) {
   if (role.is_system_role) throw new Error("System roles cannot be deleted.");
 
   const { count } = await supabase
-    .from("profiles")
+    .from("user_roles")
     .select("id", { count: "exact", head: true })
     .eq("role_id", id);
   if (count && count > 0) {
@@ -188,7 +188,7 @@ export async function deleteRole(id: string) {
 
   await logAuditEvent({
     supabase,
-    actorId: adminProfileId,
+    actorId: personId,
     actorLabel,
     module: "admin",
     action: "DELETED",

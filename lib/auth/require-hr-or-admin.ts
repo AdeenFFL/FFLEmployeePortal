@@ -11,26 +11,31 @@ export async function requireHrOrAdmin() {
   } = await supabase.auth.getUser();
   if (!user) throw new Error("Not authenticated");
 
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("id, role_id, status, display_name, email")
-    .eq("id", user.id)
+  const { data: account } = await supabase
+    .from("user_accounts")
+    .select("person_id, status, persons(full_name, personal_email, status)")
+    .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  if (!profile || profile.status !== "Active" || !profile.role_id) {
+  if (!account || account.status !== "Active" || account.persons?.status !== "Active") {
     throw new Error("Forbidden: HR or Admin role required");
   }
 
-  const { data: role } = await supabase
-    .from("roles")
-    .select("name")
-    .eq("id", profile.role_id)
-    .maybeSingle();
+  const { data: roleRows } = await supabase
+    .from("user_roles")
+    .select("roles(name)")
+    .eq("person_id", account.person_id);
 
-  if (role?.name !== "HR" && role?.name !== "Admin") {
+  const roleNames = (roleRows ?? []).map((r) => r.roles?.name).filter(Boolean);
+  const matchedRole = roleNames.includes("Admin")
+    ? "Admin"
+    : roleNames.includes("HR")
+      ? "HR"
+      : null;
+  if (!matchedRole) {
     throw new Error("Forbidden: HR or Admin role required");
   }
 
-  const actorLabel = `${profile.display_name ?? profile.email} (${role.name})`;
-  return { supabase, profileId: profile.id, actorLabel };
+  const actorLabel = `${account.persons?.full_name ?? account.persons?.personal_email} (${matchedRole})`;
+  return { supabase, personId: account.person_id as string, actorLabel };
 }

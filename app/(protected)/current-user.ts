@@ -1,6 +1,6 @@
 import { cache } from "react";
 import { createClient } from "@/lib/supabase/server";
-import { ROLE_HOME_PATH } from "@/lib/auth/roles";
+import { ROLE_HOME_PATH, ROLE_PRIORITY } from "@/lib/auth/roles";
 
 export const getCurrentUserNav = cache(async () => {
   const supabase = await createClient();
@@ -12,21 +12,22 @@ export const getCurrentUserNav = cache(async () => {
   let roleName: string | null = null;
 
   if (user) {
-    const { data: profile } = await supabase
-      .from("profiles")
-      .select("display_name, role_id")
-      .eq("id", user.id)
+    const { data: account } = await supabase
+      .from("user_accounts")
+      .select("person_id, email, persons(full_name)")
+      .eq("auth_user_id", user.id)
       .maybeSingle();
 
-    displayName = profile?.display_name ?? user.email ?? "";
+    displayName = account?.persons?.full_name ?? account?.email ?? user.email ?? "";
 
-    if (profile?.role_id) {
-      const { data: role } = await supabase
-        .from("roles")
-        .select("name")
-        .eq("id", profile.role_id)
-        .maybeSingle();
-      roleName = role?.name ?? null;
+    if (account?.person_id) {
+      const { data: roleRows } = await supabase
+        .from("user_roles")
+        .select("roles(name)")
+        .eq("person_id", account.person_id);
+
+      const roleNames = (roleRows ?? []).map((r) => r.roles?.name).filter(Boolean) as string[];
+      roleName = ROLE_PRIORITY.find((r) => roleNames.includes(r)) ?? roleNames[0] ?? null;
     }
   }
 

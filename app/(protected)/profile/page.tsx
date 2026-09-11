@@ -41,24 +41,30 @@ export default async function ProfilePage({
   searchParams: Promise<{ edit?: string }>;
 }) {
   const { edit } = await searchParams;
-  const { supabase, userId } = await requireActiveUser();
+  const { supabase, personId } = await requireActiveUser();
 
   const { data: profile } = await supabase
-    .from("profiles")
-    .select("*")
-    .eq("id", userId)
+    .from("persons")
+    .select("*, companies(name), org_units(name)")
+    .eq("id", personId)
     .single();
 
   if (!profile) throw new Error("Profile not found.");
 
+  const { data: account } = await supabase
+    .from("user_accounts")
+    .select("email, auth_method")
+    .eq("person_id", personId)
+    .single();
+
   const { data: documents } = await supabase
     .from("educational_documents")
     .select("*")
-    .eq("profile_id", userId)
+    .eq("person_id", personId)
     .order("created_at", { ascending: false });
 
-  const name = profile.display_name ?? profile.email;
-  const subtitle = [profile.designation, profile.department].filter(Boolean).join(" · ");
+  const name = profile.full_name ?? account?.email;
+  const subtitle = [profile.designation, profile.org_units?.name].filter(Boolean).join(" · ");
   const editingPersonal = edit === "personal";
 
   return (
@@ -98,7 +104,7 @@ export default async function ProfilePage({
                   <span className="font-medium text-slate-700">Name</span>
                   <input
                     name="display_name"
-                    defaultValue={profile.display_name ?? ""}
+                    defaultValue={profile.full_name ?? ""}
                     className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
                   />
                 </label>
@@ -162,7 +168,7 @@ export default async function ProfilePage({
               <dl className="grid grid-cols-2 gap-4 text-sm sm:grid-cols-3">
                 <div>
                   <dt className="text-slate-500">Name</dt>
-                  <dd className="font-medium text-slate-800">{profile.display_name ?? "—"}</dd>
+                  <dd className="font-medium text-slate-800">{profile.full_name ?? "—"}</dd>
                 </div>
                 <div>
                   <dt className="text-slate-500">CNIC</dt>
@@ -204,8 +210,8 @@ export default async function ProfilePage({
                 <dd className="font-medium text-slate-800">{profile.employee_code ?? "—"}</dd>
               </div>
               <div>
-                <dt className="text-slate-500">Department</dt>
-                <dd className="font-medium text-slate-800">{profile.department ?? "—"}</dd>
+                <dt className="text-slate-500">Company</dt>
+                <dd className="font-medium text-slate-800">{profile.companies?.name ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Designation</dt>
@@ -213,7 +219,7 @@ export default async function ProfilePage({
               </div>
               <div>
                 <dt className="text-slate-500">Site</dt>
-                <dd className="font-medium text-slate-800">{profile.site ?? "—"}</dd>
+                <dd className="font-medium text-slate-800">{profile.org_units?.name ?? "—"}</dd>
               </div>
               <div>
                 <dt className="text-slate-500">Date of Joining</dt>
@@ -224,7 +230,7 @@ export default async function ProfilePage({
             </dl>
           </div>
 
-          {profile.auth_method === "password" && (
+          {account?.auth_method === "password" && (
             <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
                 Change Password

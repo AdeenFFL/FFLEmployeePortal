@@ -25,18 +25,18 @@ export default async function InsurancePage({
   searchParams: Promise<{ compose?: string; edit?: string }>;
 }) {
   const { compose, edit } = await searchParams;
-  const { supabase, userId } = await requireActiveUser();
+  const { supabase, personId } = await requireActiveUser();
 
   const { data: policy } = await supabase
     .from("insurance_policies")
     .select("*")
-    .eq("profile_id", userId)
+    .eq("person_id", personId)
     .maybeSingle();
 
   const { data: dependents } = await supabase
     .from("dependents")
     .select("*")
-    .eq("profile_id", userId)
+    .eq("person_id", personId)
     .order("created_at");
 
   let panel: { mode: "new" | "edit"; initialValues: Parameters<typeof DependentFormPanel>[0]["initialValues"] } | null =

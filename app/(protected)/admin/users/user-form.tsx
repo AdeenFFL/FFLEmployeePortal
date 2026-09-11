@@ -1,5 +1,5 @@
 import Link from "next/link";
-import type { Role, UserStatus, AuthMethod } from "@/types/database";
+import type { Role, UserStatus, AuthMethod, EmploymentType } from "@/types/database";
 import { inviteOrUpdateUser, setUserPassword } from "./actions";
 
 type UserFormValues = {
@@ -7,15 +7,21 @@ type UserFormValues = {
   email: string;
   display_name: string | null;
   role_id: string | null;
-  department: string | null;
-  site: string | null;
   status: UserStatus;
   notes: string | null;
   employee_code: string | null;
   designation: string | null;
   date_of_joining: string | null;
+  employment_type: EmploymentType | null;
   auth_method: AuthMethod;
 };
+
+const EMPLOYMENT_TYPES: { value: EmploymentType; label: string }[] = [
+  { value: "permanent", label: "Permanent" },
+  { value: "contractual_with_email", label: "Contractual — with official email" },
+  { value: "contractual_no_email", label: "Contractual — no official email" },
+  { value: "third_party_vendor", label: "3rd-party / Vendor" },
+];
 
 const inputClass =
   "rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
@@ -23,14 +29,10 @@ const inputClass =
 export function UserFormPanel({
   mode,
   roles,
-  departmentOptions,
-  siteOptions,
   initialValues,
 }: {
   mode: "new" | "edit";
   roles: Role[];
-  departmentOptions: string[];
-  siteOptions: string[];
   initialValues: UserFormValues;
 }) {
   return (
@@ -135,43 +137,18 @@ export function UserFormPanel({
           </label>
 
           <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Department</span>
+            <span className="font-medium text-slate-700">Employment Type</span>
             <select
-              name="department"
-              defaultValue={initialValues.department ?? ""}
+              name="employment_type"
+              defaultValue={initialValues.employment_type ?? ""}
               className={inputClass}
             >
-              <option value="">— None —</option>
-              {departmentOptions.map((d) => (
-                <option key={d} value={d}>
-                  {d}
+              <option value="">— Select —</option>
+              {EMPLOYMENT_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
                 </option>
               ))}
-              {initialValues.department &&
-                !departmentOptions.includes(initialValues.department) && (
-                  <option value={initialValues.department}>
-                    {initialValues.department} (inactive)
-                  </option>
-                )}
-            </select>
-          </label>
-
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium text-slate-700">Site</span>
-            <select
-              name="site"
-              defaultValue={initialValues.site ?? ""}
-              className={inputClass}
-            >
-              <option value="">— None —</option>
-              {siteOptions.map((s) => (
-                <option key={s} value={s}>
-                  {s}
-                </option>
-              ))}
-              {initialValues.site && !siteOptions.includes(initialValues.site) && (
-                <option value={initialValues.site}>{initialValues.site} (inactive)</option>
-              )}
             </select>
           </label>
 

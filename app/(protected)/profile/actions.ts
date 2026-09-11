@@ -44,7 +44,7 @@ export async function changeOwnPassword(formData: FormData) {
 }
 
 export async function uploadEducationalDocument(formData: FormData) {
-  const { supabase, userId } = await requireActiveUser();
+  const { supabase, personId, authUserId } = await requireActiveUser();
 
   const file = formData.get("document");
   if (!(file instanceof File) || file.size === 0) {
@@ -52,14 +52,17 @@ export async function uploadEducationalDocument(formData: FormData) {
   }
   const documentName = String(formData.get("document_name") ?? "").trim() || file.name;
 
-  const path = `${userId}/education/${crypto.randomUUID()}-${file.name}`;
+  // Storage path MUST use the raw auth id — the storage bucket policy checks
+  // (storage.foldername(name))[1] = auth.uid()::text, which was not changed by the
+  // persons/user_accounts split. The document's owner FK, below, uses the resolved person id.
+  const path = `${authUserId}/education/${crypto.randomUUID()}-${file.name}`;
   const { error: uploadError } = await supabase.storage
     .from("employee-documents")
     .upload(path, file);
   if (uploadError) throw new Error(uploadError.message);
 
   const { error: insertError } = await supabase.from("educational_documents").insert({
-    profile_id: userId,
+    person_id: personId,
     document_name: documentName,
     storage_path: path,
   });
@@ -69,14 +72,14 @@ export async function uploadEducationalDocument(formData: FormData) {
 }
 
 export async function deleteEducationalDocument(documentId: string) {
-  const { supabase, userId } = await requireActiveUser();
+  const { supabase, personId } = await requireActiveUser();
 
   const { data: doc } = await supabase
     .from("educational_documents")
-    .select("id, profile_id, storage_path")
+    .select("id, person_id, storage_path")
     .eq("id", documentId)
     .maybeSingle();
-  if (!doc || doc.profile_id !== userId) throw new Error("Not found.");
+  if (!doc || doc.person_id !== personId) throw new Error("Not found.");
 
   await supabase.storage.from("employee-documents").remove([doc.storage_path]);
   const { error } = await supabase.from("educational_documents").delete().eq("id", documentId);

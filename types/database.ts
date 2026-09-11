@@ -1,7 +1,7 @@
-// Hand-written types mirroring supabase/migrations/0001_init_auth.sql, 0002_admin_module.sql,
-// and 0003_employee_profile.sql, shaped to match what `supabase gen types typescript` would
-// produce (Row/Insert/Update/Relationships per table). No live-generated types exist yet. Once
-// convenient, replace this file with the output of:
+// Hand-written types mirroring supabase/migrations/0001-0008 (persons/user_accounts/user_roles
+// identity split — see 0008_org_hierarchy_fix_and_identity_split.sql), shaped to match what
+// `supabase gen types typescript` would produce (Row/Insert/Update/Relationships per table).
+// No live-generated types exist yet. Once convenient, replace this file with the output of:
 //   npx supabase gen types typescript --project-id <ref> > types/database.ts
 //
 // NOTE: these must stay `type` aliases, not `interface` declarations — interfaces don't get the
@@ -12,9 +12,16 @@ export type UserStatus = "Active" | "Inactive" | "Suspended";
 export type DocumentVerificationStatus = "Pending" | "Verified" | "Rejected";
 export type DependentStatus = "Pending HR Approval" | "Approved" | "Rejected";
 export type OrgUnitType = "Department" | "Site";
+export type OrgUnitSiteType = "plant" | "warehouse" | "shop" | "head_office" | "mess" | "other";
 export type AuditAction = "CREATED" | "MODIFIED" | "DELETED" | "SYNCED";
-export type AuthMethod = "microsoft" | "password";
+export type AuthMethod = "microsoft" | "password" | "phone_otp";
 export type PollStatus = "Open" | "Closed";
+export type PersonType = "employee" | "third_party" | "other";
+export type EmploymentType =
+  | "permanent"
+  | "contractual_with_email"
+  | "contractual_no_email"
+  | "third_party_vendor";
 
 export type Role = {
   id: string;
@@ -40,27 +47,70 @@ export type RolePermission = {
   granted_at: string | null;
 };
 
-export type Profile = {
+export type Company = {
   id: string;
-  email: string;
-  display_name: string | null;
-  role_id: string | null;
-  status: UserStatus;
-  auth_method: AuthMethod;
-  department: string | null;
-  site: string | null;
-  notes: string | null;
-  last_login_at: string | null;
-  employee_code: string | null;
-  designation: string | null;
-  date_of_joining: string | null;
+  code: string;
+  name: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+// Universal identity — anyone the org has a relationship with, whether or not they ever log in.
+// Decoupled from auth.users; see user_accounts for the (optional) login layer.
+export type Person = {
+  id: string;
+  full_name: string;
+  personal_email: string | null;
+  phone: string | null;
   cnic: string | null;
   date_of_birth: string | null;
   address: string | null;
   emergency_contact_name: string | null;
   emergency_contact_phone: string | null;
+  person_type: PersonType;
+  employee_code: string | null;
+  designation: string | null;
+  company_id: string | null;
+  site_id: string | null;
+  employment_type: EmploymentType | null;
+  contract_start_date: string | null;
+  contract_end_date: string | null;
+  date_of_joining: string | null;
+  status: UserStatus;
+  notes: string | null;
   created_at: string;
   updated_at: string;
+};
+
+// The login layer. Only exists for people who need to log in — links persons.id to
+// auth.users.id. A 3rd-party vendor worker can exist as a Person with zero UserAccount rows.
+export type UserAccount = {
+  id: string;
+  person_id: string;
+  auth_user_id: string;
+  email: string;
+  auth_method: AuthMethod;
+  is_external: boolean;
+  sponsoring_company_id: string | null;
+  access_expires_at: string | null;
+  status: UserStatus;
+  last_login_at: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+// Multi-role, optionally company/site-scoped role assignment. Replaces the old single unscoped
+// profiles.role_id column — a person can hold more than one row here.
+export type UserRoleAssignment = {
+  id: string;
+  person_id: string;
+  role_id: string;
+  company_id: string | null;
+  site_id: string | null;
+  granted_by: string | null;
+  granted_at: string;
+  expires_at: string | null;
 };
 
 export type InvitedUser = {
@@ -80,7 +130,7 @@ export type InvitedUser = {
 
 export type EducationalDocument = {
   id: string;
-  profile_id: string;
+  person_id: string;
   document_name: string;
   storage_path: string;
   verification_status: DocumentVerificationStatus;
@@ -89,7 +139,7 @@ export type EducationalDocument = {
 
 export type Dependent = {
   id: string;
-  profile_id: string;
+  person_id: string;
   name: string;
   relationship: string;
   cnic_or_bform: string | null;
@@ -102,7 +152,7 @@ export type Dependent = {
 
 export type InsurancePolicy = {
   id: string;
-  profile_id: string;
+  person_id: string;
   provider: string | null;
   policy_number: string | null;
   coverage_type: string | null;
@@ -118,8 +168,17 @@ export type OrgUnit = {
   type: OrgUnitType;
   description: string | null;
   is_active: boolean;
+  site_type: OrgUnitSiteType | null;
   created_at: string;
   updated_at: string;
+};
+
+// Many-to-many: an org_unit (site or department) can serve more than one company, and a
+// company can have many org_units. See 0007_org_hierarchy.sql for why this isn't a single
+// company_id column on OrgUnit.
+export type OrgUnitCompany = {
+  org_unit_id: string;
+  company_id: string;
 };
 
 export type AuditLog = {
@@ -205,18 +264,66 @@ export type Database = {
             foreignKeyName: "role_permissions_granted_by_fkey";
             columns: ["granted_by"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "persons";
             referencedColumns: ["id"];
           },
         ];
       };
-      profiles: {
-        Row: Profile;
-        Insert: Partial<Profile> & Pick<Profile, "id" | "email">;
-        Update: Partial<Profile>;
+      companies: {
+        Row: Company;
+        Insert: Partial<Company> & Pick<Company, "code" | "name">;
+        Update: Partial<Company>;
+        Relationships: [];
+      };
+      persons: {
+        Row: Person;
+        Insert: Partial<Person> & Pick<Person, "full_name">;
+        Update: Partial<Person>;
         Relationships: [
           {
-            foreignKeyName: "profiles_role_id_fkey";
+            foreignKeyName: "persons_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "persons_site_id_fkey";
+            columns: ["site_id"];
+            isOneToOne: false;
+            referencedRelation: "org_units";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      user_accounts: {
+        Row: UserAccount;
+        Insert: Partial<UserAccount> & Pick<UserAccount, "person_id" | "auth_user_id" | "email">;
+        Update: Partial<UserAccount>;
+        Relationships: [
+          {
+            foreignKeyName: "user_accounts_person_id_fkey";
+            columns: ["person_id"];
+            isOneToOne: true;
+            referencedRelation: "persons";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      user_roles: {
+        Row: UserRoleAssignment;
+        Insert: Partial<UserRoleAssignment> & Pick<UserRoleAssignment, "person_id" | "role_id">;
+        Update: Partial<UserRoleAssignment>;
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_person_id_fkey";
+            columns: ["person_id"];
+            isOneToOne: false;
+            referencedRelation: "persons";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "user_roles_role_id_fkey";
             columns: ["role_id"];
             isOneToOne: false;
             referencedRelation: "roles";
@@ -240,7 +347,7 @@ export type Database = {
             foreignKeyName: "invited_users_invited_by_fkey";
             columns: ["invited_by"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "persons";
             referencedColumns: ["id"];
           },
         ];
@@ -248,42 +355,42 @@ export type Database = {
       educational_documents: {
         Row: EducationalDocument;
         Insert: Partial<EducationalDocument> &
-          Pick<EducationalDocument, "profile_id" | "document_name" | "storage_path">;
+          Pick<EducationalDocument, "person_id" | "document_name" | "storage_path">;
         Update: Partial<EducationalDocument>;
         Relationships: [
           {
-            foreignKeyName: "educational_documents_profile_id_fkey";
-            columns: ["profile_id"];
+            foreignKeyName: "educational_documents_person_id_fkey";
+            columns: ["person_id"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "persons";
             referencedColumns: ["id"];
           },
         ];
       };
       dependents: {
         Row: Dependent;
-        Insert: Partial<Dependent> & Pick<Dependent, "profile_id" | "name" | "relationship">;
+        Insert: Partial<Dependent> & Pick<Dependent, "person_id" | "name" | "relationship">;
         Update: Partial<Dependent>;
         Relationships: [
           {
-            foreignKeyName: "dependents_profile_id_fkey";
-            columns: ["profile_id"];
+            foreignKeyName: "dependents_person_id_fkey";
+            columns: ["person_id"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "persons";
             referencedColumns: ["id"];
           },
         ];
       };
       insurance_policies: {
         Row: InsurancePolicy;
-        Insert: Partial<InsurancePolicy> & Pick<InsurancePolicy, "profile_id">;
+        Insert: Partial<InsurancePolicy> & Pick<InsurancePolicy, "person_id">;
         Update: Partial<InsurancePolicy>;
         Relationships: [
           {
-            foreignKeyName: "insurance_policies_profile_id_fkey";
-            columns: ["profile_id"];
+            foreignKeyName: "insurance_policies_person_id_fkey";
+            columns: ["person_id"];
             isOneToOne: true;
-            referencedRelation: "profiles";
+            referencedRelation: "persons";
             referencedColumns: ["id"];
           },
         ];
@@ -293,6 +400,27 @@ export type Database = {
         Insert: Partial<OrgUnit> & Pick<OrgUnit, "name" | "type">;
         Update: Partial<OrgUnit>;
         Relationships: [];
+      };
+      org_unit_companies: {
+        Row: OrgUnitCompany;
+        Insert: OrgUnitCompany;
+        Update: Partial<OrgUnitCompany>;
+        Relationships: [
+          {
+            foreignKeyName: "org_unit_companies_org_unit_id_fkey";
+            columns: ["org_unit_id"];
+            isOneToOne: false;
+            referencedRelation: "org_units";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "org_unit_companies_company_id_fkey";
+            columns: ["company_id"];
+            isOneToOne: false;
+            referencedRelation: "companies";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       audit_log: {
         Row: AuditLog;
@@ -304,7 +432,7 @@ export type Database = {
             foreignKeyName: "audit_log_actor_id_fkey";
             columns: ["actor_id"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "persons";
             referencedColumns: ["id"];
           },
         ];
@@ -318,7 +446,7 @@ export type Database = {
             foreignKeyName: "announcements_created_by_fkey";
             columns: ["created_by"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "persons";
             referencedColumns: ["id"];
           },
         ];
@@ -332,7 +460,7 @@ export type Database = {
             foreignKeyName: "polls_created_by_fkey";
             columns: ["created_by"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "persons";
             referencedColumns: ["id"];
           },
         ];
@@ -374,7 +502,7 @@ export type Database = {
             foreignKeyName: "poll_votes_voter_id_fkey";
             columns: ["voter_id"];
             isOneToOne: false;
-            referencedRelation: "profiles";
+            referencedRelation: "persons";
             referencedColumns: ["id"];
           },
         ];
@@ -382,6 +510,10 @@ export type Database = {
     };
     Views: Record<string, never>;
     Functions: {
+      current_person_id: {
+        Args: Record<string, never>;
+        Returns: string;
+      };
       update_own_biodata: {
         Args: {
           p_display_name: string | null;

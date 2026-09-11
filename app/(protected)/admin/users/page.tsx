@@ -5,7 +5,7 @@ import { UserFormPanel } from "./user-form";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { getInitials } from "@/lib/format/initials";
-import type { UserStatus, AuthMethod } from "@/types/database";
+import type { UserStatus, AuthMethod, EmploymentType } from "@/types/database";
 
 const STATUSES: UserStatus[] = ["Active", "Inactive", "Suspended"];
 
@@ -25,55 +25,53 @@ export default async function AdminUsersPage({
 }: {
   searchParams: Promise<{
     role?: string;
-    department?: string;
-    site?: string;
     status?: string;
     compose?: string;
     edit?: string;
   }>;
 }) {
-  const { role, department, site, status, compose, edit } = await searchParams;
+  const { role, status, compose, edit } = await searchParams;
   const supabase = await createClient();
 
   const { data: roles } = await supabase.from("roles").select("*").order("name");
   const roleNameById = new Map((roles ?? []).map((r) => [r.id, r.name]));
 
-  // Unfiltered pass: distinct department/site options for the filter dropdowns, and the full
-  // set of existing profile emails to anti-join against pending invitations.
-  const { data: allProfiles } = await supabase
-    .from("profiles")
-    .select("email, department, site");
-  const departments = [
-    ...new Set((allProfiles ?? []).map((p) => p.department).filter(Boolean)),
-  ].sort() as string[];
-  const sites = [
-    ...new Set((allProfiles ?? []).map((p) => p.site).filter(Boolean)),
-  ].sort() as string[];
-  const existingEmails = new Set((allProfiles ?? []).map((p) => p.email));
+  // Existing (provisioned) login emails, to anti-join pending invitations. Login email now
+  // lives on user_accounts, not persons.
+  const { data: allAccounts } = await supabase.from("user_accounts").select("email");
+  const existingEmails = new Set((allAccounts ?? []).map((a) => a.email));
 
-  // Active org_units, for the Add/Edit User form's Department/Site <select>s (F-61).
-  const { data: activeDepartments } = await supabase
-    .from("org_units")
-    .select("name")
-    .eq("type", "Department")
-    .eq("is_active", true)
-    .order("name");
-  const { data: activeSites } = await supabase
-    .from("org_units")
-    .select("name")
-    .eq("type", "Site")
-    .eq("is_active", true)
-    .order("name");
-  const departmentOptions = (activeDepartments ?? []).map((d) => d.name);
-  const siteOptions = (activeSites ?? []).map((s) => s.name);
+  // Person ids matching the role filter, if any — role now lives in user_roles, not a single
+  // column on the person.
+  let roleFilterPersonIds: string[] | null = null;
+  if (role) {
+    const { data: assignments } = await supabase
+      .from("user_roles")
+      .select("person_id")
+      .eq("role_id", role);
+    roleFilterPersonIds = (assignments ?? []).map((a) => a.person_id);
+  }
 
-  let profilesQuery = supabase.from("profiles").select("*");
-  if (role) profilesQuery = profilesQuery.eq("role_id", role);
-  if (department) profilesQuery = profilesQuery.eq("department", department);
-  if (site) profilesQuery = profilesQuery.eq("site", site);
+  let personsQuery = supabase.from("persons").select("*");
   const statusFilter = STATUSES.find((s) => s === status);
-  if (statusFilter) profilesQuery = profilesQuery.eq("status", statusFilter);
-  const { data: profiles } = await profilesQuery.order("email");
+  if (statusFilter) personsQuery = personsQuery.eq("status", statusFilter);
+  if (roleFilterPersonIds) personsQuery = personsQuery.in("id", roleFilterPersonIds);
+  const { data: persons } = await personsQuery.order("full_name");
+
+  const personIds = (persons ?? []).map((p) => p.id);
+
+  const { data: accounts } = personIds.length
+    ? await supabase
+        .from("user_accounts")
+        .select("person_id, email, last_login_at")
+        .in("person_id", personIds)
+    : { data: [] };
+  const accountByPersonId = new Map((accounts ?? []).map((a) => [a.person_id, a]));
+
+  const { data: roleAssignments } = personIds.length
+    ? await supabase.from("user_roles").select("person_id, role_id").in("person_id", personIds)
+    : { data: [] };
+  const roleIdByPersonId = new Map((roleAssignments ?? []).map((r) => [r.person_id, r.role_id]));
 
   const { data: invitations } = await supabase
     .from("invited_users")
@@ -89,13 +87,12 @@ export default async function AdminUsersPage({
       email: string;
       display_name: string | null;
       role_id: string | null;
-      department: string | null;
-      site: string | null;
       status: UserStatus;
       notes: string | null;
       employee_code: string | null;
       designation: string | null;
       date_of_joining: string | null;
+      employment_type: EmploymentType | null;
       auth_method: AuthMethod;
     };
   } | null = null;
@@ -108,26 +105,46 @@ export default async function AdminUsersPage({
         email: "",
         display_name: null,
         role_id: null,
-        department: null,
-        site: null,
         status: "Active",
         notes: null,
         employee_code: null,
         designation: null,
         date_of_joining: null,
+        employment_type: null,
         auth_method: "microsoft",
       },
     };
   } else if (edit) {
     const email = edit.trim().toLowerCase();
-    const { data: existingProfile } = await supabase
-      .from("profiles")
-      .select("*")
+    const { data: existingAccount } = await supabase
+      .from("user_accounts")
+      .select("person_id, email, auth_method, persons(*)")
       .eq("email", email)
       .maybeSingle();
 
-    if (existingProfile) {
-      panel = { mode: "edit", initialValues: existingProfile };
+    if (existingAccount?.persons) {
+      const { data: roleRow } = await supabase
+        .from("user_roles")
+        .select("role_id")
+        .eq("person_id", existingAccount.person_id)
+        .maybeSingle();
+
+      panel = {
+        mode: "edit",
+        initialValues: {
+          id: existingAccount.person_id,
+          email: existingAccount.email,
+          display_name: existingAccount.persons.full_name,
+          role_id: roleRow?.role_id ?? null,
+          status: existingAccount.persons.status,
+          notes: existingAccount.persons.notes,
+          employee_code: existingAccount.persons.employee_code,
+          designation: existingAccount.persons.designation,
+          date_of_joining: existingAccount.persons.date_of_joining,
+          employment_type: existingAccount.persons.employment_type,
+          auth_method: existingAccount.auth_method,
+        },
+      };
     } else {
       const { data: invitation } = await supabase
         .from("invited_users")
@@ -135,11 +152,23 @@ export default async function AdminUsersPage({
         .eq("email", email)
         .maybeSingle();
       // Pending invites are always Microsoft — password accounts never pass through
-      // invited_users at all (they get a real profiles row immediately at creation).
+      // invited_users at all (they get a real account immediately at creation).
       if (invitation) {
         panel = {
           mode: "edit",
-          initialValues: { ...invitation, id: null, auth_method: "microsoft" },
+          initialValues: {
+            id: null,
+            email: invitation.email,
+            display_name: invitation.display_name,
+            role_id: invitation.role_id,
+            status: invitation.status,
+            notes: invitation.notes,
+            employee_code: invitation.employee_code,
+            designation: invitation.designation,
+            date_of_joining: invitation.date_of_joining,
+            employment_type: null,
+            auth_method: "microsoft",
+          },
         };
       }
     }
@@ -180,36 +209,6 @@ export default async function AdminUsersPage({
           </select>
         </label>
         <label className="flex flex-col gap-1 text-xs">
-          <span className="font-medium text-slate-600">Department</span>
-          <select
-            name="department"
-            defaultValue={department ?? ""}
-            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="">All</option>
-            {departments.map((d) => (
-              <option key={d} value={d}>
-                {d}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="font-medium text-slate-600">Site</span>
-          <select
-            name="site"
-            defaultValue={site ?? ""}
-            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="">All</option>
-            {sites.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs">
           <span className="font-medium text-slate-600">Status</span>
           <select
             name="status"
@@ -242,69 +241,71 @@ export default async function AdminUsersPage({
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Department</th>
-              <th className="px-4 py-3">Site</th>
+              <th className="px-4 py-3">Designation</th>
               <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Last Login</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
-            {(profiles ?? []).map((p) => {
+            {(persons ?? []).map((p) => {
+              const account = accountByPersonId.get(p.id);
+              const roleId = roleIdByPersonId.get(p.id);
               const isInactive = p.status !== "Active";
               return (
-              <tr key={p.id}>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
-                      {getInitials(p.display_name ?? p.email)}
+                <tr key={p.id}>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
+                        {getInitials(p.full_name ?? account?.email ?? "")}
+                      </div>
+                      <span className={isInactive ? "text-slate-400" : "text-slate-800"}>
+                        {p.full_name ?? "—"}
+                      </span>
                     </div>
-                    <span className={isInactive ? "text-slate-400" : "text-slate-800"}>
-                      {p.display_name ?? "—"}
-                    </span>
-                  </div>
-                </td>
-                <td className="px-4 py-3 text-slate-500">{p.email}</td>
-                <td className="px-4 py-3">
-                  {p.role_id ? (
-                    roleNameById.get(p.role_id)
-                  ) : (
-                    <StatusPill label="Pending Role" tone="warning" />
-                  )}
-                </td>
-                <td className="px-4 py-3">{p.department ?? "—"}</td>
-                <td className="px-4 py-3">{p.site ?? "—"}</td>
-                <td className="px-4 py-3">
-                  <StatusPill label={p.status.toUpperCase()} tone={statusTone(p.status)} />
-                </td>
-                <td className="px-4 py-3 text-slate-500">{formatDate(p.last_login_at)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <Link
-                      href={`/admin/users?edit=${encodeURIComponent(p.email)}`}
-                      className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-                    >
-                      Edit
-                    </Link>
-                    <form
-                      action={setUserStatus.bind(
-                        null,
-                        p.id,
-                        p.status === "Active" ? "Inactive" : "Active",
-                      )}
-                    >
-                      <button type="submit" className="text-slate-500 hover:underline">
-                        {p.status === "Active" ? "Deactivate" : "Reactivate"}
-                      </button>
-                    </form>
-                  </div>
-                </td>
-              </tr>
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">{account?.email ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    {roleId ? (
+                      roleNameById.get(roleId)
+                    ) : (
+                      <StatusPill label="Pending Role" tone="warning" />
+                    )}
+                  </td>
+                  <td className="px-4 py-3">{p.designation ?? "—"}</td>
+                  <td className="px-4 py-3">
+                    <StatusPill label={p.status.toUpperCase()} tone={statusTone(p.status)} />
+                  </td>
+                  <td className="px-4 py-3 text-slate-500">
+                    {formatDate(account?.last_login_at ?? null)}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex items-center gap-3">
+                      <Link
+                        href={`/admin/users?edit=${encodeURIComponent(account?.email ?? "")}`}
+                        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
+                      >
+                        Edit
+                      </Link>
+                      <form
+                        action={setUserStatus.bind(
+                          null,
+                          p.id,
+                          p.status === "Active" ? "Inactive" : "Active",
+                        )}
+                      >
+                        <button type="submit" className="text-slate-500 hover:underline">
+                          {p.status === "Active" ? "Deactivate" : "Reactivate"}
+                        </button>
+                      </form>
+                    </div>
+                  </td>
+                </tr>
               );
             })}
-            {(profiles ?? []).length === 0 && (
+            {(persons ?? []).length === 0 && (
               <tr>
-                <td colSpan={8} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
                   No users match these filters.
                 </td>
               </tr>
@@ -323,8 +324,6 @@ export default async function AdminUsersPage({
               <th className="px-4 py-3">Name</th>
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Department</th>
-              <th className="px-4 py-3">Site</th>
               <th className="px-4 py-3">Invited</th>
               <th className="px-4 py-3"></th>
             </tr>
@@ -335,8 +334,6 @@ export default async function AdminUsersPage({
                 <td className="px-4 py-3">{invite.display_name ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-500">{invite.email}</td>
                 <td className="px-4 py-3">{roleNameById.get(invite.role_id)}</td>
-                <td className="px-4 py-3">{invite.department ?? "—"}</td>
-                <td className="px-4 py-3">{invite.site ?? "—"}</td>
                 <td className="px-4 py-3 text-slate-500">{formatDate(invite.invited_at)}</td>
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-3">
@@ -357,7 +354,7 @@ export default async function AdminUsersPage({
             ))}
             {pendingInvitations.length === 0 && (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
+                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
                   No pending invitations.
                 </td>
               </tr>
@@ -367,13 +364,7 @@ export default async function AdminUsersPage({
       </div>
 
       {panel && (
-        <UserFormPanel
-          mode={panel.mode}
-          roles={roles ?? []}
-          departmentOptions={departmentOptions}
-          siteOptions={siteOptions}
-          initialValues={panel.initialValues}
-        />
+        <UserFormPanel mode={panel.mode} roles={roles ?? []} initialValues={panel.initialValues} />
       )}
     </div>
   );

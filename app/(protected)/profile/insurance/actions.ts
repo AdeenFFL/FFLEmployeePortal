@@ -13,7 +13,7 @@ function readDependentFields(formData: FormData) {
 }
 
 export async function addOrUpdateDependent(formData: FormData) {
-  const { supabase, userId } = await requireActiveUser();
+  const { supabase, personId, authUserId } = await requireActiveUser();
   const fields = readDependentFields(formData);
   if (!fields.name || !fields.relationship) {
     throw new Error("Name and Relationship are required.");
@@ -24,7 +24,8 @@ export async function addOrUpdateDependent(formData: FormData) {
   let supportingDocumentPath: string | undefined;
 
   if (file instanceof File && file.size > 0) {
-    const path = `${userId}/dependents/${crypto.randomUUID()}-${file.name}`;
+    // Storage path uses the raw auth id — see the callout in profile/actions.ts.
+    const path = `${authUserId}/dependents/${crypto.randomUUID()}-${file.name}`;
     const { error: uploadError } = await supabase.storage
       .from("employee-documents")
       .upload(path, file);
@@ -35,10 +36,10 @@ export async function addOrUpdateDependent(formData: FormData) {
   if (dependentId) {
     const { data: existing } = await supabase
       .from("dependents")
-      .select("id, profile_id")
+      .select("id, person_id")
       .eq("id", dependentId)
       .maybeSingle();
-    if (!existing || existing.profile_id !== userId) throw new Error("Not found.");
+    if (!existing || existing.person_id !== personId) throw new Error("Not found.");
 
     const { error } = await supabase
       .from("dependents")
@@ -52,7 +53,7 @@ export async function addOrUpdateDependent(formData: FormData) {
     if (error) throw new Error(error.message);
   } else {
     const { error } = await supabase.from("dependents").insert({
-      profile_id: userId,
+      person_id: personId,
       ...fields,
       supporting_document_path: supportingDocumentPath ?? null,
       // status omitted — column DEFAULT 'Pending HR Approval' applies.
@@ -64,14 +65,14 @@ export async function addOrUpdateDependent(formData: FormData) {
 }
 
 export async function removeDependent(dependentId: string) {
-  const { supabase, userId } = await requireActiveUser();
+  const { supabase, personId } = await requireActiveUser();
 
   const { data: dep } = await supabase
     .from("dependents")
-    .select("id, profile_id, supporting_document_path")
+    .select("id, person_id, supporting_document_path")
     .eq("id", dependentId)
     .maybeSingle();
-  if (!dep || dep.profile_id !== userId) throw new Error("Not found.");
+  if (!dep || dep.person_id !== personId) throw new Error("Not found.");
 
   if (dep.supporting_document_path) {
     await supabase.storage.from("employee-documents").remove([dep.supporting_document_path]);

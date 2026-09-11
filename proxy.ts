@@ -1,6 +1,6 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
-import { ROLE_HOME_PATH } from "@/lib/auth/roles";
+import { ROLE_HOME_PATH, ROLE_PRIORITY } from "@/lib/auth/roles";
 import { permissionKeyForPath } from "@/lib/auth/route-permissions";
 
 // Paths reachable without an authenticated, active, role-assigned user. /forgot-password is
@@ -26,25 +26,45 @@ export async function proxy(request: NextRequest) {
   if (pathname === "/auth/callback") return response;
 
   // NFR-06: RBAC enforced server-side, before any page renders — not just hidden in the UI.
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role_id, status")
-    .eq("id", user.id)
+  // Two status columns now exist (account-level login suspension vs. person-level employment
+  // status) — either one being non-Active blocks access, same as requireAdmin()/requireUser().
+  const { data: account } = await supabase
+    .from("user_accounts")
+    .select("person_id, status, persons(status)")
+    .eq("auth_user_id", user.id)
     .maybeSingle();
 
-  // Profile may not exist yet on the very first request right after OAuth (callback creates
+  // Account may not exist yet on the very first request right after OAuth (callback creates
   // it); treat that edge case the same as "pending" rather than erroring.
-  const roleId = profile?.role_id ?? null;
-  const status = profile?.status ?? "Active";
+  const personId = account?.person_id ?? null;
+  const isActive = account
+    ? account.status === "Active" && account.persons?.status === "Active"
+    : true;
 
-  if (status !== "Active") {
+  if (!isActive) {
     if (pathname === "/unauthorized") return response;
     return NextResponse.redirect(
       new URL("/unauthorized?reason=inactive", request.url),
     );
   }
 
-  if (!roleId) {
+  if (!personId) {
+    if (pathname === "/pending-setup") return response;
+    return NextResponse.redirect(new URL("/pending-setup", request.url));
+  }
+
+  // Aggregate across ALL roles the person holds — any one of them granting the permission is
+  // enough (a standard any-of-N-roles RBAC check, not a scope check; site/company scoping is a
+  // module-level RLS concern, not a route-gate concern).
+  const { data: roleRows } = await supabase
+    .from("user_roles")
+    .select("role_id, roles(name)")
+    .eq("person_id", personId);
+
+  const roleIds = (roleRows ?? []).map((r) => r.role_id);
+  const roleNames = (roleRows ?? []).map((r) => r.roles?.name).filter(Boolean) as string[];
+
+  if (roleIds.length === 0) {
     if (pathname === "/pending-setup") return response;
     return NextResponse.redirect(new URL("/pending-setup", request.url));
   }
@@ -52,15 +72,11 @@ export async function proxy(request: NextRequest) {
   // A role-assigned user hitting /login or /pending-setup gets sent to their role home
   // (SCR-00: "redirects authenticated users to their role home screen").
   if (pathname === "/login" || pathname === "/pending-setup") {
-    const { data: role } = await supabase
-      .from("roles")
-      .select("name")
-      .eq("id", roleId)
-      .maybeSingle();
     // Falls back to /home (not /login) for any role name not in the map — otherwise a custom
     // role (e.g. one created via "Duplicate Role") would redirect-loop on /login forever.
-    const homePath = role ? (ROLE_HOME_PATH[role.name] ?? "/home") : undefined;
-    return NextResponse.redirect(new URL(homePath ?? "/login", request.url));
+    const priorityRole = ROLE_PRIORITY.find((r) => roleNames.includes(r));
+    const homePath = priorityRole ? (ROLE_HOME_PATH[priorityRole] ?? "/home") : "/home";
+    return NextResponse.redirect(new URL(homePath, request.url));
   }
 
   const permissionKey = permissionKeyForPath(pathname);
@@ -77,7 +93,7 @@ export async function proxy(request: NextRequest) {
       const { data: grant } = await supabase
         .from("role_permissions")
         .select("role_id")
-        .eq("role_id", roleId)
+        .in("role_id", roleIds)
         .eq("permission_id", permission.id)
         .maybeSingle();
 

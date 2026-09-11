@@ -17,9 +17,9 @@ export async function recordPasswordLogin() {
     if (!user) return;
 
     await createAdminClient()
-      .from("profiles")
+      .from("user_accounts")
       .update({ last_login_at: new Date().toISOString() })
-      .eq("id", user.id);
+      .eq("auth_user_id", user.id);
   } catch (error) {
     console.error("recordPasswordLogin failed", error);
   }

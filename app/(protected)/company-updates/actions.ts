@@ -9,7 +9,7 @@ const PATH = "/company-updates";
 const OPTION_COUNT = 6;
 
 export async function createOrUpdateAnnouncement(formData: FormData) {
-  const { supabase, profileId, actorLabel } = await requireHrOrAdmin();
+  const { supabase, personId, actorLabel } = await requireHrOrAdmin();
 
   const id = String(formData.get("id") ?? "").trim() || null;
   const title = String(formData.get("title") ?? "").trim();
@@ -26,7 +26,7 @@ export async function createOrUpdateAnnouncement(formData: FormData) {
     if (error) throw new Error(error.message);
     await logAuditEvent({
       supabase,
-      actorId: profileId,
+      actorId: personId,
       actorLabel,
       module: "company-updates",
       action: "MODIFIED",
@@ -35,11 +35,11 @@ export async function createOrUpdateAnnouncement(formData: FormData) {
   } else {
     const { error } = await supabase
       .from("announcements")
-      .insert({ title, body, is_pinned, created_by: profileId });
+      .insert({ title, body, is_pinned, created_by: personId });
     if (error) throw new Error(error.message);
     await logAuditEvent({
       supabase,
-      actorId: profileId,
+      actorId: personId,
       actorLabel,
       module: "company-updates",
       action: "CREATED",
@@ -51,7 +51,7 @@ export async function createOrUpdateAnnouncement(formData: FormData) {
 }
 
 export async function deleteAnnouncement(id: string) {
-  const { supabase, profileId, actorLabel } = await requireHrOrAdmin();
+  const { supabase, personId, actorLabel } = await requireHrOrAdmin();
 
   const { data: announcement } = await supabase
     .from("announcements")
@@ -64,7 +64,7 @@ export async function deleteAnnouncement(id: string) {
 
   await logAuditEvent({
     supabase,
-    actorId: profileId,
+    actorId: personId,
     actorLabel,
     module: "company-updates",
     action: "DELETED",
@@ -75,7 +75,7 @@ export async function deleteAnnouncement(id: string) {
 }
 
 export async function createPoll(formData: FormData) {
-  const { supabase, profileId, actorLabel } = await requireHrOrAdmin();
+  const { supabase, personId, actorLabel } = await requireHrOrAdmin();
 
   const question = String(formData.get("question") ?? "").trim();
   if (!question) throw new Error("Question is required.");
@@ -89,7 +89,7 @@ export async function createPoll(formData: FormData) {
 
   const { data: poll, error: pollError } = await supabase
     .from("polls")
-    .insert({ question, created_by: profileId })
+    .insert({ question, created_by: personId })
     .select("id")
     .single();
   if (pollError) throw new Error(pollError.message);
@@ -101,7 +101,7 @@ export async function createPoll(formData: FormData) {
 
   await logAuditEvent({
     supabase,
-    actorId: profileId,
+    actorId: personId,
     actorLabel,
     module: "company-updates",
     action: "CREATED",
@@ -112,7 +112,7 @@ export async function createPoll(formData: FormData) {
 }
 
 export async function closePoll(id: string) {
-  const { supabase, profileId, actorLabel } = await requireHrOrAdmin();
+  const { supabase, personId, actorLabel } = await requireHrOrAdmin();
 
   const { data: poll } = await supabase
     .from("polls")
@@ -125,7 +125,7 @@ export async function closePoll(id: string) {
 
   await logAuditEvent({
     supabase,
-    actorId: profileId,
+    actorId: personId,
     actorLabel,
     module: "company-updates",
     action: "MODIFIED",
@@ -136,7 +136,7 @@ export async function closePoll(id: string) {
 }
 
 export async function deletePoll(id: string) {
-  const { supabase, profileId, actorLabel } = await requireHrOrAdmin();
+  const { supabase, personId, actorLabel } = await requireHrOrAdmin();
 
   const { data: poll } = await supabase
     .from("polls")
@@ -149,7 +149,7 @@ export async function deletePoll(id: string) {
 
   await logAuditEvent({
     supabase,
-    actorId: profileId,
+    actorId: personId,
     actorLabel,
     module: "company-updates",
     action: "DELETED",
