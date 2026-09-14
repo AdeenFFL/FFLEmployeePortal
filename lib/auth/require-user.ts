@@ -7,10 +7,10 @@ import { createClient } from "@/lib/supabase/server";
 // roles have /profile access).
 //
 // Returns BOTH ids, and callers must not mix them up: `personId` is the FK value to write into
-// any `person_id` column (educational_documents, dependents, etc). `authUserId` is the raw
-// Supabase auth id — storage bucket policies check `(storage.foldername(name))[1] = auth.uid()`
-// and were not changed by the persons/user_accounts split, so any storage path built from the
-// current user must keep using `authUserId`, not `personId`.
+// any `person_id` column. `authUserId` is the raw Supabase auth id — any storage bucket policy
+// that checks `(storage.foldername(name))[1] = auth.uid()` needs a path built from
+// `authUserId`, not `personId`. No current feature uploads to storage (kept for the next module
+// that does — see the git history of profile/actions.ts pre-strip for the original pattern).
 export async function requireActiveUser() {
   const supabase = await createClient();
   const {

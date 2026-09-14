@@ -2,19 +2,19 @@
 
 import { useState, useTransition } from "react";
 import { ToggleSwitch } from "@/components/toggle-switch";
-import { saveRolePermissions } from "@/app/(protected)/admin/roles/actions";
-import type { Permission } from "@/types/database";
+import { saveRolePermissionGroups } from "@/app/(protected)/admin/roles/actions";
+import type { PermissionGroup } from "@/types/database";
 
 type GrantMeta = { grantedByName: string | null; grantedAt: string | null };
 
 export function RolePermissionsEditor({
   roleId,
-  permissionsByModule,
+  groupsByModule,
   initialGrantedIds,
   grantMetaByModule,
 }: {
   roleId: string;
-  permissionsByModule: [string, Permission[]][];
+  groupsByModule: [string, PermissionGroup[]][];
   initialGrantedIds: string[];
   grantMetaByModule: Record<string, GrantMeta | null>;
 }) {
@@ -42,15 +42,15 @@ export function RolePermissionsEditor({
 
   function handleSave() {
     setError(null);
-    const changes = permissionsByModule
-      .flatMap(([, perms]) => perms)
-      .filter((p) => granted.has(p.id) !== committed.has(p.id))
-      .map((p) => ({ permissionId: p.id, granted: granted.has(p.id) }));
+    const changes = groupsByModule
+      .flatMap(([, groups]) => groups)
+      .filter((g) => granted.has(g.id) !== committed.has(g.id))
+      .map((g) => ({ permissionGroupId: g.id, granted: granted.has(g.id) }));
     if (changes.length === 0) return;
 
     startTransition(async () => {
       try {
-        await saveRolePermissions(roleId, changes);
+        await saveRolePermissionGroups(roleId, changes);
         setCommitted(new Set(granted));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to save changes.");
@@ -60,7 +60,17 @@ export function RolePermissionsEditor({
 
   return (
     <div className="space-y-6">
-      {permissionsByModule.map(([moduleName, perms]) => {
+      {groupsByModule.length === 0 && (
+        <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-400">
+          No permission groups exist yet.{" "}
+          <a href="/admin/permission-groups" className="text-blue-600 hover:underline">
+            Create one
+          </a>{" "}
+          before you can grant anything to a role.
+        </p>
+      )}
+
+      {groupsByModule.map(([moduleName, groups]) => {
         const meta = grantMetaByModule[moduleName];
         return (
           <div
@@ -79,22 +89,19 @@ export function RolePermissionsEditor({
               )}
             </div>
             <div className="divide-y divide-slate-100">
-              {perms.map((permission) => (
-                <div
-                  key={permission.id}
-                  className="flex items-center justify-between gap-4 py-3"
-                >
+              {groups.map((group) => (
+                <div key={group.id} className="flex items-center justify-between gap-4 py-3">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">
-                      {permission.description ?? permission.key}
-                    </p>
-                    <p className="text-xs text-slate-400">{permission.key}</p>
+                    <p className="text-sm font-medium text-slate-800">{group.name}</p>
+                    {group.description && (
+                      <p className="text-xs text-slate-400">{group.description}</p>
+                    )}
                   </div>
                   <ToggleSwitch
                     type="button"
-                    pressed={granted.has(permission.id)}
-                    label={permission.description ?? permission.key}
-                    onClick={() => toggle(permission.id)}
+                    pressed={granted.has(group.id)}
+                    label={group.name}
+                    onClick={() => toggle(group.id)}
                   />
                 </div>
               ))}

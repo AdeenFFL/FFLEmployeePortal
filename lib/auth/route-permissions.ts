@@ -9,15 +9,14 @@
 // step once more modules exist).
 export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/home": "route:/home",
-  "/company-updates": "route:/company-updates",
   "/hr/dashboard": "route:/hr/dashboard",
   "/it/dashboard": "route:/it/dashboard",
   "/admin/users": "route:/admin/users",
   "/admin/roles": "route:/admin/roles",
+  "/admin/permission-groups": "route:/admin/permission-groups",
   "/admin/departments": "route:/admin/departments",
   "/admin/sites": "route:/admin/sites",
   "/admin/audit-log": "route:/admin/audit-log",
-  "/profile/insurance": "route:/profile/insurance",
   "/profile": "route:/profile",
 };
 

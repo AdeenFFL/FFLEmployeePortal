@@ -53,18 +53,14 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL("/pending-setup", request.url));
   }
 
-  // Aggregate across ALL roles the person holds — any one of them granting the permission is
-  // enough (a standard any-of-N-roles RBAC check, not a scope check; site/company scoping is a
-  // module-level RLS concern, not a route-gate concern).
   const { data: roleRows } = await supabase
     .from("user_roles")
-    .select("role_id, roles(name)")
+    .select("roles(name)")
     .eq("person_id", personId);
 
-  const roleIds = (roleRows ?? []).map((r) => r.role_id);
   const roleNames = (roleRows ?? []).map((r) => r.roles?.name).filter(Boolean) as string[];
 
-  if (roleIds.length === 0) {
+  if ((roleRows ?? []).length === 0) {
     if (pathname === "/pending-setup") return response;
     return NextResponse.redirect(new URL("/pending-setup", request.url));
   }
@@ -81,6 +77,11 @@ export async function proxy(request: NextRequest) {
 
   const permissionKey = permissionKeyForPath(pathname);
   if (permissionKey) {
+    // Delegates to the has_permission() SQL function (0010_permission_groups.sql) — it already
+    // aggregates across every role the person holds and every permission group each role
+    // includes, so there's nothing left to join here. Missing key or genuinely ungranted both
+    // resolve to `false`, which is the whole point of NULL-safe boolean SQL, but they mean
+    // different things for the response below.
     const { data: permission } = await supabase
       .from("permissions")
       .select("id")
@@ -90,14 +91,11 @@ export async function proxy(request: NextRequest) {
     // Permission key not seeded in the DB — treat like an unmapped route (allow through)
     // rather than locking everyone out over a config mismatch.
     if (permission) {
-      const { data: grant } = await supabase
-        .from("role_permissions")
-        .select("role_id")
-        .in("role_id", roleIds)
-        .eq("permission_id", permission.id)
-        .maybeSingle();
+      const { data: granted } = await supabase.rpc("has_permission", {
+        p_permission_key: permissionKey,
+      });
 
-      if (!grant) {
+      if (!granted) {
         return NextResponse.redirect(new URL("/unauthorized", request.url));
       }
     }

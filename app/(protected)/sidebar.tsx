@@ -12,11 +12,7 @@ import {
   MapPinIcon,
   ChevronDownIcon,
   LogoutIcon,
-  BellIcon,
-  LogIcon,
   TicketIcon,
-  UsersIcon,
-  ShoppingBagIcon,
 } from "@/components/icons";
 
 type IconComponent = (props: { className?: string }) => React.ReactElement;
@@ -41,47 +37,8 @@ export function Sidebar({
 
   const baseItems: NavEntry[] = [
     { type: "link", href: homePath, label: "Home", icon: HomeIcon },
-    {
-      type: "group",
-      label: "My Profile",
-      icon: UserIcon,
-      children: [
-        { href: "/profile", label: "Profile & Documents" },
-        { href: "/profile/insurance", label: "Insurance & Dependents" },
-      ],
-    },
-    {
-      type: "group",
-      label: "Company Updates",
-      icon: BellIcon,
-      children: [
-        { href: "/company-updates#announcements", label: "Announcements" },
-        { href: "/company-updates#polls", label: "Polls" },
-      ],
-    },
-    {
-      type: "group",
-      label: "Employee Services",
-      icon: LogIcon,
-      children: [
-        { href: "/services/internal-jobs", label: "Internal Jobs" },
-        { href: "/services/policy-library", label: "Policy Library" },
-        { href: "/services/employment-letters", label: "Employment Letters" },
-        { href: "/services/quarter-quest", label: "Quarter Quest" },
-        { href: "/services/hr-contact-directory", label: "HR Contact Directory" },
-      ],
-    },
+    { type: "link", href: "/profile", label: "My Profile", icon: UserIcon },
     { type: "link", href: "/requests", label: "My Requests", icon: TicketIcon },
-    { type: "link", href: "/referrals", label: "Referrals", icon: UsersIcon },
-    {
-      type: "group",
-      label: "Mess & Fair Price Shop",
-      icon: ShoppingBagIcon,
-      children: [
-        { href: "/mess/menu", label: "Mess Menu" },
-        { href: "/mess/fair-price-shop", label: "Fair Price Shop" },
-      ],
-    },
   ];
 
   // Every signed-in person is an employee first (they get baseItems above); "Admin Centre" is
@@ -112,6 +69,7 @@ export function Sidebar({
       children: [
         { href: "/admin/users", label: "User Management" },
         { href: "/admin/roles", label: "Roles & Permissions" },
+        { href: "/admin/permission-groups", label: "Permission Groups" },
         { href: "/admin/departments", label: "Departments" },
         { href: "/admin/sites", label: "Sites" },
         { href: "/admin/audit-log", label: "Audit Log" },
@@ -119,8 +77,8 @@ export function Sidebar({
     });
   }
 
-  // usePathname() never includes a "#fragment" — strip it before comparing so hash-linked
-  // children (e.g. Company Updates' "#announcements"/"#polls") still match on their base path.
+  // usePathname() never includes a "#fragment" — strip it before comparing so any future
+  // hash-linked nav entry still matches on its base path.
   function hrefPath(href: string) {
     return href.split("#")[0];
   }

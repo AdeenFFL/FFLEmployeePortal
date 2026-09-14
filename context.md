@@ -19,16 +19,24 @@ Any design that assumes "every person has one account and one role" breaks again
 
 ## 2. What's being built
 
-A single **Employee Portal** covering six modules, developed by separate teams but sharing one identity/auth foundation:
+**Revised 2026-09-14 — re-scoped from the original 6-module plan (see git history) to a minimal base skeleton plus 4 modules, decided this way so the base stays small while each module is configured bottom-up as it's actually designed and built:**
 
-1. **Fair Price Shop (FPS) Management**
-2. **Mess Management**
-3. **Health, Safety & Environment (HSE)**
-4. **HR Documentation & Anonymous Feedback**
-5. **IT Onboarding/Offboarding + Service Desk + Inventory**
-6. **Central AI Agent** — cross-module employee-facing assistant
+**Base skeleton** (`context.md` §3, this is what exists in the app today outside any module folder):
+1. **Users & Role Creation** — permission groups are created within a module (by a module admin), assigned to roles, roles assigned to users.
+2. **Sites configuration & site scoping** — companies/org_units/org_unit_companies (already built).
+3. **Dashboard** — currently a placeholder (`/home`); becomes real once modules exist to surface data from.
+4. **Access to modules** — the `module:<code>` coarse-permission convention (§3).
 
-Each module team builds their own screens and their own database schema, but all six sit on top of one shared identity/org/roles layer so a person's employment status, role, and site are consistent everywhere.
+**Modules** (each gets its own schema, own `app/(protected)/<module>/` folder, built one at a time — HR first):
+
+- **M1 — HR**: (1) anonymous feedback chat with an HRBP, reachable *outside* auth/login, stored and routed to the relevant HRBP(s) by department for them to reply to once logged in; (2) non-anonymous feedback/requests, inside auth, assigned as a ticket to the relevant HR person by category.
+- **M2 — IT Service Management**: two broad user classes (IT staff with varying permission groups vs. general employees who raise tickets/requests/ideas); IT onboarding/offboarding; inventory & asset management; a demand system for assets/consumables across sites with approval workflow and full procurement steps.
+- **M3 — Mess + Fair Price Shop**: employee purchase & billing (site-scoped); a general-public-sale POS system; shop inventory & meal-cost calculation; a stock-demand system with receiving/gate-pass steps.
+- **M4 — HSE**: health & safety incident management and hazard reporting, with HSE users and general-employee users.
+
+Each module team builds their own screens and schema, but every module sits on top of the shared base-skeleton identity/org/roles/permission-groups layer so a person's employment status, role, and site are consistent everywhere.
+
+**Open question, not yet resolved:** the original plan's 6th module, **Central AI Agent** (cross-module employee-facing assistant), is absent from the re-scoped 4-module list above — unclear whether it's dropped, deferred, or just not mentioned in this pass. Don't assume either way; ask before doing anything that depends on it existing or not.
 
 ---
 
@@ -45,6 +53,7 @@ Each module team builds their own screens and their own database schema, but all
 - **Sites/departments and companies are many-to-many, not "each site belongs to one company"** (decided 2026-09-08): `org_units` (sites and departments) has no `company_id` column — `org_unit_companies` is a join table instead. Reason: a physical site can be shared by more than one sub-company (a shared plant/warehouse/head-office building), and departments were already documented as "company-specific or shared." Nothing else in the schema derives a person's or transaction's company from their site (`persons`/`user_roles` already carry `company_id` and `site_id` independently), so this has no downstream sync-consistency risk. See `01-platform-design-and-sop.md` Section 3 and `supabase/migrations/0008_org_hierarchy_fix_and_identity_split.sql` Part A (this design superseded `0007`'s original `company_id` column after `0007` was already live — see the 2026-09-09 update below).
 - **Permissions split into two naming conventions on the same engine, not two systems** (decided 2026-09-08): `module:<code>` (coarse, core-reviewed — gates whether a person can open a module at all) vs `<module>.<verb>_<object>` (fine-grained, module-team-owned, no core review needed). Both are just rows in the existing `roles`/`permissions`/`role_permissions`/`user_roles` tables, checked through the one `has_permission()` function. Reason: each module team should be able to build and iterate their own in-module feature permissions without coordinating with the other five, while still keeping one Admin UI, one audit log, and one thing for the AI Agent module to query. No new tables needed — `permissions.key`/`permissions.module` already support this. See `01-platform-design-and-sop.md` Section 6 and Section 11 step 4.
 - **Cross-module reactions go through an event outbox** (`core.integration_events`), not direct writes into another module's schema. E.g. IT marking someone offboarded fires an event; Mess/FPS/HSE react to it independently via a shared Vercel Cron job that dispatches to each module's own handler.
+- **Roles are composed only of permission groups, never raw permissions directly** (decided 2026-09-14, supersedes the "two naming conventions" bullet above — the `module:<code>` vs `<module>.<verb>_<object>` key convention still applies to raw `permissions` rows, but roles no longer grant them directly): `permissions` →(M:N)→ `permission_groups` (module-scoped, named bundle — e.g. "HSE Officer Actions" in module `hse`) →(M:N)→ `roles` → `persons` (via `user_roles`, already company/site-scoped). A DB trigger enforces that a group can only contain permissions from its own module (closes a privilege-escalation path). `has_permission(key)` (security-definer SQL function, mirrors `current_person_id()`) is now the one real implementation of the long-referenced-but-never-built `core.has_permission()` — `proxy.ts` calls it via RPC instead of manually joining permission tables. A "module admin" is just a person holding `<module>.manage_permission_groups`, granted through this same system — no separate concept, and RLS already supports self-service group management by one once a module has one; the admin UI (`/admin/permission-groups`) is Admin-gated for now since no module has a module admin yet. See `supabase/migrations/0010_permission_groups.sql`.
 
 ---
 
@@ -68,6 +77,10 @@ One accepted, flagged gap: `profiles.department`/`site` (free text) have no dest
 
 **Not yet done / needs a human with real infrastructure access:** the migrations have not been run against an actual Supabase project (none exists yet — see `05-setup-runbook.md`), so the doc's Section 7 manual test checklist (login flows, status changes blocking login, document upload storage-path correctness, etc.) is still unverified against a live database. Do that as part of running the setup runbook.
 
+**Update 2026-09-14 (superseded — a real Supabase project now exists and the app has been run against it live):** `0007` and `0008` above were in fact applied to a real project during this stretch (see the 2026-09-09 update for how `0007`'s drift was caught and corrected) — first login, Admin bootstrap, and the full identity-split flow were all verified working end-to-end in the actual running app, not just in theory.
+
+**Update 2026-09-14: base-skeleton strip + permission groups.** Following the re-scope in §2, removed everything outside the base skeleton and the (not-yet-built) 4 modules: `profile/insurance` (dependents/insurance), the "Educational Documents" sub-feature of `/profile`, `company-updates` (announcements/polls), `referrals`, `services/employment-letters`, and the old placeholder `mess/fair-price-shop` + `mess/menu` stubs — both the routes/components and their underlying tables (migration `0009_strip_non_core_features.sql`). `services/internal-jobs`, `policy-library`, `quarter-quest`, and `hr-contact-directory` were relocated (not deleted) into `app/(protected)/hr/` as unwired reference material for when the HR module design doc gets written — they're not linked from nav and have no route-permission entry, reachable only by direct URL. `hr/dashboard` and `it/dashboard` stay as-is. `is_admin()`/`is_hr_or_admin()` and the `employee-documents` storage bucket were deliberately NOT dropped — generic infra every future module will reuse. Also built the permission-groups layer (§3) — migration `0010_permission_groups.sql`, plus a new `/admin/permission-groups` screen (list/create/rename/delete groups, toggle which permissions belong to a group, add new permission keys inline) and a reworked `/admin/roles` (toggles groups now, not raw permissions). Along the way, fixed two pre-existing latent bugs surfaced by this rework: (1) `roles` had no RLS write policy at all despite `admin/roles/actions.ts` already doing insert/update/delete on it — would have failed under RLS the first time someone actually clicked Duplicate/Rename/Delete; (2) `role_permissions.granted_by` defaulted to `auth.uid()`, which stopped being a valid `persons.id` after the 0008 identity split — `role_permission_groups.granted_by` has no default and callers now pass the resolved person id explicitly. `tsc`/`eslint`/`npm run build` all pass clean; **migrations `0009` and `0010` have not yet been run against the live database** — do that next, in order, before testing any of this in the running app.
+
 ---
 
 ## 5. Documents produced so far (reference these, don't regenerate from scratch)
@@ -77,7 +90,9 @@ One accepted, flagged gap: `profiles.department`/`site` (free text) have no dest
 | `01-platform-design-and-sop.md` (v0.2) | The full platform design: org model, identity model, employment/auth strategy, RBAC, schema partitioning, RLS approach, single-app architecture SOP, cross-module event pattern, module onboarding SOP, conventions, governance |
 | `04-claude-code-refactor-instructions.md` | File-by-file work order for Claude Code to execute the `profiles` → `persons`/`user_accounts`/`user_roles` refactor against the actual existing codebase |
 | `0007_org_hierarchy.sql` | **Already applied to the live database.** Adds `companies` table, extends `org_units` with `company_id`/`site_type`. Matches what's actually live — do not edit further; corrections go in a new migration (see below). |
-| `0008_org_hierarchy_fix_and_identity_split.sql` | **Not yet applied.** Combined migration written against the confirmed live schema: (A) replaces the now-superseded `org_units.company_id` with a many-to-many `org_unit_companies` join table, (B) the core identity-split — creates `persons`/`user_accounts`/`user_roles`, backfills from `profiles`, repoints every existing FK, rewires `is_admin()`/`is_hr_or_admin()`/`update_own_biodata()`/`cast_poll_vote()`. `drop table profiles;` is left commented out. Not idempotent — see its header comment before running. |
+| `0008_org_hierarchy_fix_and_identity_split.sql` | **Applied.** Combined migration: (A) replaces the now-superseded `org_units.company_id` with a many-to-many `org_unit_companies` join table, (B) the core identity-split — creates `persons`/`user_accounts`/`user_roles`, backfills from `profiles`, repoints every existing FK, rewires `is_admin()`/`is_hr_or_admin()`/`update_own_biodata()`/`cast_poll_vote()`. `drop table profiles;` is still commented out — profiles has not been dropped yet. |
+| `0009_strip_non_core_features.sql` | **Not yet applied.** Drops `educational_documents`, `dependents`, `insurance_policies`, `announcements`, `polls`/`poll_options`/`poll_votes`, `cast_poll_vote()`, `poll_results()`, and their orphaned route permissions. Part of the base-skeleton re-scope (§2/§4). |
+| `0010_permission_groups.sql` | **Not yet applied.** Adds `permission_groups`/`permission_group_permissions`/`role_permission_groups`, `has_permission(key)`, backfills every existing `role_permissions` grant into an equivalent group, then drops `role_permissions`. Also adds the `roles`/`permissions` RLS write policies that were missing before (see §4's 2026-09-14 update). Must run after `0009`. |
 | `05-setup-runbook.md` | Step-by-step: repo directory reorg (routes are currently misaligned with module ownership — e.g. `fair-price-shop` sits under `mess/`), `CODEOWNERS`, branch protection, Supabase project setup + migration order, Auth provider config, Vercel project + env var setup, admin bootstrap |
 | `CODEOWNERS` | Ready-to-use file mapping shared files and module folders to review ownership (needs real usernames filled in) |
 
@@ -85,20 +100,22 @@ One accepted, flagged gap: `profiles.department`/`site` (free text) have no dest
 
 ## 6. Open decisions — not yet resolved, don't assume an answer
 
-- **`app/(protected)/services/quarter-quest/`** — unclear what this feature is or which module owns it. Needs to be asked, not guessed.
-- **`app/(protected)/requests/`** — possibly a legitimate cross-module "employee requests" inbox (base-app surface, not module-owned), possibly should belong to one module. Needs an explicit decision, documented in the module registry.
-- **Anonymous feedback mechanism** (HR module) — hashed/pseudonymous token vs. edge-function-stripped submission. Must be decided before that module is built; retrofitting anonymity guarantees after data exists isn't credible.
-- **Offboarding system of record** — confirm with BAs whether HR or IT actually owns writing `core.employees.status` (only one module should trigger the lifecycle event).
+- **Central AI Agent module** — absent from the 2026-09-14 re-scoped module list (§2). Dropped, deferred, or just unmentioned? Ask before assuming either way.
+- **`app/(protected)/services/quarter-quest/`** — relocated to `app/(protected)/hr/quarter-quest/` as HR-module reference material (2026-09-14), but what it actually *is* is still unresolved — ask before building on it.
+- **`app/(protected)/requests/`** — left untouched by the 2026-09-14 strip (wasn't in scope of that decision either way). Possibly a legitimate cross-module "employee requests" inbox (base-app surface, not module-owned), possibly should belong to one module — likely relevant now that M1/M2 both describe ticket-style request flows. Needs an explicit decision, documented in the module registry.
+- **Anonymous feedback mechanism** (M1/HR) — hashed/pseudonymous token vs. edge-function-stripped submission. Must be decided before that module is built; retrofitting anonymity guarantees after data exists isn't credible. Note M1 as now scoped explicitly puts this chat *outside* auth/login entirely (§2) — factor that into the mechanism design, it's a stronger constraint than "anonymous within the app."
+- **Offboarding system of record** — confirm with BAs whether HR or IT actually owns writing employment status (only one module should trigger the lifecycle event) — relevant to M2's onboarding/offboarding scope.
 
 ---
 
 ## 7. What's next
 
-- Run the setup runbook (`05-setup-runbook.md`) to actually stand up the repo/Supabase/Vercel projects, then run migrations `0001`–`0008` in order and work through the manual test checklist in `04-claude-code-refactor-instructions.md` Section 7 — the base-auth refactor itself is done (see Section 4 above), but untested against a real database.
+- **Run `0009_strip_non_core_features.sql` then `0010_permission_groups.sql`** against the live Supabase project, in that order — the app code already assumes both have run.
 - Once verified in staging, uncomment `drop table profiles;` at the end of `0008_org_hierarchy_fix_and_identity_split.sql` and run it as its own migration.
-- Mess Management System documentation (next module to be scoped/documented after FPS).
-- To-Be design phase for the FPS module (an AS-IS BRD for FPS, scoped to the Dairy Plant site, already exists as a separate baseline document).
-- Remaining modules (HSE, HR, IT, AI) still need onboarding per Section 11 of the SOP once the base is live.
+- Resolve the open decisions in §6, particularly the Central AI Agent question (changes whether a 5th module folder is still coming) and the anonymous-feedback mechanism (blocks starting M1 for real).
+- **Write the HR module (M1) design document** — the user's own stated next step, and the first module they're implementing themselves end-to-end (own schema, full integration with the base skeleton) to learn the pattern before the other three. The relocated `app/(protected)/hr/*` reference pages and `hr/dashboard` are raw material for that doc, not a starting implementation.
+- M2 (IT Service Management), M3 (Mess + FPS), M4 (HSE) follow after M1, each getting the same design-doc-first treatment.
+- `01-platform-design-and-sop.md`'s original 6-module SOP (Section 11 onboarding steps, module registry, etc.) still applies mechanically to onboarding each of the 4 re-scoped modules — it wasn't rewritten for the new module list, just superseded in which modules exist.
 
 ---
 

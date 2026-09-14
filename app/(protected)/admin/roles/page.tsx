@@ -4,7 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { RolePermissionsEditor } from "@/components/role-permissions-editor";
 import { RoleFormPanel } from "@/components/role-form";
 import { duplicateRole, deleteRole } from "./actions";
-import type { Permission } from "@/types/database";
+import type { PermissionGroup } from "@/types/database";
 
 export default async function AdminRolesPage({
   searchParams,
@@ -19,16 +19,16 @@ export default async function AdminRolesPage({
   const selectedRole = (roles ?? []).find((r) => r.id === selectedRoleId);
   const roleBeingEdited = editRole ? (roles ?? []).find((r) => r.id === editRole) : undefined;
 
-  const { data: permissions } = await supabase
-    .from("permissions")
+  const { data: permissionGroups } = await supabase
+    .from("permission_groups")
     .select("*")
     .order("module")
-    .order("key");
+    .order("name");
 
   const { data: grants } = selectedRoleId
     ? await supabase
-        .from("role_permissions")
-        .select("permission_id, granted_by, granted_at")
+        .from("role_permission_groups")
+        .select("permission_group_id, granted_by, granted_at")
         .eq("role_id", selectedRoleId)
     : { data: [] };
 
@@ -49,26 +49,25 @@ export default async function AdminRolesPage({
     );
   }
 
-  const grantByPermissionId = new Map((grants ?? []).map((g) => [g.permission_id, g]));
+  const grantByGroupId = new Map((grants ?? []).map((g) => [g.permission_group_id, g]));
 
-  const permissionsByModule = new Map<string, Permission[]>();
-  for (const permission of permissions ?? []) {
-    const moduleName = permission.module ?? "Other";
-    if (!permissionsByModule.has(moduleName)) permissionsByModule.set(moduleName, []);
-    permissionsByModule.get(moduleName)!.push(permission);
+  const groupsByModule = new Map<string, PermissionGroup[]>();
+  for (const group of permissionGroups ?? []) {
+    if (!groupsByModule.has(group.module)) groupsByModule.set(group.module, []);
+    groupsByModule.get(group.module)!.push(group);
   }
-  const permissionsByModuleEntries = [...permissionsByModule.entries()];
+  const groupsByModuleEntries = [...groupsByModule.entries()];
 
   // "Last updated by X on Y" — once per module card, the most recent grant among that module's
-  // currently-granted permissions (not shown per-row anymore).
+  // currently-granted groups (not shown per-row anymore).
   const grantMetaByModule: Record<
     string,
     { grantedByName: string | null; grantedAt: string | null } | null
   > = {};
-  for (const [moduleName, perms] of permissionsByModuleEntries) {
+  for (const [moduleName, groups] of groupsByModuleEntries) {
     let latest: { granted_by: string | null; granted_at: string | null } | null = null;
-    for (const permission of perms) {
-      const grant = grantByPermissionId.get(permission.id);
+    for (const group of groups) {
+      const grant = grantByGroupId.get(group.id);
       if (!grant) continue;
       if (!latest || (grant.granted_at ?? "") > (latest.granted_at ?? "")) {
         latest = grant;
@@ -89,6 +88,14 @@ export default async function AdminRolesPage({
       <PageHeader
         title="Roles & Permissions"
         description="Configure system access levels and operational capabilities."
+        action={
+          <Link
+            href="/admin/permission-groups"
+            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Manage Permission Groups
+          </Link>
+        }
       />
 
       <div className="flex gap-6">
@@ -142,7 +149,7 @@ export default async function AdminRolesPage({
                 {selectedRole.name} Permissions
               </h2>
               <p className="text-sm text-slate-500">
-                Configure specific module access levels for this role.
+                Toggle which permission groups this role includes.
               </p>
             </div>
           )}
@@ -151,8 +158,8 @@ export default async function AdminRolesPage({
             <RolePermissionsEditor
               key={selectedRoleId}
               roleId={selectedRoleId}
-              permissionsByModule={permissionsByModuleEntries}
-              initialGrantedIds={[...grantByPermissionId.keys()]}
+              groupsByModule={groupsByModuleEntries}
+              initialGrantedIds={[...grantByGroupId.keys()]}
               grantMetaByModule={grantMetaByModule}
             />
           )}

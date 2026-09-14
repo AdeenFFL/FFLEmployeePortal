@@ -1,26 +1,11 @@
 import Link from "next/link";
 import { requireActiveUser } from "@/lib/auth/require-user";
-import {
-  updateOwnBiodata,
-  changeOwnPassword,
-  uploadEducationalDocument,
-  deleteEducationalDocument,
-} from "./actions";
+import { updateOwnBiodata, changeOwnPassword } from "./actions";
 import { PageHeader } from "@/components/page-header";
-import { StatusPill } from "@/components/status-pill";
-import type { DocumentVerificationStatus } from "@/types/database";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString();
-}
-
-function documentStatusTone(
-  status: DocumentVerificationStatus,
-): "positive" | "warning" | "negative" {
-  if (status === "Verified") return "positive";
-  if (status === "Rejected") return "negative";
-  return "warning";
 }
 
 function initialsFor(name: string) {
@@ -56,12 +41,6 @@ export default async function ProfilePage({
     .select("email, auth_method")
     .eq("person_id", personId)
     .single();
-
-  const { data: documents } = await supabase
-    .from("educational_documents")
-    .select("*")
-    .eq("person_id", personId)
-    .order("created_at", { ascending: false });
 
   const name = profile.full_name ?? account?.email;
   const subtitle = [profile.designation, profile.org_units?.name].filter(Boolean).join(" · ");
@@ -269,76 +248,6 @@ export default async function ProfilePage({
               </form>
             </div>
           )}
-
-          <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
-              Educational Documents
-            </h2>
-
-            <div className="overflow-x-auto rounded-lg border border-slate-200">
-              <table className="w-full text-left text-sm">
-                <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-                  <tr>
-                    <th className="px-4 py-3">Document Name</th>
-                    <th className="px-4 py-3">Upload Date</th>
-                    <th className="px-4 py-3">Verification Status</th>
-                    <th className="px-4 py-3"></th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {(documents ?? []).map((doc) => (
-                    <tr key={doc.id}>
-                      <td className="px-4 py-3">{doc.document_name}</td>
-                      <td className="px-4 py-3 text-slate-500">{formatDate(doc.created_at)}</td>
-                      <td className="px-4 py-3">
-                        <StatusPill
-                          label={doc.verification_status}
-                          tone={documentStatusTone(doc.verification_status)}
-                        />
-                      </td>
-                      <td className="px-4 py-3">
-                        <form action={deleteEducationalDocument.bind(null, doc.id)}>
-                          <button type="submit" className="text-red-600 hover:underline">
-                            Delete
-                          </button>
-                        </form>
-                      </td>
-                    </tr>
-                  ))}
-                  {(documents ?? []).length === 0 && (
-                    <tr>
-                      <td colSpan={4} className="px-4 py-6 text-center text-slate-400">
-                        No documents uploaded yet.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
-            </div>
-
-            <form
-              action={uploadEducationalDocument}
-              className="mt-4 flex flex-wrap items-end gap-3"
-            >
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-700">Document Name</span>
-                <input
-                  name="document_name"
-                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
-                />
-              </label>
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-700">File</span>
-                <input name="document" type="file" required className="text-sm" />
-              </label>
-              <button
-                type="submit"
-                className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Upload Document
-              </button>
-            </form>
-          </div>
         </div>
       </div>
     </div>
