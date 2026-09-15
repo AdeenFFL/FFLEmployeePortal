@@ -14,6 +14,8 @@ export default async function ProtectedLayout({
 
   return (
     <div className="flex min-h-screen bg-slate-50">
+      {/* Sidebar sits in normal flex flow (not fixed) so its own width transition pushes/pulls
+          this content area as it expands and collapses on hover. */}
       <Sidebar roleName={roleName} homePath={homePath} />
       <div className="flex flex-1 flex-col">
         <TopBar displayName={displayName} />

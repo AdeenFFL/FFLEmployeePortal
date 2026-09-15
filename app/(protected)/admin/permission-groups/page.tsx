@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { PermissionGroupFormPanel } from "@/components/permission-group-form";
 import { PermissionGroupMembersEditor } from "@/components/permission-group-members-editor";
+import { IconLink, IconButton } from "@/components/icon-button";
+import { PencilIcon, TrashIcon } from "@/components/icons";
 import { deletePermissionGroup } from "./actions";
 import type { PermissionGroup } from "@/types/database";
 
@@ -79,17 +81,18 @@ export default async function AdminPermissionGroupsPage({
                           {g.name}
                         </p>
                       </Link>
-                      <div className="flex gap-3 px-3 pb-2 pt-1 text-xs">
-                        <Link
+                      <div className="flex items-center gap-1 px-2 pb-1.5 pt-1">
+                        <IconLink
                           href={`/admin/permission-groups?group=${selectedGroupId}&editGroup=${g.id}`}
-                          className="font-medium text-slate-500 hover:underline"
-                        >
-                          Rename
-                        </Link>
+                          icon={<PencilIcon className="h-4 w-4" />}
+                          label="Rename group"
+                        />
                         <form action={deletePermissionGroup.bind(null, g.id)}>
-                          <button type="submit" className="font-medium text-red-600 hover:underline">
-                            Delete
-                          </button>
+                          <IconButton
+                            icon={<TrashIcon className="h-4 w-4" />}
+                            label="Delete group"
+                            tone="danger"
+                          />
                         </form>
                       </div>
                     </div>

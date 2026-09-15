@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { recordPasswordLogin } from "./actions";
 import { MicrosoftLogoIcon } from "@/components/icons";
+import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
 
 const ERROR_MESSAGES: Record<string, string> = {
   missing_code: "Sign-in did not complete. Please try again.",
@@ -89,31 +90,37 @@ export default function LoginPage() {
     <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-slate-50 px-4 py-16">
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
-        src="/logos/fauji-foods.jpg"
+        src="/logos/ffl-logo-blue.jpg"
         alt=""
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 m-auto h-[34rem] w-[34rem] max-w-none object-contain opacity-[0.06]"
       />
       <div className="relative z-10 w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-md">
         <div className="mb-8 text-center">
-          <div className="mx-auto mb-3 flex items-center justify-center gap-3">
+          <div className="mx-auto mb-4 flex items-center justify-center gap-4">
+            {/* The three main companies under the Fauji Food Vertical. */}
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/logos/fauji-foods.jpg"
-              alt="Fauji Foods"
-              className="h-12 w-12 rounded-md object-contain"
+              src="/logos/ffl-logo-blue.jpg"
+              alt="Fauji Foods Limited"
+              className="h-10 w-10 rounded-md object-contain"
             />
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src="/logos/fresh-n-freeze.jpg"
+              src="/logos/fresh-n-freeze-logo.png"
               alt="Fauji Fresh n Freeze"
-              className="h-12 w-12 rounded-md object-contain"
+              className="h-10 w-10 object-contain"
+            />
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/logos/fauji-cereals-logo.png"
+              alt="Fauji Cereals"
+              className="h-10 w-10 object-contain"
             />
           </div>
-          <h1 className="text-lg font-semibold text-slate-900">
-            Fauji Foods Employee Portal
-          </h1>
-          <p className="mt-1 text-sm text-slate-500">Sign in to continue</p>
+          <h1 className="text-lg font-semibold text-slate-900">{APP_NAME}</h1>
+          <p className="mt-1 text-sm text-slate-500">{APP_TAGLINE}</p>
+          <p className="mt-2 text-xs text-slate-400">Sign in to continue</p>
         </div>
 
         <Suspense fallback={null}>

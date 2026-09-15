@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/auth/sign-out";
+import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
 import {
   HomeIcon,
   UserIcon,
@@ -26,6 +27,12 @@ type NavGroup = {
 };
 type NavEntry = NavLeaf | NavGroup;
 
+// Collapsed = icon-only rail; hovering the rail expands it — pushing the main content over,
+// same as the sidebar's own width transition — and moving the pointer away collapses it back.
+// Small open/close delays smooth out brief graze-past mouse movement.
+const EXPAND_DELAY_MS = 100;
+const COLLAPSE_DELAY_MS = 200;
+
 export function Sidebar({
   roleName,
   homePath,
@@ -34,6 +41,26 @@ export function Sidebar({
   homePath: string;
 }) {
   const pathname = usePathname();
+  const [expandedByHover, setExpandedByHover] = useState(false);
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    };
+  }, []);
+
+  function handleMouseEnter() {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setExpandedByHover(true), EXPAND_DELAY_MS);
+  }
+
+  function handleMouseLeave() {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = setTimeout(() => setExpandedByHover(false), COLLAPSE_DELAY_MS);
+  }
+
+  const collapsed = !expandedByHover;
 
   const baseItems: NavEntry[] = [
     { type: "link", href: homePath, label: "Home", icon: HomeIcon },
@@ -128,35 +155,57 @@ export function Sidebar({
         <Link
           key={entry.href}
           href={entry.href}
-          className={`flex items-center gap-3 rounded-full px-3 py-2 text-sm font-medium transition-colors ${
+          title={collapsed ? entry.label : undefined}
+          className={`flex w-fit items-center rounded-full px-3 py-2 text-sm font-medium transition-colors ${
+            collapsed ? "gap-0" : "gap-3"
+          } ${
             active
               ? "bg-blue-50 text-blue-700"
               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`}
         >
-          <ItemIcon className="h-4 w-4" />
-          {entry.label}
+          <ItemIcon className="h-4 w-4 shrink-0" />
+          <span
+            className={`overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
+              collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100"
+            }`}
+          >
+            {entry.label}
+          </span>
         </Link>
       );
     }
 
-    const isOpen = expanded.has(entry.label);
+    // Collapsing the whole rail also closes every group visually — there's no room to show
+    // children in icon-only width, and hovering back in restores whatever was open before.
+    const isOpen = !collapsed && expanded.has(entry.label);
     return (
       <div key={entry.label}>
         <button
           type="button"
           onClick={() => toggleGroup(entry.label)}
-          className={`flex w-full items-center gap-3 rounded-full px-3 py-2 text-left text-sm font-medium transition-colors ${
+          title={collapsed ? entry.label : undefined}
+          className={`flex items-center rounded-full px-3 py-2 text-left text-sm font-medium transition-colors ${
+            collapsed ? "w-fit gap-0" : "w-full gap-3"
+          } ${
             active
               ? "bg-blue-50 text-blue-700"
               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`}
         >
-          <ItemIcon className="h-4 w-4" />
-          <span className="flex-1">{entry.label}</span>
-          <ChevronDownIcon
-            className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
-          />
+          <ItemIcon className="h-4 w-4 shrink-0" />
+          <span
+            className={`overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
+              collapsed ? "max-w-0 opacity-0" : "max-w-40 flex-1 opacity-100"
+            }`}
+          >
+            {entry.label}
+          </span>
+          {!collapsed && (
+            <ChevronDownIcon
+              className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
+            />
+          )}
         </button>
         {isOpen && (
           <div className="ml-6 mt-1 space-y-1 border-l border-slate-200 pl-3">
@@ -185,17 +234,27 @@ export function Sidebar({
   }
 
   return (
-    <aside className="flex h-screen w-64 shrink-0 flex-col overflow-y-auto border-r border-slate-200 bg-white">
-      <div className="flex items-center gap-2 px-5 py-6">
+    <aside
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      className={`flex h-screen shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-white transition-[width] duration-200 ease-in-out ${
+        collapsed ? "w-16" : "w-64"
+      }`}
+    >
+      <div className="flex w-fit items-center gap-2 px-3 py-6">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/logos/fauji-foods.jpg"
-          alt="Fauji Foods"
+          src="/logos/ffl-logo-blue.jpg"
+          alt="Fauji Foods Limited"
           className="h-8 w-8 shrink-0 rounded-md object-contain"
         />
-        <div>
-          <p className="text-base font-bold text-slate-900">Employee Portal</p>
-          <p className="text-xs text-slate-500">Fauji Foods</p>
+        <div
+          className={`overflow-hidden whitespace-nowrap transition-opacity duration-150 ${
+            collapsed ? "opacity-0" : "opacity-100"
+          }`}
+        >
+          <p className="text-base font-bold text-slate-900">{APP_NAME}</p>
+          <p className="text-xs text-slate-500">{APP_TAGLINE}</p>
         </div>
       </div>
 
@@ -204,7 +263,11 @@ export function Sidebar({
 
         {adminCentreItems.length > 0 && (
           <>
-            <p className="mb-1 mt-4 px-3 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p
+              className={`mb-1 mt-4 overflow-hidden whitespace-nowrap px-3 text-xs font-semibold uppercase tracking-wide text-slate-400 transition-opacity duration-150 ${
+                collapsed ? "opacity-0" : "opacity-100"
+              }`}
+            >
               Admin Centre
             </p>
             {adminCentreItems.map(renderEntry)}
@@ -215,18 +278,36 @@ export function Sidebar({
       <div className="space-y-1 border-t border-slate-200 px-3 py-4">
         <Link
           href="/profile"
-          className="flex items-center gap-3 rounded-full px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+          title={collapsed ? "Account" : undefined}
+          className={`flex w-fit items-center rounded-full px-3 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 ${
+            collapsed ? "gap-0" : "gap-3"
+          }`}
         >
-          <UserIcon className="h-4 w-4" />
-          Account
+          <UserIcon className="h-4 w-4 shrink-0" />
+          <span
+            className={`overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
+              collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100"
+            }`}
+          >
+            Account
+          </span>
         </Link>
         <form action={signOut}>
           <button
             type="submit"
-            className="flex w-full items-center gap-3 rounded-full px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+            title={collapsed ? "Logout" : undefined}
+            className={`flex w-fit items-center rounded-full px-3 py-2 text-left text-sm font-medium text-slate-600 hover:bg-slate-50 hover:text-slate-900 ${
+              collapsed ? "gap-0" : "gap-3"
+            }`}
           >
-            <LogoutIcon className="h-4 w-4" />
-            Logout
+            <LogoutIcon className="h-4 w-4 shrink-0" />
+            <span
+              className={`overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
+                collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100"
+              }`}
+            >
+              Logout
+            </span>
           </button>
         </form>
       </div>

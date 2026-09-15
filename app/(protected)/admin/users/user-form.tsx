@@ -1,4 +1,6 @@
-import Link from "next/link";
+"use client";
+
+import { useDismissable } from "@/components/use-dismissable";
 import type { Role, UserStatus, AuthMethod, EmploymentType } from "@/types/database";
 import { inviteOrUpdateUser, setUserPassword } from "./actions";
 
@@ -35,20 +37,24 @@ export function UserFormPanel({
   roles: Role[];
   initialValues: UserFormValues;
 }) {
+  const { visible, close } = useDismissable("/admin/users");
+  if (!visible) return null;
+
   return (
-    <div className="fixed inset-0 z-10">
-      <div className="absolute inset-0 bg-slate-900/40" />
+    <div className="fixed inset-0 z-20">
+      <div className="absolute inset-0 bg-slate-900/40" onClick={close} />
       <div className="absolute inset-y-0 right-0 w-full max-w-md overflow-y-auto rounded-l-xl bg-white p-6 shadow-2xl">
         <div className="mb-6 flex items-center justify-between">
           <h2 className="text-lg font-semibold text-slate-900">
             {mode === "new" ? "Add New User" : "Edit User"}
           </h2>
-          <Link
-            href="/admin/users"
+          <button
+            type="button"
+            onClick={close}
             className="text-sm text-slate-500 hover:text-slate-700"
           >
             Close
-          </Link>
+          </button>
         </div>
 
         <form action={inviteOrUpdateUser} className="flex flex-col gap-4">
@@ -204,12 +210,13 @@ export function UserFormPanel({
           </label>
 
           <div className="mt-2 flex justify-end gap-2">
-            <Link
-              href="/admin/users"
+            <button
+              type="button"
+              onClick={close}
               className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
             >
               Cancel
-            </Link>
+            </button>
             <button
               type="submit"
               className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"

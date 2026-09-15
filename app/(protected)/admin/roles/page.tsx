@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { RolePermissionsEditor } from "@/components/role-permissions-editor";
 import { RoleFormPanel } from "@/components/role-form";
+import { IconLink, IconButton } from "@/components/icon-button";
+import { CopyIcon, PencilIcon, TrashIcon } from "@/components/icons";
 import { duplicateRole, deleteRole } from "./actions";
 import type { PermissionGroup } from "@/types/database";
 
@@ -115,24 +117,27 @@ export default async function AdminRolesPage({
                   </p>
                   <p className="text-xs text-slate-500">{subtitle}</p>
                 </Link>
-                <div className="flex gap-3 px-4 pb-3 pt-1 text-xs">
+                <div className="flex items-center gap-1 px-3 pb-2 pt-1">
                   <form action={duplicateRole.bind(null, r.id)}>
-                    <button type="submit" className="font-medium text-blue-600 hover:underline">
-                      Duplicate
-                    </button>
+                    <IconButton
+                      icon={<CopyIcon className="h-4 w-4" />}
+                      label="Duplicate role"
+                      tone="primary"
+                    />
                   </form>
                   {!r.is_system_role && (
                     <>
-                      <Link
+                      <IconLink
                         href={`/admin/roles?role=${selectedRoleId}&editRole=${r.id}`}
-                        className="font-medium text-slate-500 hover:underline"
-                      >
-                        Edit
-                      </Link>
+                        icon={<PencilIcon className="h-4 w-4" />}
+                        label="Edit role"
+                      />
                       <form action={deleteRole.bind(null, r.id)}>
-                        <button type="submit" className="font-medium text-red-600 hover:underline">
-                          Delete
-                        </button>
+                        <IconButton
+                          icon={<TrashIcon className="h-4 w-4" />}
+                          label="Delete role"
+                          tone="danger"
+                        />
                       </form>
                     </>
                   )}

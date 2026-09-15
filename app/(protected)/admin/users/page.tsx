@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { setUserStatus, revokeInvitation } from "./actions";
+import { setUserStatus, revokeInvitation, resendInviteEmail } from "./actions";
 import { UserFormPanel } from "./user-form";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
+import { OptimisticToggle } from "@/components/optimistic-toggle";
+import { IconLink, IconButton } from "@/components/icon-button";
+import { PencilIcon, TrashIcon, MailIcon } from "@/components/icons";
 import { getInitials } from "@/lib/format/initials";
 import type { UserStatus, AuthMethod, EmploymentType } from "@/types/database";
 
@@ -12,12 +15,6 @@ const STATUSES: UserStatus[] = ["Active", "Inactive", "Suspended"];
 function formatDate(value: string | null) {
   if (!value) return "Never";
   return new Date(value).toLocaleString();
-}
-
-function statusTone(status: UserStatus): "positive" | "neutral" | "negative" {
-  if (status === "Active") return "positive";
-  if (status === "Suspended") return "negative";
-  return "neutral";
 }
 
 export default async function AdminUsersPage({
@@ -242,8 +239,8 @@ export default async function AdminUsersPage({
               <th className="px-4 py-3">Email</th>
               <th className="px-4 py-3">Role</th>
               <th className="px-4 py-3">Designation</th>
-              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3">Last Login</th>
+              <th className="px-4 py-3">Status</th>
               <th className="px-4 py-3"></th>
             </tr>
           </thead>
@@ -273,31 +270,28 @@ export default async function AdminUsersPage({
                     )}
                   </td>
                   <td className="px-4 py-3">{p.designation ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    <StatusPill label={p.status.toUpperCase()} tone={statusTone(p.status)} />
-                  </td>
                   <td className="px-4 py-3 text-slate-500">
                     {formatDate(account?.last_login_at ?? null)}
                   </td>
                   <td className="px-4 py-3">
+                    <OptimisticToggle
+                      pressed={p.status === "Active"}
+                      label={p.status === "Active" ? "Deactivate user" : "Reactivate user"}
+                      action={setUserStatus.bind(
+                        null,
+                        p.id,
+                        p.status === "Active" ? "Inactive" : "Active",
+                      )}
+                    />
+                  </td>
+                  <td className="px-4 py-3">
                     <div className="flex items-center gap-3">
-                      <Link
+                      <IconLink
                         href={`/admin/users?edit=${encodeURIComponent(account?.email ?? "")}`}
-                        className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-                      >
-                        Edit
-                      </Link>
-                      <form
-                        action={setUserStatus.bind(
-                          null,
-                          p.id,
-                          p.status === "Active" ? "Inactive" : "Active",
-                        )}
-                      >
-                        <button type="submit" className="text-slate-500 hover:underline">
-                          {p.status === "Active" ? "Deactivate" : "Reactivate"}
-                        </button>
-                      </form>
+                        icon={<PencilIcon className="h-4 w-4" />}
+                        label="Edit user"
+                        tone="primary"
+                      />
                     </div>
                   </td>
                 </tr>
@@ -336,17 +330,25 @@ export default async function AdminUsersPage({
                 <td className="px-4 py-3">{roleNameById.get(invite.role_id)}</td>
                 <td className="px-4 py-3 text-slate-500">{formatDate(invite.invited_at)}</td>
                 <td className="px-4 py-3">
-                  <div className="flex items-center gap-3">
-                    <Link
+                  <div className="flex items-center gap-2">
+                    <form action={resendInviteEmail.bind(null, invite.email)}>
+                      <IconButton
+                        icon={<MailIcon className="h-4 w-4" />}
+                        label="Resend invite email"
+                        tone="primary"
+                      />
+                    </form>
+                    <IconLink
                       href={`/admin/users?edit=${encodeURIComponent(invite.email)}`}
-                      className="text-blue-700 hover:underline"
-                    >
-                      Edit
-                    </Link>
+                      icon={<PencilIcon className="h-4 w-4" />}
+                      label="Edit invitation"
+                    />
                     <form action={revokeInvitation.bind(null, invite.email)}>
-                      <button type="submit" className="text-red-600 hover:underline">
-                        Revoke
-                      </button>
+                      <IconButton
+                        icon={<TrashIcon className="h-4 w-4" />}
+                        label="Revoke invitation"
+                        tone="danger"
+                      />
                     </form>
                   </div>
                 </td>

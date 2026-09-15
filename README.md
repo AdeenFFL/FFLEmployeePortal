@@ -1,8 +1,10 @@
-# FFL Employee Portal
+# Employee Campsite
 
-Next.js (App Router) + Supabase employee portal. This pass implements the **Authentication & Access
-Management module**: Microsoft OAuth sign-in via Supabase Auth, no self-registration
-(accounts are provisioned by Admin/HR), soft-deactivation, and a config-driven role/permission model.
+Fauji Food Vertical Employee Portal — Next.js (App Router) + Supabase. Base skeleton covers
+identity/roles (Microsoft OAuth + password sign-in via Supabase Auth, no self-registration,
+accounts provisioned by Admin), site/company configuration, and a permission-groups-based
+access model (see `context.md` for the full architecture and decision record — this README
+predates several since-superseded details below, kept for the local-setup mechanics only).
 
 ## Local setup
 

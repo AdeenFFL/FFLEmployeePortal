@@ -1,4 +1,4 @@
-import { ToggleSwitch } from "@/components/toggle-switch";
+import { OptimisticToggle } from "@/components/optimistic-toggle";
 import {
   togglePermissionInGroup,
   addPermissionToGroup,
@@ -37,11 +37,11 @@ export function PermissionGroupMembersEditor({
                     </p>
                     <p className="text-xs text-slate-400">{permission.key}</p>
                   </div>
-                  <form
+                  <OptimisticToggle
+                    pressed={included}
+                    label={permission.description ?? permission.key}
                     action={togglePermissionInGroup.bind(null, groupId, permission.id, !included)}
-                  >
-                    <ToggleSwitch pressed={included} label={permission.description ?? permission.key} />
-                  </form>
+                  />
                 </div>
               );
             })}

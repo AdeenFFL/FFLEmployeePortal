@@ -1,8 +1,8 @@
-import Link from "next/link";
 import { setOrgUnitStatus } from "@/lib/admin/org-units";
 import { StatusPill } from "@/components/status-pill";
-import { ToggleSwitch } from "@/components/toggle-switch";
-import { BuildingIcon, MapPinIcon } from "@/components/icons";
+import { OptimisticToggle } from "@/components/optimistic-toggle";
+import { IconLink } from "@/components/icon-button";
+import { BuildingIcon, MapPinIcon, PencilIcon } from "@/components/icons";
 import type { OrgUnit, OrgUnitType } from "@/types/database";
 
 export function OrgUnitTable({
@@ -50,22 +50,20 @@ export function OrgUnitTable({
                 </span>
               </td>
               <td className="px-4 py-3">
-                <div className="flex items-center gap-2">
-                  <form action={setOrgUnitStatus.bind(null, type, unit.id, !unit.is_active)}>
-                    <ToggleSwitch pressed={unit.is_active} label={`${unit.name} active status`} />
-                  </form>
-                  <span className="text-xs text-slate-500">
-                    {unit.is_active ? "Active" : "Inactive"}
-                  </span>
-                </div>
+                <OptimisticToggle
+                  pressed={unit.is_active}
+                  label={`${unit.name} active status`}
+                  action={setOrgUnitStatus.bind(null, type, unit.id, !unit.is_active)}
+                  statusLabels={{ on: "Active", off: "Inactive" }}
+                />
               </td>
               <td className="px-4 py-3">
-                <Link
+                <IconLink
                   href={`${basePath}?edit=${unit.id}`}
-                  className="rounded-md bg-blue-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-blue-700"
-                >
-                  Edit
-                </Link>
+                  icon={<PencilIcon className="h-4 w-4" />}
+                  label={`Edit ${unit.name}`}
+                  tone="primary"
+                />
               </td>
             </tr>
           ))}

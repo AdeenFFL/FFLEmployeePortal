@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/require-admin";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditEvent } from "@/lib/audit/log";
+import { sendInviteEmail } from "@/lib/email/invite";
 import type { UserStatus, AuthMethod, EmploymentType } from "@/types/database";
 
 const MIN_PASSWORD_LENGTH = 6; // Supabase's own GoTrue default minimum
@@ -170,13 +171,21 @@ export async function inviteOrUpdateUser(formData: FormData) {
       throw new Error(roleError.message);
     }
 
+    const emailResult = await sendInviteEmail({
+      to: email,
+      displayName: fields.full_name,
+      authMethod: "password",
+    });
+
     await logAuditEvent({
       supabase,
       actorId: adminPersonId,
       actorLabel,
       module: "admin",
       action: "CREATED",
-      details: `Created password-based account for ${email} as ${role?.name ?? "Unknown role"}`,
+      details: `Created password-based account for ${email} as ${role?.name ?? "Unknown role"}${
+        emailResult.sent ? " (invite email sent)" : " (invite email FAILED to send)"
+      }`,
     });
 
     revalidatePath("/admin/users");
@@ -201,6 +210,11 @@ export async function inviteOrUpdateUser(formData: FormData) {
       employee_code: fields.employee_code,
       designation: fields.designation,
       date_of_joining: fields.date_of_joining,
+      // invited_users.invited_by has a stale DEFAULT auth.uid() left over from before the
+      // persons/user_accounts split (its FK now points at persons(id), not auth.users(id) via
+      // profiles) — must be passed explicitly or the insert violates the FK. See
+      // 0011_fix_invited_by_default.sql.
+      invited_by: adminPersonId,
     },
     { onConflict: "email" },
   );
@@ -212,6 +226,12 @@ export async function inviteOrUpdateUser(formData: FormData) {
     .eq("id", fields.role_id)
     .maybeSingle();
 
+  // Only on a genuinely fresh invite — editing a still-pending one's fields shouldn't re-email
+  // them every time. Use the "Resend Invite" button for that.
+  const emailResult = existingInvite
+    ? null
+    : await sendInviteEmail({ to: email, displayName: fields.full_name, authMethod: "microsoft" });
+
   await logAuditEvent({
     supabase,
     actorId: adminPersonId,
@@ -220,7 +240,44 @@ export async function inviteOrUpdateUser(formData: FormData) {
     action: existingInvite ? "MODIFIED" : "CREATED",
     details: existingInvite
       ? `Updated pending invitation for ${email}`
-      : `Invited new user ${email} as ${role?.name ?? "Unknown role"}`,
+      : `Invited new user ${email} as ${role?.name ?? "Unknown role"}${
+          emailResult?.sent ? " (invite email sent)" : " (invite email FAILED to send)"
+        }`,
+  });
+
+  revalidatePath("/admin/users");
+}
+
+// Lets an admin re-send the invite notification for a pending Microsoft invitation without
+// editing/resaving it — e.g. if the employee says they never got it, or it's been a while.
+export async function resendInviteEmail(email: string) {
+  const { supabase, personId: adminPersonId, actorLabel } = await requireAdmin();
+
+  const normalizedEmail = email.trim().toLowerCase();
+  const { data: invitation } = await supabase
+    .from("invited_users")
+    .select("display_name")
+    .eq("email", normalizedEmail)
+    .maybeSingle();
+  if (!invitation) throw new Error("Invitation not found.");
+
+  const emailResult = await sendInviteEmail({
+    to: normalizedEmail,
+    displayName: invitation.display_name,
+    authMethod: "microsoft",
+  });
+
+  if (!emailResult.sent) {
+    throw new Error(emailResult.error ?? "Failed to send invite email.");
+  }
+
+  await logAuditEvent({
+    supabase,
+    actorId: adminPersonId,
+    actorLabel,
+    module: "admin",
+    action: "SYNCED",
+    details: `Re-sent invite email to ${normalizedEmail}`,
   });
 
   revalidatePath("/admin/users");
