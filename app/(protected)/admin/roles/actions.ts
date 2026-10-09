@@ -2,96 +2,71 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { requirePermission } from "@/lib/auth/require-permission";
 import { logAuditEvent } from "@/lib/audit/log";
-
-// Revoking a group containing either of these from Admin would lock every admin out of this
-// module with no way back in — a role-wide lockout, distinct from the single self-deactivation
-// guard in app/admin/users/actions.ts.
-const PROTECTED_ADMIN_ROUTE_KEYS = new Set([
-  "route:/admin/users",
-  "route:/admin/roles",
-]);
+import { applyRolePermissionGroupChanges } from "@/lib/admin/role-permission-groups";
 
 // Batched: the Roles & Permissions screen stages toggles locally (RolePermissionsEditor) and
-// commits them all at once via "Save Changes", rather than submitting per-toggle. Each changed
-// group still gets its own audit log row (same granularity as every other action in this app),
-// and the Admin-lockout guard is checked per-change so a batch can't sneak one through.
+// commits them all at once via "Save Changes", rather than submitting per-toggle. This is the
+// GLOBAL entrypoint (any permission_group_id, any module) — gated by route:/admin/roles. A
+// module's own scoped screen (e.g. hr/admin/roles/actions.ts) calls the same shared
+// applyRolePermissionGroupChanges() but behind its own permission and restricted to its own
+// module's groups only.
 export async function saveRolePermissionGroups(
   roleId: string,
   changes: { permissionGroupId: string; granted: boolean }[],
 ) {
-  const { supabase, personId, actorLabel } = await requireAdmin();
-  if (changes.length === 0) return;
+  const { supabase, personId, actorLabel } = await requirePermission("route:/admin/roles");
+  await applyRolePermissionGroupChanges({
+    supabase,
+    personId,
+    actorLabel,
+    roleId,
+    changes,
+    revalidatePaths: ["/admin/roles"],
+  });
+}
 
-  const { data: role } = await supabase
+// A genuinely blank-slate role — no permission groups granted at all, by design. The admin picks
+// Module Access and (inside each module) its fine-grained permissions afterward, same as this
+// role was built from scratch rather than copied from one of the 4 seed roles — there is nothing
+// in this codebase that assumes a role is, or descends from, "Admin"/"HR"/"IT"/"Employee".
+export async function createRole(formData: FormData) {
+  const { supabase, personId, actorLabel } = await requirePermission("route:/admin/roles");
+
+  const name = String(formData.get("name") ?? "").trim();
+  const description = String(formData.get("description") ?? "").trim() || null;
+  if (!name) throw new Error("Name is required.");
+
+  const { data: newRole, error } = await supabase
     .from("roles")
-    .select("name")
-    .eq("id", roleId)
-    .maybeSingle();
-
-  for (const change of changes) {
-    const { data: group } = await supabase
-      .from("permission_groups")
-      .select("module, name, description")
-      .eq("id", change.permissionGroupId)
-      .maybeSingle();
-
-    if (!change.granted) {
-      if (role?.name === "Admin") {
-        const { data: memberPermissions } = await supabase
-          .from("permission_group_permissions")
-          .select("permissions(key)")
-          .eq("permission_group_id", change.permissionGroupId);
-        const memberKeys = (memberPermissions ?? [])
-          .map((m) => m.permissions?.key)
-          .filter(Boolean) as string[];
-        if (memberKeys.some((key) => PROTECTED_ADMIN_ROUTE_KEYS.has(key))) {
-          throw new Error(
-            `Cannot revoke '${group?.name ?? change.permissionGroupId}' from Admin — it would lock all admins out of this module.`,
-          );
-        }
-      }
-
-      const { error } = await supabase
-        .from("role_permission_groups")
-        .delete()
-        .eq("role_id", roleId)
-        .eq("permission_group_id", change.permissionGroupId);
-      if (error) throw new Error(error.message);
-    } else {
-      const { error } = await supabase.from("role_permission_groups").insert({
-        role_id: roleId,
-        permission_group_id: change.permissionGroupId,
-        granted_by: personId,
-      });
-      if (error && error.code !== "23505") throw new Error(error.message); // idempotent on dup
-    }
-
-    await logAuditEvent({
-      supabase,
-      actorId: personId,
-      actorLabel,
-      module: "admin",
-      action: "MODIFIED",
-      details: `Changed '${role?.name ?? roleId}' permissions: ${
-        group?.description ?? group?.name ?? change.permissionGroupId
-      } ${change.granted ? "enabled" : "disabled"}`,
-    });
+    .insert({ name, description, is_system_role: false })
+    .select("id")
+    .single();
+  if (error) {
+    throw new Error(error.code === "23505" ? `A role named '${name}' already exists.` : error.message);
   }
 
+  await logAuditEvent({
+    supabase,
+    actorId: personId,
+    actorLabel,
+    module: "admin",
+    action: "CREATED",
+    details: `Created role '${name}'`,
+  });
+
   revalidatePath("/admin/roles");
+  redirect(`/admin/roles?role=${newRole.id}`);
 }
 
 // Copies a role's full permission-group grant set into a brand-new (non-system) role, so an
 // admin can start from an existing configuration instead of granting every group from scratch.
-// Note: the new role gets correct *page* access (proxy.ts's route checks are fully data-driven),
-// but isn't treated as "Admin"/"HR" by the handful of Server Actions that check role.name
-// literally (requireAdmin, requireHrOrAdmin) — duplicating Admin or HR won't grant their
-// action-level privileges, only their page visibility. Making those checks permission-driven
-// instead of name-driven is a bigger change than this button.
+// Every Server Action authorization check in this codebase is now permission-driven
+// (requirePermission), not role-name-driven, so a duplicated role gets correct *action* access
+// too, not just page visibility — whatever it was granted is exactly what it can do.
 export async function duplicateRole(roleId: string) {
-  const { supabase, personId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requirePermission("route:/admin/roles");
 
   const { data: source } = await supabase
     .from("roles")
@@ -144,7 +119,7 @@ export async function duplicateRole(roleId: string) {
 }
 
 export async function renameRole(formData: FormData) {
-  const { supabase, personId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requirePermission("route:/admin/roles");
 
   const id = String(formData.get("id") ?? "").trim();
   const name = String(formData.get("name") ?? "").trim();
@@ -175,7 +150,7 @@ export async function renameRole(formData: FormData) {
 }
 
 export async function deleteRole(id: string) {
-  const { supabase, personId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requirePermission("route:/admin/roles");
 
   const { data: role } = await supabase
     .from("roles")

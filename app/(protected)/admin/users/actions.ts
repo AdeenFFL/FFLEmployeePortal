@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { requirePermission } from "@/lib/auth/require-permission";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditEvent } from "@/lib/audit/log";
 import { sendInviteEmail } from "@/lib/email/invite";
@@ -29,7 +29,7 @@ function readUserFormFields(formData: FormData) {
 }
 
 export async function inviteOrUpdateUser(formData: FormData) {
-  const { supabase, personId: adminPersonId, actorLabel } = await requireAdmin();
+  const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 
   const email = String(formData.get("email") ?? "")
     .trim()
@@ -251,7 +251,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
 // Lets an admin re-send the invite notification for a pending Microsoft invitation without
 // editing/resaving it — e.g. if the employee says they never got it, or it's been a while.
 export async function resendInviteEmail(email: string) {
-  const { supabase, personId: adminPersonId, actorLabel } = await requireAdmin();
+  const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 
   const normalizedEmail = email.trim().toLowerCase();
   const { data: invitation } = await supabase
@@ -286,7 +286,7 @@ export async function resendInviteEmail(email: string) {
 // Decision: since "contact your administrator" is the only recovery path (no email flow), the
 // Admin must be able to set a new password for an existing password-auth user.
 export async function setUserPassword(personId: string, formData: FormData) {
-  const { supabase, personId: adminPersonId, actorLabel } = await requireAdmin();
+  const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 
   const newPassword = String(formData.get("new_password") ?? "");
   if (newPassword.length < MIN_PASSWORD_LENGTH) {
@@ -321,7 +321,7 @@ export async function setUserPassword(personId: string, formData: FormData) {
 }
 
 export async function setUserStatus(personId: string, status: UserStatus) {
-  const { supabase, personId: adminPersonId, actorLabel } = await requireAdmin();
+  const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 
   if (personId === adminPersonId) {
     throw new Error("You cannot deactivate your own account.");
@@ -358,7 +358,7 @@ export async function setUserStatus(personId: string, status: UserStatus) {
 }
 
 export async function revokeInvitation(email: string) {
-  const { supabase, personId: adminPersonId, actorLabel } = await requireAdmin();
+  const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 
   const normalizedEmail = email.trim().toLowerCase();
   const { error } = await supabase

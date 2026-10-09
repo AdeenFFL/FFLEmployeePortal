@@ -2,7 +2,6 @@
 
 import { useState, useTransition } from "react";
 import { ToggleSwitch } from "@/components/toggle-switch";
-import { saveRolePermissionGroups } from "@/app/(protected)/admin/roles/actions";
 import type { PermissionGroup } from "@/types/database";
 
 type GrantMeta = { grantedByName: string | null; grantedAt: string | null };
@@ -13,12 +12,20 @@ export function RolePermissionsEditor({
   groupsByModule,
   initialGrantedIds,
   grantMetaByModule,
+  saveAction,
 }: {
   roleId: string;
   moduleAccessGroups: PermissionGroup[];
   groupsByModule: [string, PermissionGroup[]][];
   initialGrantedIds: string[];
   grantMetaByModule: Record<string, GrantMeta | null>;
+  // The actual persistence call — admin/roles/page.tsx passes the global
+  // saveRolePermissionGroups (any module), a module's own screen (e.g. hr/admin/roles/page.tsx)
+  // passes its own scoped action restricted to that module's groups only.
+  saveAction: (
+    roleId: string,
+    changes: { permissionGroupId: string; granted: boolean }[],
+  ) => Promise<void>;
 }) {
   const [granted, setGranted] = useState(new Set(initialGrantedIds));
   const [committed, setCommitted] = useState(new Set(initialGrantedIds));
@@ -52,7 +59,7 @@ export function RolePermissionsEditor({
 
     startTransition(async () => {
       try {
-        await saveRolePermissionGroups(roleId, changes);
+        await saveAction(roleId, changes);
         setCommitted(new Set(granted));
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to save changes.");
@@ -92,11 +99,9 @@ export function RolePermissionsEditor({
 
       {groupsByModule.length === 0 && (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-400">
-          No permission groups exist yet.{" "}
-          <a href="/admin/permission-groups" className="text-blue-600 hover:underline">
-            Create one
-          </a>{" "}
-          before you can grant anything to a role.
+          Nothing to configure here yet — each module seeds its own permissions via its
+          migration (see 01-platform-design-and-sop.md §11), there's no screen to create one by
+          hand.
         </p>
       )}
 

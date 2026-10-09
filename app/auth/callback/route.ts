@@ -1,7 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { createAdminClient } from "@/lib/supabase/admin";
-import { ROLE_HOME_PATH, ROLE_PRIORITY } from "@/lib/auth/roles";
+import { resolveHomePath } from "@/lib/auth/home-path";
+import { getGrantedPermissionKeys } from "@/lib/auth/granted-permissions";
 
 export async function GET(request: NextRequest) {
   const code = request.nextUrl.searchParams.get("code");
@@ -147,22 +148,15 @@ export async function GET(request: NextRequest) {
 
   const { data: roleRows } = await supabase
     .from("user_roles")
-    .select("roles(name)")
+    .select("role_id")
     .eq("person_id", personId);
 
-  const roleNames = (roleRows ?? []).map((r) => r.roles?.name).filter(Boolean) as string[];
-
-  if (roleNames.length === 0) {
+  if ((roleRows ?? []).length === 0) {
     return NextResponse.redirect(new URL("/pending-setup", request.url));
   }
 
-  // Falls back to /home for any role name not in the map (e.g. a custom role created via
-  // "Duplicate Role") — "unknown_role" stays reserved for the genuine data-integrity case where
-  // a person has role rows that don't resolve to any known role name.
-  const priorityRole = ROLE_PRIORITY.find((r) => roleNames.includes(r));
-  const homePath = priorityRole ? (ROLE_HOME_PATH[priorityRole] ?? "/home") : undefined;
-
-  return NextResponse.redirect(
-    new URL(homePath ?? "/login?error=unknown_role", request.url),
-  );
+  // Resolved from permissions, not role name — any role, including a brand-new custom one,
+  // lands somewhere sensible with no name-matching involved (see lib/auth/home-path.ts).
+  const grantedKeys = await getGrantedPermissionKeys(supabase, personId);
+  return NextResponse.redirect(new URL(resolveHomePath(grantedKeys), request.url));
 }

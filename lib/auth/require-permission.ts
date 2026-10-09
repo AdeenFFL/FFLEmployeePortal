@@ -1,12 +1,11 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 
-// Defense-in-depth for Server Actions gated by a permission code rather than a role name —
-// proxy.ts already blocks the page by route, but Server Actions are independently POST-reachable.
-// Unlike requireAdmin()/requireHrOrAdmin(), this checks the same has_permission() SQL function
-// (0010_permission_groups.sql) the proxy itself uses, so a duplicated role (see
-// admin/roles/actions.ts's duplicateRole note) gets correct action-level access too, not just
-// page visibility.
+// Defense-in-depth for every Server Action in this codebase — proxy.ts already blocks the page
+// by route, but Server Actions are independently POST-reachable. Checks the same has_permission()
+// SQL function (0010_permission_groups.sql) the proxy itself uses, so a duplicated or brand-new
+// custom role (see admin/roles/actions.ts's duplicateRole note) gets correct action-level access
+// too, not just page visibility — there is no role-name check anywhere in this app anymore.
 export async function requirePermission(permissionKey: string) {
   const supabase = await createClient();
   const {

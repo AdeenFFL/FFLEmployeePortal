@@ -1,10 +1,10 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
 
-// Defense-in-depth for /profile Server Actions, same rationale as requireAdmin(): proxy.ts
+// Defense-in-depth for /profile Server Actions, same rationale as requirePermission(): proxy.ts
 // already gates /profile by route, but Server Actions are independently POST-reachable.
-// Unlike requireAdmin, no role check — any active, authenticated person qualifies (all four
-// roles have /profile access).
+// Unlike requirePermission, no permission check — any active, authenticated person qualifies
+// (every role has /profile access).
 //
 // Returns BOTH ids, and callers must not mix them up: `personId` is the FK value to write into
 // any `person_id` column. `authUserId` is the raw Supabase auth id — any storage bucket policy

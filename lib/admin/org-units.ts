@@ -1,13 +1,17 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { requireAdmin } from "@/lib/auth/require-admin";
+import { requirePermission } from "@/lib/auth/require-permission";
 import { logAuditEvent } from "@/lib/audit/log";
 import type { OrgUnitType } from "@/types/database";
 
 const PATH_BY_TYPE: Record<OrgUnitType, string> = {
   Department: "/admin/departments",
   Site: "/admin/sites",
+};
+const PERMISSION_BY_TYPE: Record<OrgUnitType, string> = {
+  Department: "route:/admin/departments",
+  Site: "route:/admin/sites",
 };
 
 function readOrgUnitFormFields(formData: FormData) {
@@ -20,7 +24,7 @@ function readOrgUnitFormFields(formData: FormData) {
 }
 
 export async function createOrUpdateOrgUnit(type: OrgUnitType, formData: FormData) {
-  const { supabase, personId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requirePermission(PERMISSION_BY_TYPE[type]);
   const path = PATH_BY_TYPE[type];
   const id = String(formData.get("id") ?? "").trim() || null;
   const fields = readOrgUnitFormFields(formData);
@@ -58,7 +62,7 @@ export async function createOrUpdateOrgUnit(type: OrgUnitType, formData: FormDat
 }
 
 export async function setOrgUnitStatus(type: OrgUnitType, id: string, isActive: boolean) {
-  const { supabase, personId, actorLabel } = await requireAdmin();
+  const { supabase, personId, actorLabel } = await requirePermission(PERMISSION_BY_TYPE[type]);
 
   const { data: unit } = await supabase
     .from("org_units")

@@ -6,7 +6,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 const PATH = "/hr/admin/categories";
 
 export async function createCategory(formData: FormData) {
-  const { supabase } = await requirePermission("hr.manage_categories");
+  const { supabase } = await requirePermission("hr.categories.create");
 
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
@@ -19,7 +19,7 @@ export async function createCategory(formData: FormData) {
 }
 
 export async function toggleCategoryActive(categoryId: string, isActive: boolean) {
-  const { supabase } = await requirePermission("hr.manage_categories");
+  const { supabase } = await requirePermission("hr.categories.update");
 
   const { error } = await supabase
     .schema("hr")
@@ -32,7 +32,7 @@ export async function toggleCategoryActive(categoryId: string, isActive: boolean
 }
 
 export async function deleteCategory(categoryId: string) {
-  const { supabase } = await requirePermission("hr.manage_categories");
+  const { supabase } = await requirePermission("hr.categories.delete");
 
   const { error } = await supabase.schema("hr").from("ticket_categories").delete().eq("id", categoryId);
   if (error) throw new Error(error.message);
@@ -41,7 +41,7 @@ export async function deleteCategory(categoryId: string) {
 }
 
 export async function addCategoryAssignee(categoryId: string, formData: FormData) {
-  const { supabase } = await requirePermission("hr.manage_categories");
+  const { supabase } = await requirePermission("hr.categories.update");
 
   const email = String(formData.get("email") ?? "").trim();
   if (!email) throw new Error("Email is required.");
@@ -63,7 +63,7 @@ export async function addCategoryAssignee(categoryId: string, formData: FormData
 }
 
 export async function removeCategoryAssignee(categoryId: string, personId: string) {
-  const { supabase } = await requirePermission("hr.manage_categories");
+  const { supabase } = await requirePermission("hr.categories.update");
 
   const { error } = await supabase
     .schema("hr")

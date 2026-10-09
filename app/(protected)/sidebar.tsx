@@ -10,7 +10,6 @@ import {
   UserIcon,
   KeyIcon,
   BuildingIcon,
-  MapPinIcon,
   ChevronDownIcon,
   LogoutIcon,
   TicketIcon,
@@ -18,12 +17,18 @@ import {
 
 type IconComponent = (props: { className?: string }) => React.ReactElement;
 
-type NavLeaf = { type: "link"; href: string; label: string; icon: IconComponent };
+// `permission` is a key from the `permissions` table (lib/auth/route-permissions.ts is the
+// canonical map of route -> required key). Omit it for something every signed-in person should
+// see regardless of role — everything else is shown only if the viewer's resolved permission set
+// (computed in app/(protected)/current-user.ts, keyed off role_permission_groups, never a role
+// *name*) actually contains it, so a brand-new custom role sees exactly what it was granted.
+type NavChild = { href: string; label: string; permission?: string };
+type NavLeaf = { type: "link"; href: string; label: string; icon: IconComponent; permission?: string };
 type NavGroup = {
   type: "group";
   label: string;
   icon: IconComponent;
-  children: { href: string; label: string }[];
+  children: NavChild[];
 };
 type NavEntry = NavLeaf | NavGroup;
 
@@ -34,12 +39,14 @@ const EXPAND_DELAY_MS = 100;
 const COLLAPSE_DELAY_MS = 200;
 
 export function Sidebar({
-  roleName,
+  permissions,
   homePath,
 }: {
-  roleName: string | null;
+  permissions: string[];
   homePath: string;
 }) {
+  const granted = new Set(permissions);
+  const has = (permission?: string) => !permission || granted.has(permission);
   const pathname = usePathname();
   const [expandedByHover, setExpandedByHover] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -62,53 +69,71 @@ export function Sidebar({
 
   const collapsed = !expandedByHover;
 
-  const baseItems: NavEntry[] = [
+  const allBaseItems: NavLeaf[] = [
     { type: "link", href: homePath, label: "Home", icon: HomeIcon },
     { type: "link", href: "/profile", label: "My Profile", icon: UserIcon },
     { type: "link", href: "/requests", label: "My Requests", icon: TicketIcon },
-    { type: "link", href: "/hr/tickets", label: "HR Tickets", icon: TicketIcon },
+    {
+      type: "link",
+      href: "/hr/tickets",
+      label: "HR Tickets",
+      icon: TicketIcon,
+      permission: "module:hr",
+    },
   ];
+  const baseItems: NavEntry[] = allBaseItems.filter((entry) => has(entry.permission));
 
-  // Every signed-in person is an employee first (they get baseItems above); "Admin Centre" is
-  // appended on top for whichever elevated role they also happen to have. Display-only —
-  // proxy.ts's permission checks already gate every route regardless of what's linked here.
-  const adminCentreItems: NavEntry[] = [];
-  if (roleName === "HR") {
-    adminCentreItems.push({
+  // Every module's nav section lists its OWN children with their own required permission
+  // (matching lib/auth/route-permissions.ts) — no role name anywhere. A group with zero visible
+  // children (nothing in it granted) renders nothing at all, so a custom role sees exactly the
+  // modules/screens it was actually given, nothing more, nothing hardcoded by role.
+  const allModuleSections: NavGroup[] = [
+    {
       type: "group",
       label: "HR Management",
       icon: BuildingIcon,
       children: [
-        { href: "/hr/dashboard", label: "Dashboard" },
-        { href: "/hr/feedback", label: "Ticket Queue" },
-        { href: "/hr/feedback/anonymous", label: "Anonymous Feedback" },
-        { href: "/hr/admin/categories", label: "Ticket Categories" },
-        { href: "/hr/admin/roles", label: "Role Permissions" },
+        { href: "/hr/dashboard", label: "Dashboard", permission: "module:hr" },
+        { href: "/hr/feedback", label: "Ticket Queue", permission: "hr.tickets.read" },
+        {
+          href: "/hr/feedback/anonymous",
+          label: "Anonymous Feedback",
+          permission: "hr.anonymous_feedback.read",
+        },
+        {
+          href: "/hr/admin/categories",
+          label: "Ticket Categories",
+          permission: "hr.categories.update",
+        },
+        {
+          href: "/hr/admin/roles",
+          label: "Role Permissions",
+          permission: "hr.manage_role_permissions",
+        },
       ],
-    });
-  }
-  if (roleName === "IT") {
-    adminCentreItems.push({
-      type: "link",
-      href: "/it/dashboard",
-      label: "IT Management",
-      icon: MapPinIcon,
-    });
-  }
-  if (roleName === "Admin") {
-    adminCentreItems.push({
+    },
+    {
       type: "group",
       label: "Administration",
       icon: KeyIcon,
       children: [
-        { href: "/admin/users", label: "User Management" },
-        { href: "/admin/roles", label: "Roles & Permissions" },
-        { href: "/admin/departments", label: "Departments" },
-        { href: "/admin/sites", label: "Sites" },
-        { href: "/admin/audit-log", label: "Audit Log" },
+        { href: "/admin/users", label: "User Management", permission: "route:/admin/users" },
+        { href: "/admin/roles", label: "Roles & Permissions", permission: "route:/admin/roles" },
+        {
+          href: "/admin/departments",
+          label: "Departments",
+          permission: "route:/admin/departments",
+        },
+        { href: "/admin/sites", label: "Sites", permission: "route:/admin/sites" },
+        { href: "/admin/audit-log", label: "Audit Log", permission: "route:/admin/audit-log" },
       ],
-    });
-  }
+    },
+  ];
+  const moduleSections: NavGroup[] = allModuleSections
+    .map((group) => ({ ...group, children: group.children.filter((c) => has(c.permission)) }))
+    .filter((group) => group.children.length > 0);
+
+  const adminCentreItems: NavEntry[] = moduleSections;
 
   // usePathname() never includes a "#fragment" — strip it before comparing so any future
   // hash-linked nav entry still matches on its base path.

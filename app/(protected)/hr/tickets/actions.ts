@@ -54,7 +54,7 @@ export async function replyToTicket(ticketId: string, formData: FormData) {
   if (error) throw new Error(error.message);
 
   // Not updating tickets.updated_by here: RLS on hr.tickets' update policy only allows HR
-  // staff (has_permission('hr.manage_tickets')) to update the ticket row itself — a submitter
+  // staff (has_permission('hr.tickets.update')) to update the ticket row itself — a submitter
   // replying to their own ticket can insert a message but can't touch the ticket row. That's
   // fine; updated_by/updated_at tracks HR-side changes (status, assignment), not every reply.
   revalidatePath(`/hr/tickets/${ticketId}`);

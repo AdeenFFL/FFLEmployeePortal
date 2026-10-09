@@ -5,15 +5,15 @@ import { RolePermissionsEditor } from "@/components/role-permissions-editor";
 import { RoleFormPanel } from "@/components/role-form";
 import { IconLink, IconButton } from "@/components/icon-button";
 import { CopyIcon, PencilIcon, TrashIcon } from "@/components/icons";
-import { duplicateRole, deleteRole } from "./actions";
+import { duplicateRole, deleteRole, saveRolePermissionGroups } from "./actions";
 import type { PermissionGroup } from "@/types/database";
 
 export default async function AdminRolesPage({
   searchParams,
 }: {
-  searchParams: Promise<{ role?: string; editRole?: string }>;
+  searchParams: Promise<{ role?: string; editRole?: string; compose?: string }>;
 }) {
-  const { role: roleParam, editRole } = await searchParams;
+  const { role: roleParam, editRole, compose } = await searchParams;
   const supabase = await createClient();
 
   const { data: roles } = await supabase.from("roles").select("*").order("name");
@@ -128,6 +128,14 @@ export default async function AdminRolesPage({
       <PageHeader
         title="Roles & Permissions"
         description="Configure system access levels and operational capabilities."
+        action={
+          <Link
+            href={`/admin/roles?role=${selectedRoleId}&compose=new`}
+            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            + Add Role
+          </Link>
+        }
       />
 
       <div className="flex gap-6">
@@ -197,6 +205,7 @@ export default async function AdminRolesPage({
               groupsByModule={groupsByModuleEntries}
               initialGrantedIds={[...grantByGroupId.keys()]}
               grantMetaByModule={grantMetaByModule}
+              saveAction={saveRolePermissionGroups}
             />
           )}
         </div>
@@ -205,7 +214,15 @@ export default async function AdminRolesPage({
       {roleBeingEdited && (
         <RoleFormPanel
           closeHref={`/admin/roles?role=${selectedRoleId}`}
+          mode="edit"
           role={roleBeingEdited}
+        />
+      )}
+      {compose === "new" && (
+        <RoleFormPanel
+          closeHref={`/admin/roles?role=${selectedRoleId}`}
+          mode="new"
+          role={null}
         />
       )}
     </div>

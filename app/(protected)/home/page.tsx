@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getCurrentUserNav } from "../current-user";
 import { PageHeader } from "@/components/page-header";
-import { UserIcon, TicketIcon, BuildingIcon, MapPinIcon, KeyIcon } from "@/components/icons";
+import { UserIcon, TicketIcon, BuildingIcon, KeyIcon } from "@/components/icons";
 
 type IconComponent = (props: { className?: string }) => React.ReactElement;
 
@@ -10,13 +10,16 @@ type QuickLink = {
   label: string;
   description: string;
   icon: IconComponent;
+  permission?: string;
 };
 
-// Access-based: which cards show up depends on the signed-in person's role, same source of
-// truth proxy.ts already gates every route against — this is a shortcut to what they can
-// already reach, not a separate permission surface.
+// Access-based: which cards show up depends on the signed-in person's actual granted
+// permissions (not a role name — see lib/auth/granted-permissions.ts), same source of truth
+// proxy.ts already gates every route against — this is a shortcut to what they can already
+// reach, not a separate permission surface.
 export default async function EmployeeHomePage() {
-  const { displayName, roleName } = await getCurrentUserNav();
+  const { displayName, permissions } = await getCurrentUserNav();
+  const granted = new Set(permissions);
 
   const quickLinks: QuickLink[] = [
     {
@@ -31,34 +34,21 @@ export default async function EmployeeHomePage() {
       description: "Track tickets and requests you've submitted.",
       icon: TicketIcon,
     },
-  ];
-
-  if (roleName === "HR" || roleName === "Admin") {
-    quickLinks.push({
+    {
       href: "/hr/dashboard",
       label: "HR Management",
       description: "Manage HR operations and employee support.",
       icon: BuildingIcon,
-    });
-  }
-
-  if (roleName === "IT" || roleName === "Admin") {
-    quickLinks.push({
-      href: "/it/dashboard",
-      label: "IT Management",
-      description: "Manage IT service requests, assets, and onboarding.",
-      icon: MapPinIcon,
-    });
-  }
-
-  if (roleName === "Admin") {
-    quickLinks.push({
+      permission: "module:hr",
+    },
+    {
       href: "/admin/users",
       label: "Administration",
-      description: "Manage users, roles, permission groups, and sites.",
+      description: "Manage users, roles, and permissions.",
       icon: KeyIcon,
-    });
-  }
+      permission: "route:/admin/users",
+    },
+  ].filter((link) => !link.permission || granted.has(link.permission));
 
   const firstName = displayName.split(" ")[0] || displayName;
 

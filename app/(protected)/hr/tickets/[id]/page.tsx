@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { replyToTicket } from "../actions";
-import { updateTicketStatus } from "../../feedback/actions";
+import { updateTicketStatus, deleteTicket } from "../../feedback/actions";
 
 const STATUSES = ["Open", "In Progress", "Resolved", "Closed"];
 
@@ -15,7 +15,7 @@ export default async function TicketThreadPage({
   const supabase = await createClient();
 
   // RLS ("tickets select own or hr staff") already scopes this to either the submitter or
-  // someone with hr.manage_tickets — a mismatched id resolves to no row either way.
+  // someone with hr.tickets.read — a mismatched id resolves to no row either way.
   const { data: ticket } = await supabase
     .schema("hr")
     .from("tickets")
@@ -41,12 +41,14 @@ export default async function TicketThreadPage({
       : { data: [] };
   const senderNameById = new Map((senders ?? []).map((p) => [p.id, p.full_name]));
 
-  const { data: canManage } = await supabase.rpc("has_permission", {
-    p_permission_key: "hr.manage_tickets",
-  });
+  const [{ data: canUpdate }, { data: canDelete }] = await Promise.all([
+    supabase.rpc("has_permission", { p_permission_key: "hr.tickets.update" }),
+    supabase.rpc("has_permission", { p_permission_key: "hr.tickets.delete" }),
+  ]);
 
   const replyAction = replyToTicket.bind(null, id);
   const statusAction = updateTicketStatus.bind(null, id);
+  const deleteAction = deleteTicket.bind(null, id);
 
   return (
     <div className="py-6">
@@ -54,27 +56,39 @@ export default async function TicketThreadPage({
         title={ticket.subject}
         description={`${ticket.ticket_categories?.name ?? "General"} · ${ticket.status}`}
         action={
-          canManage ? (
-            <form action={statusAction} className="flex items-center gap-2">
-              <select
-                name="status"
-                defaultValue={ticket.status}
-                className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-              >
-                {STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {s}
-                  </option>
-                ))}
-              </select>
-              <button
-                type="submit"
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-              >
-                Update Status
-              </button>
-            </form>
-          ) : undefined
+          <div className="flex items-center gap-2">
+            {canUpdate && (
+              <form action={statusAction} className="flex items-center gap-2">
+                <select
+                  name="status"
+                  defaultValue={ticket.status}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Update Status
+                </button>
+              </form>
+            )}
+            {canDelete && (
+              <form action={deleteAction}>
+                <button
+                  type="submit"
+                  className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Delete
+                </button>
+              </form>
+            )}
+          </div>
         }
       />
 

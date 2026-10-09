@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require-permission";
 
 export async function replyToConversation(conversationId: string, formData: FormData) {
-  const { supabase } = await requirePermission("hr.manage_anonymous_feedback");
+  const { supabase } = await requirePermission("hr.anonymous_feedback.update");
 
   const body = String(formData.get("body") ?? "").trim();
   if (!body) throw new Error("Message cannot be empty.");

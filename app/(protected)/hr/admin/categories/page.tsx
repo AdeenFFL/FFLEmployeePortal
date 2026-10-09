@@ -29,6 +29,12 @@ export default async function HrCategoriesAdminPage() {
       : { data: [] };
   const assigneeNameById = new Map((assigneePeople ?? []).map((p) => [p.id, p.full_name]));
 
+  const [{ data: canCreate }, { data: canUpdate }, { data: canDelete }] = await Promise.all([
+    supabase.rpc("has_permission", { p_permission_key: "hr.categories.create" }),
+    supabase.rpc("has_permission", { p_permission_key: "hr.categories.update" }),
+    supabase.rpc("has_permission", { p_permission_key: "hr.categories.delete" }),
+  ]);
+
   return (
     <div className="py-6">
       <PageHeader
@@ -36,32 +42,34 @@ export default async function HrCategoriesAdminPage() {
         description="Manage categories and who gets assigned tickets filed under each one."
       />
 
-      <form
-        action={createCategory}
-        className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-      >
-        <div>
-          <label className="mb-1 block text-xs font-medium text-slate-700">Name</label>
-          <input
-            name="name"
-            required
-            className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-          />
-        </div>
-        <div className="flex-1">
-          <label className="mb-1 block text-xs font-medium text-slate-700">Description</label>
-          <input
-            name="description"
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-          />
-        </div>
-        <button
-          type="submit"
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+      {canCreate && (
+        <form
+          action={createCategory}
+          className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
         >
-          + Add Category
-        </button>
-      </form>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-slate-700">Name</label>
+            <input
+              name="name"
+              required
+              className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+            />
+          </div>
+          <div className="flex-1">
+            <label className="mb-1 block text-xs font-medium text-slate-700">Description</label>
+            <input
+              name="description"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+            />
+          </div>
+          <button
+            type="submit"
+            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+          >
+            + Add Category
+          </button>
+        </form>
+      )}
 
       <div className="space-y-4">
         {(categories ?? []).map((cat) => {
@@ -91,22 +99,26 @@ export default async function HrCategoriesAdminPage() {
                   >
                     {cat.is_active ? "Active" : "Inactive"}
                   </span>
-                  <form action={toggleAction}>
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
-                    >
-                      {cat.is_active ? "Deactivate" : "Activate"}
-                    </button>
-                  </form>
-                  <form action={deleteAction}>
-                    <button
-                      type="submit"
-                      className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
-                    >
-                      Delete
-                    </button>
-                  </form>
+                  {canUpdate && (
+                    <form action={toggleAction}>
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50"
+                      >
+                        {cat.is_active ? "Deactivate" : "Activate"}
+                      </button>
+                    </form>
+                  )}
+                  {canDelete && (
+                    <form action={deleteAction}>
+                      <button
+                        type="submit"
+                        className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50"
+                      >
+                        Delete
+                      </button>
+                    </form>
+                  )}
                 </div>
               </div>
 
@@ -124,7 +136,7 @@ export default async function HrCategoriesAdminPage() {
                       cat.id,
                       a.person_id,
                     );
-                    return (
+                    return canUpdate ? (
                       <form key={a.person_id} action={removeAction}>
                         <button
                           type="submit"
@@ -134,24 +146,33 @@ export default async function HrCategoriesAdminPage() {
                           {assigneeNameById.get(a.person_id) ?? "Unknown"} ✕
                         </button>
                       </form>
+                    ) : (
+                      <span
+                        key={a.person_id}
+                        className="rounded-full bg-slate-100 px-3 py-1 text-xs text-slate-700"
+                      >
+                        {assigneeNameById.get(a.person_id) ?? "Unknown"}
+                      </span>
                     );
                   })}
                 </div>
-                <form action={addAssigneeAction} className="flex gap-2">
-                  <input
-                    name="email"
-                    type="email"
-                    placeholder="person@fauji.foods"
-                    required
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    + Assign
-                  </button>
-                </form>
+                {canUpdate && (
+                  <form action={addAssigneeAction} className="flex gap-2">
+                    <input
+                      name="email"
+                      type="email"
+                      placeholder="person@fauji.foods"
+                      required
+                      className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                    />
+                    <button
+                      type="submit"
+                      className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                    >
+                      + Assign
+                    </button>
+                  </form>
+                )}
               </div>
             </div>
           );

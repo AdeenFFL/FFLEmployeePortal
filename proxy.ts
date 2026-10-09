@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/proxy";
-import { ROLE_HOME_PATH, ROLE_PRIORITY } from "@/lib/auth/roles";
+import { resolveHomePath } from "@/lib/auth/home-path";
+import { getGrantedPermissionKeys } from "@/lib/auth/granted-permissions";
 import { permissionKeyForPath } from "@/lib/auth/route-permissions";
 
 // Paths reachable without an authenticated, active, role-assigned user. /forgot-password is
@@ -27,7 +28,7 @@ export async function proxy(request: NextRequest) {
 
   // NFR-06: RBAC enforced server-side, before any page renders — not just hidden in the UI.
   // Two status columns now exist (account-level login suspension vs. person-level employment
-  // status) — either one being non-Active blocks access, same as requireAdmin()/requireUser().
+  // status) — either one being non-Active blocks access, same as requirePermission()/requireActiveUser().
   const { data: account } = await supabase
     .from("user_accounts")
     .select("person_id, status, persons(status)")
@@ -55,10 +56,8 @@ export async function proxy(request: NextRequest) {
 
   const { data: roleRows } = await supabase
     .from("user_roles")
-    .select("roles(name)")
+    .select("role_id")
     .eq("person_id", personId);
-
-  const roleNames = (roleRows ?? []).map((r) => r.roles?.name).filter(Boolean) as string[];
 
   if ((roleRows ?? []).length === 0) {
     if (pathname === "/pending-setup") return response;
@@ -66,13 +65,12 @@ export async function proxy(request: NextRequest) {
   }
 
   // A role-assigned user hitting /login or /pending-setup gets sent to their role home
-  // (SCR-00: "redirects authenticated users to their role home screen").
+  // (SCR-00: "redirects authenticated users to their role home screen"). Resolved from
+  // permissions, not role name — any role, including a brand-new custom one, lands somewhere
+  // sensible with no name-matching involved (see lib/auth/home-path.ts).
   if (pathname === "/login" || pathname === "/pending-setup") {
-    // Falls back to /home (not /login) for any role name not in the map — otherwise a custom
-    // role (e.g. one created via "Duplicate Role") would redirect-loop on /login forever.
-    const priorityRole = ROLE_PRIORITY.find((r) => roleNames.includes(r));
-    const homePath = priorityRole ? (ROLE_HOME_PATH[priorityRole] ?? "/home") : "/home";
-    return NextResponse.redirect(new URL(homePath, request.url));
+    const grantedKeys = await getGrantedPermissionKeys(supabase, personId);
+    return NextResponse.redirect(new URL(resolveHomePath(grantedKeys), request.url));
   }
 
   const permissionKey = permissionKeyForPath(pathname);

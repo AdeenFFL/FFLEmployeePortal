@@ -10,11 +10,10 @@
 export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/dashboard": "module:hr",
   "/hr/tickets": "module:hr",
-  "/hr/feedback/anonymous": "hr.manage_anonymous_feedback",
-  "/hr/feedback": "hr.manage_tickets",
-  "/hr/admin/categories": "hr.manage_categories",
-  "/hr/admin/roles": "route:/admin/roles",
-  "/it/dashboard": "route:/it/dashboard",
+  "/hr/feedback/anonymous": "hr.anonymous_feedback.read",
+  "/hr/feedback": "hr.tickets.read",
+  "/hr/admin/categories": "hr.categories.update",
+  "/hr/admin/roles": "hr.manage_role_permissions",
   "/admin/users": "route:/admin/users",
   "/admin/roles": "route:/admin/roles",
   "/admin/departments": "route:/admin/departments",
@@ -25,6 +24,11 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
 // both regardless of role, so there is nothing to ever toggle — they fall through to this map's
 // permissive default (routes with no entry are allowed through) instead of carrying a dead
 // permission that was granted to literally every role anyway.
+//
+// /it/dashboard is the same story, retired for the same reason as /hr/dashboard — it was a
+// one-off placeholder-stub permission with no module:it to fold into yet (IT isn't a real
+// module). Falls through to the same permissive default; give it a module:it gate once IT
+// actually gets built, the way HR did.
 
 export function permissionKeyForPath(pathname: string): string | null {
   for (const [route, permissionKey] of Object.entries(ROUTE_PERMISSIONS)) {

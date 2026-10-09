@@ -6,8 +6,8 @@ export default async function HrDashboardPage() {
   const supabase = await createClient();
 
   const [{ data: canManageTickets }, { data: canManageFeedback }] = await Promise.all([
-    supabase.rpc("has_permission", { p_permission_key: "hr.manage_tickets" }),
-    supabase.rpc("has_permission", { p_permission_key: "hr.manage_anonymous_feedback" }),
+    supabase.rpc("has_permission", { p_permission_key: "hr.tickets.read" }),
+    supabase.rpc("has_permission", { p_permission_key: "hr.anonymous_feedback.read" }),
   ]);
 
   // RLS scopes each count to exactly what this viewer is allowed to see — canManage* just
@@ -58,8 +58,8 @@ export default async function HrDashboardPage() {
         {!canManageTickets && !canManageFeedback && (
           <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm sm:col-span-2">
             <p className="text-sm text-slate-500">
-              You don't currently hold any HR-staff permissions (hr.manage_tickets or
-              hr.manage_anonymous_feedback). Contact an admin via Permission Groups if this
+              You don't currently hold any HR-staff permissions (hr.tickets.read or
+              hr.anonymous_feedback.read). Contact whoever manages HR Role Permissions if this
               seems wrong.
             </p>
           </div>

@@ -13,8 +13,6 @@ const ERROR_MESSAGES: Record<string, string> = {
   auth_failed: "We couldn't sign you in. Please try again.",
   provisioning_failed:
     "We couldn't set up your account. Please contact your administrator.",
-  unknown_role:
-    "Your account's role isn't recognized. Please contact your administrator.",
 };
 
 function LoginError() {

@@ -10,13 +10,13 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const { displayName, roleName, homePath } = await getCurrentUserNav();
+  const { displayName, permissions, homePath } = await getCurrentUserNav();
 
   return (
     <div className="flex min-h-screen bg-slate-50">
       {/* Sidebar sits in normal flex flow (not fixed) so its own width transition pushes/pulls
           this content area as it expands and collapses on hover. */}
-      <Sidebar roleName={roleName} homePath={homePath} />
+      <Sidebar permissions={permissions} homePath={homePath} />
       <div className="flex flex-1 flex-col">
         <TopBar displayName={displayName} />
         <main className="flex-1 px-8 pb-10">{children}</main>
