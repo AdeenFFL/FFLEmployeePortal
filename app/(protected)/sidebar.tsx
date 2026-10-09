@@ -83,6 +83,7 @@ export function Sidebar({
         { href: "/hr/feedback", label: "Ticket Queue" },
         { href: "/hr/feedback/anonymous", label: "Anonymous Feedback" },
         { href: "/hr/admin/categories", label: "Ticket Categories" },
+        { href: "/hr/admin/roles", label: "Role Permissions" },
       ],
     });
   }
@@ -102,7 +103,6 @@ export function Sidebar({
       children: [
         { href: "/admin/users", label: "User Management" },
         { href: "/admin/roles", label: "Roles & Permissions" },
-        { href: "/admin/permission-groups", label: "Permission Groups" },
         { href: "/admin/departments", label: "Departments" },
         { href: "/admin/sites", label: "Sites" },
         { href: "/admin/audit-log", label: "Audit Log" },

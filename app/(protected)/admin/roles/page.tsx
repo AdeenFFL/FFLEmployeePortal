@@ -27,6 +27,44 @@ export default async function AdminRolesPage({
     .order("module")
     .order("name");
 
+  // Every permission_group here still only ever wraps one permission in practice (true
+  // many-permission bundles exist in the schema but nothing uses them yet) — this map lets the
+  // page tell "module:x" coarse-access groups apart from everything else without a second admin
+  // concept. See 01-platform-design-and-sop.md §11's module-onboarding convention: a module's
+  // own `module:<x>` permission always gets exactly one group, named after the key, and that's
+  // what surfaces here as "Module Access"; its `<module>.manage_*` fine-grained permissions get
+  // groups too (same convention) but are hidden from this screen — each module's own admin area
+  // is where those get configured per role instead (e.g. /hr/admin/roles).
+  const { data: groupPermissionRows } = await supabase
+    .from("permission_group_permissions")
+    .select("permission_group_id, permissions(key)");
+  const permissionKeysByGroupId = new Map<string, string[]>();
+  for (const row of groupPermissionRows ?? []) {
+    const key = row.permissions?.key;
+    if (!key) continue;
+    const list = permissionKeysByGroupId.get(row.permission_group_id) ?? [];
+    list.push(key);
+    permissionKeysByGroupId.set(row.permission_group_id, list);
+  }
+
+  // Fine-grained permissions that have their own module admin screen — hidden from this
+  // cross-module view entirely so there's exactly one place to configure each. Add a module's
+  // key prefix here once it ships its own "<module>.manage_*" config screen.
+  const MODULE_OWNED_PREFIXES = ["hr."];
+
+  const moduleAccessGroups: PermissionGroup[] = [];
+  const visibleGroups: PermissionGroup[] = [];
+  for (const group of permissionGroups ?? []) {
+    const keys = permissionKeysByGroupId.get(group.id) ?? [];
+    if (keys.length === 1 && keys[0].startsWith("module:")) {
+      moduleAccessGroups.push(group);
+    } else if (keys.length === 1 && MODULE_OWNED_PREFIXES.some((p) => keys[0].startsWith(p))) {
+      // skip — configured from within the owning module instead
+    } else {
+      visibleGroups.push(group);
+    }
+  }
+
   const { data: grants } = selectedRoleId
     ? await supabase
         .from("role_permission_groups")
@@ -54,7 +92,7 @@ export default async function AdminRolesPage({
   const grantByGroupId = new Map((grants ?? []).map((g) => [g.permission_group_id, g]));
 
   const groupsByModule = new Map<string, PermissionGroup[]>();
-  for (const group of permissionGroups ?? []) {
+  for (const group of visibleGroups) {
     if (!groupsByModule.has(group.module)) groupsByModule.set(group.module, []);
     groupsByModule.get(group.module)!.push(group);
   }
@@ -90,14 +128,6 @@ export default async function AdminRolesPage({
       <PageHeader
         title="Roles & Permissions"
         description="Configure system access levels and operational capabilities."
-        action={
-          <Link
-            href="/admin/permission-groups"
-            className="rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-          >
-            Manage Permission Groups
-          </Link>
-        }
       />
 
       <div className="flex gap-6">
@@ -163,6 +193,7 @@ export default async function AdminRolesPage({
             <RolePermissionsEditor
               key={selectedRoleId}
               roleId={selectedRoleId}
+              moduleAccessGroups={moduleAccessGroups}
               groupsByModule={groupsByModuleEntries}
               initialGrantedIds={[...grantByGroupId.keys()]}
               grantMetaByModule={grantMetaByModule}

@@ -9,11 +9,13 @@ type GrantMeta = { grantedByName: string | null; grantedAt: string | null };
 
 export function RolePermissionsEditor({
   roleId,
+  moduleAccessGroups,
   groupsByModule,
   initialGrantedIds,
   grantMetaByModule,
 }: {
   roleId: string;
+  moduleAccessGroups: PermissionGroup[];
   groupsByModule: [string, PermissionGroup[]][];
   initialGrantedIds: string[];
   grantMetaByModule: Record<string, GrantMeta | null>;
@@ -42,8 +44,8 @@ export function RolePermissionsEditor({
 
   function handleSave() {
     setError(null);
-    const changes = groupsByModule
-      .flatMap(([, groups]) => groups)
+    const allGroups = [...moduleAccessGroups, ...groupsByModule.flatMap(([, groups]) => groups)];
+    const changes = allGroups
       .filter((g) => granted.has(g.id) !== committed.has(g.id))
       .map((g) => ({ permissionGroupId: g.id, granted: granted.has(g.id) }));
     if (changes.length === 0) return;
@@ -60,6 +62,34 @@ export function RolePermissionsEditor({
 
   return (
     <div className="space-y-6">
+      {moduleAccessGroups.length > 0 && (
+        <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
+          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-blue-700">
+            Module Access
+          </h2>
+          <p className="mb-3 text-xs text-slate-500">
+            Whether this role can open each module at all. Fine-grained permissions within a
+            module (who can manage its tickets, categories, etc.) are configured from that
+            module's own settings screen, not here.
+          </p>
+          <div className="divide-y divide-blue-100">
+            {moduleAccessGroups.map((group) => (
+              <div key={group.id} className="flex items-center justify-between gap-4 py-3">
+                <div>
+                  <p className="text-sm font-medium text-slate-800">{group.description ?? group.name}</p>
+                </div>
+                <ToggleSwitch
+                  type="button"
+                  pressed={granted.has(group.id)}
+                  label={group.name}
+                  onClick={() => toggle(group.id)}
+                />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       {groupsByModule.length === 0 && (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-400">
           No permission groups exist yet.{" "}
