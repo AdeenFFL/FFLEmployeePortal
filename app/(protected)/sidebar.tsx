@@ -66,6 +66,7 @@ export function Sidebar({
     { type: "link", href: homePath, label: "Home", icon: HomeIcon },
     { type: "link", href: "/profile", label: "My Profile", icon: UserIcon },
     { type: "link", href: "/requests", label: "My Requests", icon: TicketIcon },
+    { type: "link", href: "/hr/tickets", label: "HR Tickets", icon: TicketIcon },
   ];
 
   // Every signed-in person is an employee first (they get baseItems above); "Admin Centre" is
@@ -74,10 +75,15 @@ export function Sidebar({
   const adminCentreItems: NavEntry[] = [];
   if (roleName === "HR") {
     adminCentreItems.push({
-      type: "link",
-      href: "/hr/dashboard",
+      type: "group",
       label: "HR Management",
       icon: BuildingIcon,
+      children: [
+        { href: "/hr/dashboard", label: "Dashboard" },
+        { href: "/hr/feedback", label: "Ticket Queue" },
+        { href: "/hr/feedback/anonymous", label: "Anonymous Feedback" },
+        { href: "/hr/admin/categories", label: "Ticket Categories" },
+      ],
     });
   }
   if (roleName === "IT") {

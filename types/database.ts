@@ -175,6 +175,72 @@ export type AuditLog = {
   created_at: string;
 };
 
+// HR module (hr.* schema) — mirrors supabase/migrations/0012_hr_module.sql. See
+// 06-hr-module-design.md for the design this was built against.
+export type TicketStatus = "Open" | "In Progress" | "Resolved" | "Closed";
+export type AnonymousConversationStatus = "Open" | "Closed";
+export type AnonymousMessageSenderType = "submitter" | "hr";
+
+export type AnonymousConversation = {
+  id: string;
+  department_org_unit_id: string;
+  status: AnonymousConversationStatus;
+  created_at: string;
+  updated_at: string;
+};
+
+export type AnonymousMessage = {
+  id: string;
+  conversation_id: string;
+  sender_type: AnonymousMessageSenderType;
+  sender_person_id: string | null;
+  body: string;
+  created_at: string;
+};
+
+export type HrbpDepartment = {
+  person_id: string;
+  department_org_unit_id: string;
+};
+
+export type TicketCategory = {
+  id: string;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+};
+
+export type TicketCategoryAssignee = {
+  category_id: string;
+  person_id: string;
+};
+
+export type Ticket = {
+  id: string;
+  person_id: string;
+  category_id: string | null;
+  subject: string;
+  body: string;
+  status: TicketStatus;
+  assigned_to_person_id: string | null;
+  company_id: string | null;
+  site_id: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type TicketMessage = {
+  id: string;
+  ticket_id: string;
+  sender_person_id: string;
+  body: string;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -399,6 +465,97 @@ export type Database = {
           p_emergency_contact_name: string | null;
           p_emergency_contact_phone: string | null;
         };
+        Returns: undefined;
+      };
+    };
+  };
+  hr: {
+    Tables: {
+      anonymous_conversations: {
+        Row: AnonymousConversation;
+        Insert: Partial<AnonymousConversation> &
+          Pick<AnonymousConversation, "department_org_unit_id">;
+        Update: Partial<AnonymousConversation>;
+        // department_org_unit_id -> public.org_units(id) is a real FK, but supabase-js can only
+        // type an embedded `.select("org_units(...)")` for a relationship whose referencedRelation
+        // lives in this same schema's Tables map — cross-schema embeds aren't resolvable here, so
+        // callers fetch org_units separately instead of embedding it.
+        Relationships: [];
+      };
+      anonymous_messages: {
+        Row: AnonymousMessage;
+        Insert: Partial<AnonymousMessage> &
+          Pick<AnonymousMessage, "conversation_id" | "sender_type" | "body">;
+        Update: Partial<AnonymousMessage>;
+        Relationships: [
+          {
+            foreignKeyName: "anonymous_messages_conversation_id_fkey";
+            columns: ["conversation_id"];
+            isOneToOne: false;
+            referencedRelation: "anonymous_conversations";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      hrbp_departments: {
+        Row: HrbpDepartment;
+        Insert: HrbpDepartment;
+        Update: Partial<HrbpDepartment>;
+        Relationships: [];
+      };
+      ticket_categories: {
+        Row: TicketCategory;
+        Insert: Partial<TicketCategory> & Pick<TicketCategory, "name">;
+        Update: Partial<TicketCategory>;
+        Relationships: [];
+      };
+      ticket_category_assignees: {
+        Row: TicketCategoryAssignee;
+        Insert: TicketCategoryAssignee;
+        Update: Partial<TicketCategoryAssignee>;
+        Relationships: [
+          {
+            foreignKeyName: "ticket_category_assignees_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "ticket_categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      tickets: {
+        Row: Ticket;
+        Insert: Partial<Ticket> & Pick<Ticket, "person_id" | "subject" | "body">;
+        Update: Partial<Ticket>;
+        Relationships: [
+          {
+            foreignKeyName: "tickets_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "ticket_categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ticket_messages: {
+        Row: TicketMessage;
+        Insert: Partial<TicketMessage> & Pick<TicketMessage, "ticket_id" | "sender_person_id" | "body">;
+        Update: Partial<TicketMessage>;
+        Relationships: [
+          {
+            foreignKeyName: "ticket_messages_ticket_id_fkey";
+            columns: ["ticket_id"];
+            isOneToOne: false;
+            referencedRelation: "tickets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: {
+      reply_to_anonymous_conversation: {
+        Args: { p_conversation_id: string; p_body: string };
         Returns: undefined;
       };
     };

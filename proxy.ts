@@ -6,7 +6,7 @@ import { permissionKeyForPath } from "@/lib/auth/route-permissions";
 // Paths reachable without an authenticated, active, role-assigned user. /forgot-password is
 // here (unlike /unauthorized, which is only ever reached by an already-authenticated user) —
 // its whole audience is someone who can't sign in at all.
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/forgot-password"];
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/forgot-password", "/feedback"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(

@@ -10,6 +10,10 @@
 export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/home": "route:/home",
   "/hr/dashboard": "route:/hr/dashboard",
+  "/hr/tickets": "module:hr",
+  "/hr/feedback/anonymous": "hr.manage_anonymous_feedback",
+  "/hr/feedback": "hr.manage_tickets",
+  "/hr/admin/categories": "hr.manage_categories",
   "/it/dashboard": "route:/it/dashboard",
   "/admin/users": "route:/admin/users",
   "/admin/roles": "route:/admin/roles",
