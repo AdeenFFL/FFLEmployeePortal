@@ -92,7 +92,7 @@ export default function LoginPage() {
         src="/logos/ffl-logo-blue.jpg"
         alt=""
         aria-hidden="true"
-        className="pointer-events-none absolute inset-0 m-auto h-[34rem] w-[34rem] max-w-none object-contain opacity-[0.06]"
+        className="pointer-events-none absolute inset-0 m-auto h-136 w-136 max-w-none object-contain opacity-[0.06]"
       />
       <div className="relative z-10 w-full max-w-sm rounded-xl border border-slate-200 bg-white p-8 shadow-md">
         <div className="mb-8 text-center">
