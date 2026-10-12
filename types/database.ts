@@ -348,6 +348,117 @@ export type ItTicketTask = {
   completed_at: string | null;
 };
 
+// Onboarding / Offboarding — mirrors javaria_it_0002_onboarding_offboarding.sql.
+export type ItLifecycleKind = "Onboarding" | "Offboarding" | "Replacement";
+export type ItLifecycleStatus =
+  | "Open"
+  | "Under Review"
+  | "In Progress"
+  | "Awaiting Confirmation"
+  | "Pending Final Review"
+  | "Completed"
+  | "Closed"
+  | "Cancelled";
+export type ItChecklistStatus = "Pending" | "In Progress" | "Completed" | "Not Applicable";
+export type ItChecklistTaskType =
+  | "email_account"
+  | "access_provisioning"
+  | "software_installation"
+  | "asset_allocation"
+  | "portal_account"
+  | "email_backup_closure"
+  | "access_revocation"
+  | "hardware_recovery"
+  | "asset_return"
+  | "license_deactivation"
+  | "other";
+export type ItEmployeeCategory = "Permanent" | "Contractual";
+export type ItOnboardingUpdateType =
+  | "comment"
+  | "work_note"
+  | "status_change"
+  | "task_update"
+  | "sign_off"
+  | "system";
+
+export type ItLifecycleRequest = {
+  id: string;
+  request_number: string;
+  request_type_id: string;
+  kind: ItLifecycleKind;
+  person_id: string | null;
+  employee_name: string;
+  employee_code: string | null;
+  designation: string | null;
+  grade: string | null;
+  employee_category: ItEmployeeCategory | null;
+  company_id: string | null;
+  site_id: string | null;
+  department_id: string | null;
+  reporting_manager_name: string | null;
+  personal_email: string | null;
+  joining_date: string | null;
+  last_working_date: string | null;
+  laptop_required: boolean;
+  email_required: boolean;
+  access_required: string | null;
+  software_required: string | null;
+  known_assets_accesses: string | null;
+  priority: ItTicketPriority;
+  remarks: string | null;
+  routing_team: "IT HQ Team" | "IT Plant Site Team";
+  it_executive_person_id: string | null;
+  status: ItLifecycleStatus;
+  due_date: string | null;
+  requested_by: string | null;
+  email_confirmed: boolean | null;
+  access_confirmed: boolean | null;
+  software_confirmed: boolean | null;
+  asset_confirmed: boolean | null;
+  confirmation_notes: string | null;
+  employee_confirmed_at: string | null;
+  executive_signed_by: string | null;
+  executive_signed_at: string | null;
+  hod_signed_by: string | null;
+  hod_signed_at: string | null;
+  completed_at: string | null;
+  closed_at: string | null;
+  cancelled_reason: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItChecklistItem = {
+  id: string;
+  request_id: string;
+  task_type: ItChecklistTaskType;
+  task_name: string;
+  sort_order: number;
+  assigned_to_person_id: string | null;
+  status: ItChecklistStatus;
+  due_date: string | null;
+  details: Record<string, string>;
+  notes: string | null;
+  assignment_id: string | null;
+  completed_at: string | null;
+  completed_by: string | null;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ItOnboardingUpdate = {
+  id: string;
+  request_id: string;
+  author_person_id: string | null;
+  update_type: ItOnboardingUpdateType;
+  body: string;
+  is_internal: boolean;
+  created_at: string;
+};
+
 export type ItTicketAttachment = {
   id: string;
   ticket_id: string;
@@ -748,9 +859,91 @@ export type Database = {
           },
         ];
       };
+      onboarding_offboarding: {
+        Row: ItLifecycleRequest;
+        Insert: Partial<ItLifecycleRequest> &
+          Pick<ItLifecycleRequest, "request_type_id" | "employee_name">;
+        Update: Partial<ItLifecycleRequest>;
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_offboarding_request_type_id_fkey";
+            columns: ["request_type_id"];
+            isOneToOne: false;
+            referencedRelation: "request_types";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      checklist_items: {
+        Row: ItChecklistItem;
+        Insert: Partial<ItChecklistItem> &
+          Pick<ItChecklistItem, "request_id" | "task_type" | "task_name">;
+        Update: Partial<ItChecklistItem>;
+        Relationships: [
+          {
+            foreignKeyName: "checklist_items_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: false;
+            referencedRelation: "onboarding_offboarding";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      onboarding_updates: {
+        Row: ItOnboardingUpdate;
+        Insert: Partial<ItOnboardingUpdate> & Pick<ItOnboardingUpdate, "request_id" | "body">;
+        Update: Partial<ItOnboardingUpdate>;
+        Relationships: [
+          {
+            foreignKeyName: "onboarding_updates_request_id_fkey";
+            columns: ["request_id"];
+            isOneToOne: false;
+            referencedRelation: "onboarding_offboarding";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
+      confirm_onboarding: {
+        Args: {
+          p_request_id: string;
+          p_email_ok: boolean;
+          p_access_ok: boolean;
+          p_software_ok: boolean;
+          p_asset_ok: boolean;
+          p_notes: string | null;
+        };
+        Returns: string;
+      };
+      sign_offboarding: {
+        Args: { p_request_id: string; p_role: "executive" | "hod" };
+        Returns: undefined;
+      };
+      link_onboarding_person: {
+        Args: { p_request_id: string; p_person_id: string };
+        Returns: undefined;
+      };
+      search_employees: {
+        Args: { p_search: string };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          site_id: string | null;
+          status: string;
+        }[];
+      };
+      list_onboarding_staff: {
+        Args: Record<string, never>;
+        Returns: { person_id: string; full_name: string; designation: string | null }[];
+      };
+      routing_team_for_site: {
+        Args: { p_site_id: string | null };
+        Returns: string;
+      };
       next_number: {
         Args: { p_prefix: string; p_width?: number };
         Returns: string;

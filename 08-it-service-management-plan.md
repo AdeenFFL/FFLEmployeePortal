@@ -168,7 +168,27 @@ tickets by category, 90-day trend, `<InventoryKpis>`), ITSM-02 (volume and SLA r
 BRD §5.3.18: first response time, resolution time, SLA compliance, closure rate, ageing,
 escalation rate, technician productivity).
 
-### Phase 4 — Onboarding / Offboarding *(asset steps need Talha's Phase 3)*
+### Phase 4 — Onboarding / Offboarding *(built ahead of Phases 2–3 at Javaria's request; not yet applied or browser-tested)*
+**As built** (`javaria_it_0002_onboarding_offboarding.sql`): `it.onboarding_offboarding`,
+`it.checklist_items`, `it.onboarding_updates`; default checklist seeded per type; status moves
+automatically as items complete; HOD IT sign-off and employee confirmation via security-definer
+functions; `it.search_employees()` picker; `it.person_names()` widened for onboarding screens.
+Screens: `/it/onboarding` (queue), `/it/onboarding/new`, `/it/onboarding/[id]`,
+`/it/my-onboarding` (linked from My IT Tickets when the person has one).
+Design choices made while building:
+- New joiners usually have no `persons` row yet, so the request stores their details and
+  `person_id` is linked on the portal-account task (after the account is created on
+  `/admin/users`); the portal-account task can't complete until it is.
+- A leaver can't see their own offboarding record (it may be a termination); a new joiner can see
+  their onboarding.
+- No passwords are stored anywhere; the credential emails in BRD §5.1.10 / §5.1.12 become a
+  Phase 5 notification that generates and sends, never persists.
+- Asset allocation / return items record tag / serial / condition by hand until Talha's forms
+  exist; `checklist_items.assignment_id` gets its FK in a later file.
+- The BRD §5.1.1 "Approver" field isn't modelled; the IT Executive pick-up replaces it. Confirm
+  with the IT BA.
+
+**Original plan:**
 **Migration** `javaria_it_0002_onboarding_offboarding.sql`: `onboarding_offboarding` (ONB- / OFB-
 numbers via `it.next_number()`, request type, employee, Permanent / Contractual, location, due
 date, status), `checklist_items` (owner, status, due, completed_at, `assignment_id →

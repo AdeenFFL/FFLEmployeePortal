@@ -127,6 +127,11 @@ export function Sidebar({
       icon: TicketIcon,
       children: [
         { href: "/it/tickets", label: "Ticket Queue", permission: "it.tickets.read" },
+        {
+          href: "/it/onboarding",
+          label: "Onboarding / Offboarding",
+          permission: "it.onboarding.read",
+        },
       ],
     },
     {

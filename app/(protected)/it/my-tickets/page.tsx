@@ -21,7 +21,7 @@ export default async function MyItTicketsPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [{ data: tickets }, { categoryNameById }] = await Promise.all([
+  const [{ data: tickets }, { categoryNameById }, { count: onboardingCount }] = await Promise.all([
     supabase
       .schema("it")
       .from("tickets")
@@ -29,6 +29,13 @@ export default async function MyItTicketsPage({
       .or(`requester_person_id.eq.${personId},requested_for_person_id.eq.${personId}`)
       .order("created_at", { ascending: false }),
     fetchCategoryMaps(supabase),
+    // New joiners get a pointer to /it/my-onboarding (not a permanent nav item for everyone).
+    supabase
+      .schema("it")
+      .from("onboarding_offboarding")
+      .select("id", { count: "exact", head: true })
+      .eq("kind", "Onboarding")
+      .eq("person_id", personId ?? ""),
   ]);
 
   const rows = tickets ?? [];
@@ -45,6 +52,15 @@ export default async function MyItTicketsPage({
         }
       />
       <FormMessage error={error} notice={notice} />
+
+      {(onboardingCount ?? 0) > 0 && (
+        <Link
+          href="/it/my-onboarding"
+          className="mb-6 block rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800 hover:bg-blue-100"
+        >
+          Welcome! Track your IT onboarding and confirm your setup on <strong>My Onboarding</strong> →
+        </Link>
+      )}
 
       <div className={cardClass}>
         {rows.length === 0 ? (

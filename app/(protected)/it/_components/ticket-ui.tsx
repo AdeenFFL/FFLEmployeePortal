@@ -64,21 +64,25 @@ export function Fact({ label, children }: { label: string; children: React.React
   );
 }
 
-const UPDATE_STYLE: Record<ItTicketUpdate["update_type"], string> = {
+// Covers both it.ticket_updates and it.onboarding_updates; event types not listed here (status
+// changes, assignments, task updates, …) get the neutral style.
+const UPDATE_STYLE: Record<string, string> = {
   comment: "bg-white border-slate-200",
   work_note: "bg-amber-50 border-amber-200",
-  status_change: "bg-slate-50 border-slate-200",
-  assignment: "bg-slate-50 border-slate-200",
-  priority_change: "bg-slate-50 border-slate-200",
   escalation: "bg-red-50 border-red-200",
-  system: "bg-slate-50 border-slate-200",
+  sign_off: "bg-emerald-50 border-emerald-200",
 };
+
+type TimelineEntry = Pick<
+  ItTicketUpdate,
+  "id" | "author_person_id" | "body" | "created_at"
+> & { update_type: string };
 
 export function Timeline({
   updates,
   names,
 }: {
-  updates: ItTicketUpdate[];
+  updates: TimelineEntry[];
   names: Map<string, string>;
 }) {
   if (updates.length === 0) {
@@ -93,7 +97,12 @@ export function Timeline({
           ? (names.get(u.author_person_id) ?? "IT Team")
           : "System";
         return (
-          <li key={u.id} className={`rounded-lg border px-4 py-3 ${UPDATE_STYLE[u.update_type]}`}>
+          <li
+            key={u.id}
+            className={`rounded-lg border px-4 py-3 ${
+              UPDATE_STYLE[u.update_type] ?? "bg-slate-50 border-slate-200"
+            }`}
+          >
             <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-slate-500">
               <span className="font-medium text-slate-700">{author}</span>
               <span>·</span>
