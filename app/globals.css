@@ -28,3 +28,19 @@ body {
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
+
+/* Gentle vertical bob for the anonymous-feedback chat bubble (components/anonymous-feedback-fab.tsx)
+   — Tailwind's built-in animate-bounce is tuned for loading spinners, too sharp/fast for a
+   persistent on-page nudge. */
+@keyframes gentle-bounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+.animate-gentle-bounce {
+  animation: gentle-bounce 2s ease-in-out infinite;
+}

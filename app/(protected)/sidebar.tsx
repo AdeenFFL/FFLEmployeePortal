@@ -13,6 +13,7 @@ import {
   ChevronDownIcon,
   LogoutIcon,
   TicketIcon,
+  HelpCircleIcon,
 } from "@/components/icons";
 
 type IconComponent = (props: { className?: string }) => React.ReactElement;
@@ -80,6 +81,7 @@ export function Sidebar({
       icon: TicketIcon,
       permission: "module:hr",
     },
+    { type: "link", href: "/feedback", label: "Anonymous Feedback", icon: HelpCircleIcon },
   ];
   const baseItems: NavEntry[] = allBaseItems.filter((entry) => has(entry.permission));
 

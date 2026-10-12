@@ -6,6 +6,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import { recordPasswordLogin } from "./actions";
 import { MicrosoftLogoIcon } from "@/components/icons";
+import { AnonymousFeedbackFab } from "@/components/anonymous-feedback-fab";
 import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
 
 const ERROR_MESSAGES: Record<string, string> = {
@@ -188,6 +189,8 @@ export default function LoginPage() {
 
         <p className="mt-6 text-center text-xs text-slate-400">Developed by IT FFL</p>
       </div>
+
+      <AnonymousFeedbackFab />
     </div>
   );
 }

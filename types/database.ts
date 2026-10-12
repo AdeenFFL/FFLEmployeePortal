@@ -36,6 +36,11 @@ export type Permission = {
   id: string;
   key: string;
   module: string | null;
+  // Short, human-readable name (e.g. "Audit Log", "Manage Tickets") — what every admin screen
+  // should display. `description` is the longer explanatory line underneath; `key` is internal
+  // plumbing (route-permissions.ts, requirePermission() calls, has_permission() checks) and
+  // should never be shown as a label.
+  label: string;
   description: string | null;
   created_at: string;
 };
@@ -239,7 +244,7 @@ export type Database = {
       };
       permissions: {
         Row: Permission;
-        Insert: Partial<Permission> & Pick<Permission, "key">;
+        Insert: Partial<Permission> & Pick<Permission, "key" | "label">;
         Update: Partial<Permission>;
         Relationships: [];
       };

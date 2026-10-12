@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { ToggleSwitch } from "@/components/toggle-switch";
+import { CheckIcon } from "@/components/icons";
 import type { Permission } from "@/types/database";
 
 type GrantMeta = { grantedByName: string | null; grantedAt: string | null };
@@ -73,31 +74,34 @@ export function RolePermissionsEditor({
   return (
     <div className="space-y-6">
       {moduleAccessPermissions.length > 0 && (
-        <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
-          <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-blue-700">
-            Module Access
+        <div>
+          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Modules
           </h2>
-          <p className="mb-3 text-xs text-slate-500">
-            Whether this role can open each module at all. Fine-grained permissions within a
-            module (who can manage its tickets, categories, etc.) are configured from that
-            module's own settings screen, not here.
-          </p>
-          <div className="divide-y divide-blue-100">
-            {moduleAccessPermissions.map((permission) => (
-              <div key={permission.id} className="flex items-center justify-between gap-4 py-3">
-                <div>
-                  <p className="text-sm font-medium text-slate-800">
-                    {permission.description ?? permission.key}
-                  </p>
-                </div>
-                <ToggleSwitch
+          <div className="flex flex-wrap gap-3">
+            {moduleAccessPermissions.map((permission) => {
+              const pressed = granted.has(permission.id);
+              return (
+                <button
+                  key={permission.id}
                   type="button"
-                  pressed={granted.has(permission.id)}
-                  label={permission.key}
                   onClick={() => toggle(permission.id)}
-                />
-              </div>
-            ))}
+                  aria-pressed={pressed}
+                  className={`relative flex h-20 w-20 cursor-pointer flex-col items-center justify-center gap-1 rounded-xl border-2 text-sm font-medium shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md active:translate-y-0 ${
+                    pressed
+                      ? "border-blue-600 bg-blue-600 text-white"
+                      : "border-slate-200 bg-white text-slate-600 hover:border-blue-300"
+                  }`}
+                >
+                  {pressed && (
+                    <span className="absolute -right-2 -top-2 flex h-5 w-5 items-center justify-center rounded-full border-2 border-white bg-blue-600 text-white shadow">
+                      <CheckIcon className="h-3 w-3" />
+                    </span>
+                  )}
+                  {permission.label}
+                </button>
+              );
+            })}
           </div>
         </div>
       )}
@@ -132,7 +136,7 @@ export function RolePermissionsEditor({
               {permissions.map((permission) => (
                 <div key={permission.id} className="flex items-center justify-between gap-4 py-3">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{permission.key}</p>
+                    <p className="text-sm font-medium text-slate-800">{permission.label}</p>
                     {permission.description && (
                       <p className="text-xs text-slate-400">{permission.description}</p>
                     )}
@@ -140,7 +144,7 @@ export function RolePermissionsEditor({
                   <ToggleSwitch
                     type="button"
                     pressed={granted.has(permission.id)}
-                    label={permission.key}
+                    label={permission.label}
                     onClick={() => toggle(permission.id)}
                   />
                 </div>

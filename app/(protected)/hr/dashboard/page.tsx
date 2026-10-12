@@ -58,9 +58,8 @@ export default async function HrDashboardPage() {
         {!canManageTickets && !canManageFeedback && (
           <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm sm:col-span-2">
             <p className="text-sm text-slate-500">
-              You don't currently hold any HR-staff permissions (hr.tickets.read or
-              hr.anonymous_feedback.read). Contact whoever manages HR Role Permissions if this
-              seems wrong.
+              You don't currently hold any HR-staff permissions (View Tickets or View Anonymous
+              Feedback). Contact whoever manages HR Role Permissions if this seems wrong.
             </p>
           </div>
         )}
