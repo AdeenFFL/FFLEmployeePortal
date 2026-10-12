@@ -37,10 +37,17 @@
 -- PART A — Request types (it.request_types is owned by this track; see javaria_it_0001).
 -- ===========================================================================
 
-insert into it.request_types (name, applies_to, description) values
-  ('Onboarding', 'Onboarding', 'New joiner: email, access, software, equipment and portal account'),
-  ('Offboarding', 'Offboarding', 'Leaver: mailbox backup, access revocation and asset recovery'),
-  ('Replacement', 'Replacement', 'Equipment replacement for an existing employee')
+-- One type per kind, added only where none exists. The live DB already has New Joiner
+-- (Onboarding), Exit (Offboarding) and Equipment Replacement (Replacement) — checked
+-- 2026-10-12 — so nothing is inserted there. The app picks the active type for each kind.
+insert into it.request_types (name, applies_to, description)
+select v.name, v.applies_to, v.description
+from (values
+  ('New Joiner', 'Onboarding', 'New joiner: email, access, software, equipment and portal account'),
+  ('Exit', 'Offboarding', 'Leaver: mailbox backup, access revocation and asset recovery'),
+  ('Equipment Replacement', 'Replacement', 'Equipment replacement for an existing employee')
+) as v(name, applies_to, description)
+where not exists (select 1 from it.request_types rt where rt.applies_to = v.applies_to)
 on conflict (name) do nothing;
 
 -- ===========================================================================

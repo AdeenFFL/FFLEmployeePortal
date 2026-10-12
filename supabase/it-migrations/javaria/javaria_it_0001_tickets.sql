@@ -50,11 +50,19 @@ create policy "request_types write by ticket settings" on it.request_types
 
 grant select, insert, update, delete on it.request_types to authenticated;
 
-insert into it.request_types (name, applies_to, description) values
-  ('Incident', 'Ticket', 'Something is broken or not working as expected'),
-  ('Service Request', 'Ticket', 'A request for a standard IT service (installation, setup, etc.)'),
-  ('Access Request', 'Ticket', 'Access to a system, application, folder, or account'),
-  ('Asset Request', 'Ticket', 'A request for new or replacement IT equipment')
+-- Defaults only for a database with no ticket types at all. The live DB already has its own
+-- (Access Request, Email Issue, Hardware Issue, Network Issue, New Equipment, Software Issue —
+-- checked 2026-10-12), which are kept as the real list; seeding BRD-style names on top would
+-- create near-duplicates.
+insert into it.request_types (name, applies_to, description)
+select v.name, 'Ticket', v.description
+from (values
+  ('Incident', 'Something is broken or not working as expected'),
+  ('Service Request', 'A request for a standard IT service (installation, setup, etc.)'),
+  ('Access Request', 'Access to a system, application, folder, or account'),
+  ('Asset Request', 'A request for new or replacement IT equipment')
+) as v(name, description)
+where not exists (select 1 from it.request_types where applies_to = 'Ticket')
 on conflict (name) do nothing;
 
 -- Category + subcategory in one self-referencing table (BRD §5.3.1 asks for both). parent_id
