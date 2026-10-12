@@ -1,0 +1,64 @@
+-- Author:      Talha
+-- Branch:      it/talha
+-- Feature:     Phase 0 — baseline of the live `it` schema (07-it-inventory-plan.md §5)
+-- Depends on:  —
+-- Applied to live DB: YES (pre-existing; created directly in Supabase, not via any migration)
+--
+-- REFERENCE ONLY — DO NOT RUN. Records what the `it` schema looked like on 2026-10-12, before
+-- the first real IT migration, so later files have a known starting point to diff against.
+-- Captured from the Supabase dashboard's schema view, which omits RLS state, policies, grants
+-- and triggers; those are unknown and the next migrations are written to cope with either.
+-- Every statement is commented out so this file is inert even if someone runs it by mistake.
+--
+-- Status of each table against 07-it-inventory-plan.md §1:
+--   it.staff_roles        — CONFLICTS with the portal's role model (hardcoded role names in a
+--                           module-local table; context.md §3 / 0019 removed exactly this
+--                           pattern). Not owned by either IT track yet. Proposed: drop once
+--                           confirmed empty and unused; see the plan §8.
+--   it.request_types      — Javeria's (ERD section B/E). Missing created_by/updated_by and an
+--                           updated_at trigger. Left for her migrations.
+--   it.asset_types        — Talha's. Missing updated_at, created_by, updated_by. Fixed in
+--                           talha_it_0002.
+--   it.asset_value_types  — Talha's. Missing every audit column; depreciation_method is free
+--                           text. Fixed in talha_it_0002.
+
+-- create table it.staff_roles (
+--   person_id uuid not null,
+--   role text not null check (role = any (array['Admin', 'IT Staff', 'Approver', 'Finance'])),
+--   created_at timestamptz not null default now(),
+--   created_by uuid,
+--   constraint staff_roles_pkey primary key (person_id, role),
+--   constraint staff_roles_person_id_fkey foreign key (person_id) references public.persons(id),
+--   constraint staff_roles_created_by_fkey foreign key (created_by) references public.persons(id)
+-- );
+
+-- create table it.request_types (
+--   id uuid not null default gen_random_uuid(),
+--   name text not null unique,
+--   applies_to text not null check (applies_to = any (array['Ticket', 'Onboarding', 'Offboarding', 'Replacement'])),
+--   description text,
+--   is_active boolean not null default true,
+--   created_at timestamptz not null default now(),
+--   updated_at timestamptz not null default now(),
+--   constraint request_types_pkey primary key (id)
+-- );
+
+-- create table it.asset_types (
+--   id uuid not null default gen_random_uuid(),
+--   name text not null unique,
+--   classification text not null check (classification = any (array['Fixed', 'Consumable'])),
+--   description text,
+--   is_active boolean not null default true,
+--   created_at timestamptz not null default now(),
+--   constraint asset_types_pkey primary key (id)
+-- );
+
+-- create table it.asset_value_types (
+--   id uuid not null default gen_random_uuid(),
+--   name text not null unique check (name = any (array['New', 'Old'])),
+--   depreciation_percentage numeric not null check (depreciation_percentage >= 0 and depreciation_percentage <= 100),
+--   depreciation_method text not null default 'Straight Line',
+--   useful_life_years integer check (useful_life_years > 0),
+--   description text,
+--   constraint asset_value_types_pkey primary key (id)
+-- );
