@@ -233,6 +233,132 @@ export type TicketMessage = {
   created_at: string;
 };
 
+// IT module (it.* schema), Service Management track — mirrors
+// supabase/it-migrations/javaria/javaria_it_0001_tickets.sql. See
+// 08-it-service-management-plan.md. Prefixed "It" so nothing collides with the HR types above.
+export type ItTicketStatus = "Open" | "Assigned" | "In Progress" | "On Hold" | "Resolved" | "Closed";
+export type ItTicketPriority = "Critical" | "High" | "Medium" | "Low";
+export type ItContactMethod = "Portal" | "Email" | "Phone" | "Teams";
+// Capitalised in the live check constraint (talha_it_0000 baseline).
+export type ItRequestTypeAppliesTo = "Ticket" | "Onboarding" | "Offboarding" | "Replacement";
+export type ItTicketUpdateType =
+  | "comment"
+  | "work_note"
+  | "status_change"
+  | "assignment"
+  | "priority_change"
+  | "escalation"
+  | "system";
+export type ItTicketTaskStatus = "Pending" | "In Progress" | "Completed" | "Cancelled";
+
+export type ItRequestType = {
+  id: string;
+  name: string;
+  applies_to: ItRequestTypeAppliesTo;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItTicketCategory = {
+  id: string;
+  parent_id: string | null;
+  name: string;
+  description: string | null;
+  is_active: boolean;
+  sort_order: number;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ItSlaPolicy = {
+  priority: ItTicketPriority;
+  response_hours: number;
+  resolution_hours: number;
+  updated_at: string;
+};
+
+export type ItTicket = {
+  id: string;
+  ticket_number: string;
+  requester_person_id: string;
+  requested_for_person_id: string | null;
+  request_type_id: string;
+  category_id: string | null;
+  subcategory_id: string | null;
+  priority: ItTicketPriority;
+  subject: string;
+  description: string;
+  status: ItTicketStatus;
+  assigned_to_person_id: string | null;
+  linked_asset_id: string | null;
+  asset_system_name: string | null;
+  access_required: string | null;
+  manager_approval_required: boolean;
+  preferred_contact_method: ItContactMethod;
+  remarks: string | null;
+  company_id: string | null;
+  site_id: string | null;
+  department_id: string | null;
+  response_due_at: string | null;
+  resolution_due_at: string | null;
+  first_responded_at: string | null;
+  resolution_notes: string | null;
+  root_cause: string | null;
+  resolved_at: string | null;
+  closed_at: string | null;
+  closure_remarks: string | null;
+  is_escalated: boolean;
+  escalated_at: string | null;
+  escalated_by: string | null;
+  escalation_reason: string | null;
+  reopen_count: number;
+  requester_confirmed_at: string | null;
+  satisfaction_rating: number | null;
+  satisfaction_comment: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItTicketUpdate = {
+  id: string;
+  ticket_id: string;
+  author_person_id: string | null;
+  update_type: ItTicketUpdateType;
+  body: string;
+  is_internal: boolean;
+  created_at: string;
+};
+
+export type ItTicketTask = {
+  id: string;
+  ticket_id: string;
+  assigned_to_person_id: string | null;
+  task_type: string;
+  description: string | null;
+  status: ItTicketTaskStatus;
+  created_by: string | null;
+  created_at: string;
+  updated_at: string;
+  completed_at: string | null;
+};
+
+export type ItTicketAttachment = {
+  id: string;
+  ticket_id: string;
+  storage_path: string;
+  file_name: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  uploaded_by: string | null;
+  created_at: string;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -514,6 +640,145 @@ export type Database = {
       reply_to_anonymous_conversation: {
         Args: { p_conversation_id: string; p_body: string };
         Returns: undefined;
+      };
+    };
+  };
+  // Only the tables the Service Management track uses. Talha's inventory tables get added to
+  // this block on IT/dev after merge (07-it-inventory-plan.md §2.1). Cross-schema FKs to
+  // public.persons / org_units aren't listed in Relationships (same reason as the hr block) —
+  // names are resolved through it.person_names() / it.list_org_units() instead.
+  it: {
+    Tables: {
+      request_types: {
+        Row: ItRequestType;
+        Insert: Partial<ItRequestType> & Pick<ItRequestType, "name" | "applies_to">;
+        Update: Partial<ItRequestType>;
+        Relationships: [];
+      };
+      ticket_categories: {
+        Row: ItTicketCategory;
+        Insert: Partial<ItTicketCategory> & Pick<ItTicketCategory, "name">;
+        Update: Partial<ItTicketCategory>;
+        Relationships: [
+          {
+            foreignKeyName: "ticket_categories_parent_id_fkey";
+            columns: ["parent_id"];
+            isOneToOne: false;
+            referencedRelation: "ticket_categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      sla_policies: {
+        Row: ItSlaPolicy;
+        Insert: Partial<ItSlaPolicy> &
+          Pick<ItSlaPolicy, "priority" | "response_hours" | "resolution_hours">;
+        Update: Partial<ItSlaPolicy>;
+        Relationships: [];
+      };
+      tickets: {
+        Row: ItTicket;
+        Insert: Partial<ItTicket> &
+          Pick<ItTicket, "requester_person_id" | "request_type_id" | "subject" | "description">;
+        Update: Partial<ItTicket>;
+        Relationships: [
+          {
+            foreignKeyName: "tickets_request_type_id_fkey";
+            columns: ["request_type_id"];
+            isOneToOne: false;
+            referencedRelation: "request_types";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tickets_category_id_fkey";
+            columns: ["category_id"];
+            isOneToOne: false;
+            referencedRelation: "ticket_categories";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "tickets_subcategory_id_fkey";
+            columns: ["subcategory_id"];
+            isOneToOne: false;
+            referencedRelation: "ticket_categories";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ticket_updates: {
+        Row: ItTicketUpdate;
+        Insert: Partial<ItTicketUpdate> & Pick<ItTicketUpdate, "ticket_id" | "body">;
+        Update: Partial<ItTicketUpdate>;
+        Relationships: [
+          {
+            foreignKeyName: "ticket_updates_ticket_id_fkey";
+            columns: ["ticket_id"];
+            isOneToOne: false;
+            referencedRelation: "tickets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ticket_tasks: {
+        Row: ItTicketTask;
+        Insert: Partial<ItTicketTask> & Pick<ItTicketTask, "ticket_id" | "task_type">;
+        Update: Partial<ItTicketTask>;
+        Relationships: [
+          {
+            foreignKeyName: "ticket_tasks_ticket_id_fkey";
+            columns: ["ticket_id"];
+            isOneToOne: false;
+            referencedRelation: "tickets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      ticket_attachments: {
+        Row: ItTicketAttachment;
+        Insert: Partial<ItTicketAttachment> &
+          Pick<ItTicketAttachment, "ticket_id" | "storage_path" | "file_name">;
+        Update: Partial<ItTicketAttachment>;
+        Relationships: [
+          {
+            foreignKeyName: "ticket_attachments_ticket_id_fkey";
+            columns: ["ticket_id"];
+            isOneToOne: false;
+            referencedRelation: "tickets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: {
+      next_number: {
+        Args: { p_prefix: string; p_width?: number };
+        Returns: string;
+      };
+      confirm_ticket_resolution: {
+        Args: { p_ticket_id: string; p_rating: number; p_comment: string | null };
+        Returns: undefined;
+      };
+      reopen_ticket: {
+        Args: { p_ticket_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      list_it_staff: {
+        Args: Record<string, never>;
+        Returns: { person_id: string; full_name: string; designation: string | null }[];
+      };
+      person_names: {
+        Args: { p_person_ids: string[] };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          designation: string | null;
+          employee_code: string | null;
+        }[];
+      };
+      list_org_units: {
+        Args: Record<string, never>;
+        Returns: { id: string; name: string; type: OrgUnitType }[];
       };
     };
   };

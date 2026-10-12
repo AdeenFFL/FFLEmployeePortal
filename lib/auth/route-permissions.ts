@@ -14,6 +14,9 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/feedback": "hr.tickets.read",
   "/hr/admin/categories": "hr.categories.update",
   "/hr/admin/roles": "hr.manage_role_permissions",
+  // IT module — Service Management track (08-it-service-management-plan.md §4).
+  "/it/my-tickets": "module:it",
+  "/it/tickets": "it.tickets.read",
   "/admin/users": "route:/admin/users",
   "/admin/roles": "route:/admin/roles",
   "/admin/departments": "route:/admin/departments",

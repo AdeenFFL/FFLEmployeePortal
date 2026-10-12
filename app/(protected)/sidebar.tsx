@@ -81,6 +81,13 @@ export function Sidebar({
       icon: TicketIcon,
       permission: "module:hr",
     },
+    {
+      type: "link",
+      href: "/it/my-tickets",
+      label: "IT Tickets",
+      icon: TicketIcon,
+      permission: "module:it",
+    },
     { type: "link", href: "/feedback", label: "Anonymous Feedback", icon: HelpCircleIcon },
   ];
   const baseItems: NavEntry[] = allBaseItems.filter((entry) => has(entry.permission));
@@ -112,6 +119,14 @@ export function Sidebar({
           label: "Role Permissions",
           permission: "hr.manage_role_permissions",
         },
+      ],
+    },
+    {
+      type: "group",
+      label: "IT Service Management",
+      icon: TicketIcon,
+      children: [
+        { href: "/it/tickets", label: "Ticket Queue", permission: "it.tickets.read" },
       ],
     },
     {
