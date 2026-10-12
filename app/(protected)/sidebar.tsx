@@ -116,6 +116,22 @@ export function Sidebar({
     },
     {
       type: "group",
+      label: "IT Management",
+      icon: BuildingIcon,
+      children: [
+        { href: "/it/dashboard", label: "Dashboard", permission: "module:it" },
+        // Inventory track (Talha)
+        { href: "/it/inventory", label: "Asset Register", permission: "it.assets.read" },
+        {
+          href: "/it/inventory/settings",
+          label: "Inventory Settings",
+          permission: "it.inventory_settings.update",
+        },
+        // Service management track (Javeria)
+      ],
+    },
+    {
+      type: "group",
       label: "Administration",
       icon: KeyIcon,
       children: [

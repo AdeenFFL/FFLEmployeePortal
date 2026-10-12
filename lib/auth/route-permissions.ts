@@ -14,6 +14,10 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/feedback": "hr.tickets.read",
   "/hr/admin/categories": "hr.categories.update",
   "/hr/admin/roles": "hr.manage_role_permissions",
+  // IT module (M2). First match wins, so every specific /it/* entry must come before the bare
+  // "/it" catch-all, which gates the rest of the module (incl. /it/dashboard) on module:it.
+  "/it/inventory": "it.assets.read",
+  "/it": "module:it",
   "/admin/users": "route:/admin/users",
   "/admin/roles": "route:/admin/roles",
   "/admin/departments": "route:/admin/departments",
@@ -25,10 +29,8 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
 // permissive default (routes with no entry are allowed through) instead of carrying a dead
 // permission that was granted to literally every role anyway.
 //
-// /it/dashboard is the same story, retired for the same reason as /hr/dashboard — it was a
-// one-off placeholder-stub permission with no module:it to fold into yet (IT isn't a real
-// module). Falls through to the same permissive default; give it a module:it gate once IT
-// actually gets built, the way HR did.
+// /it/dashboard is gated by the "/it" catch-all above (module:it), the same way HR's dashboard
+// is gated by module:hr.
 
 export function permissionKeyForPath(pathname: string): string | null {
   for (const [route, permissionKey] of Object.entries(ROUTE_PERMISSIONS)) {

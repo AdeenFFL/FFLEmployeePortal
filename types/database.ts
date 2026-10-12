@@ -233,6 +233,61 @@ export type TicketMessage = {
   created_at: string;
 };
 
+// IT module (M2) — inventory settings (supabase/it-migrations/talha/talha_it_0002_inventory_settings.sql).
+export type AssetClassification = "Fixed" | "Consumable";
+export type AssetValueTypeName = "New" | "Old";
+export type DepreciationMethod = "Straight Line" | "Reducing Balance";
+
+export type AssetType = {
+  id: string;
+  name: string;
+  classification: AssetClassification;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type AssetValueType = {
+  id: string;
+  name: AssetValueTypeName;
+  depreciation_percentage: number;
+  depreciation_method: DepreciationMethod;
+  useful_life_years: number | null;
+  description: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+// IT module (M2) — asset register (supabase/it-migrations/talha/talha_it_0003_assets.sql).
+export type Asset = {
+  id: string;
+  asset_tag: string;
+  serial_number: string;
+  asset_name: string;
+  asset_type_id: string;
+  manufacturer: string | null;
+  model_number: string | null;
+  company_id: string;
+  site_id: string | null;
+  purchase_date: string | null;
+  vendor_id: string | null;
+  receiving_id: string | null;
+  status: "Unassigned" | "In Use" | "In Repair" | "Retired" | "Disposed" | "Lost";
+  condition: string | null;
+  warranty_expiry: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+  deleted_at: string | null;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -514,6 +569,45 @@ export type Database = {
       reply_to_anonymous_conversation: {
         Args: { p_conversation_id: string; p_body: string };
         Returns: undefined;
+      };
+    };
+  };
+  it: {
+    Tables: {
+      asset_types: {
+        Row: AssetType;
+        Insert: Partial<AssetType> & Pick<AssetType, "name" | "classification">;
+        Update: Partial<AssetType>;
+        Relationships: [];
+      };
+      asset_value_types: {
+        Row: AssetValueType;
+        Insert: Partial<AssetValueType> &
+          Pick<AssetValueType, "name" | "depreciation_percentage">;
+        Update: Partial<AssetValueType>;
+        Relationships: [];
+      };
+      assets: {
+        Row: Asset;
+        Insert: Partial<Asset> &
+          Pick<Asset, "serial_number" | "asset_name" | "asset_type_id" | "company_id">;
+        Update: Partial<Asset>;
+        Relationships: [
+          {
+            foreignKeyName: "assets_asset_type_id_fkey";
+            columns: ["asset_type_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_types";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+    };
+    Views: Record<string, never>;
+    Functions: {
+      next_number: {
+        Args: { p_prefix: string; p_width?: number };
+        Returns: string;
       };
     };
   };
