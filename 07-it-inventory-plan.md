@@ -1,4 +1,4 @@
-# IT Module (M2) — Inventory, Assets & Procurement
+# IT Module (M2) — Inventory & Asset Management
 ## Implementation & Development Plan (Talha's track)
 
 Written against the Module Onboarding SOP (`01-platform-design-and-sop.md` §11), the HR module
@@ -9,10 +9,15 @@ precedent (`06-hr-module-design.md`, migrations `0012`–`0020`), the IT BRD
 |---|---|
 | Module code / schema | `it` / `it` |
 | Coarse access | `module:it` (registered by the senior dev, shared by both IT tracks) |
-| This track | **Inventory**: asset register, assignments, maintenance, stock, valuation, **procurement** |
-| Other track | **Service Management** (Javeria, `it/javaria`): tickets, tasks, request types, onboarding/offboarding |
+| This track | **Inventory**: asset register, assignments, maintenance, stock movements, valuation |
+| Other track | **Service Management, Procurement & On/Offboarding** (Javeria, `it/javaria`) |
 | Branch flow | `it/talha` + `it/javaria` → `it/dev` (IT testing) → `develop` (senior dev) |
 | Migrations | Staged in `supabase/it-migrations/talha/` (see that folder's README) |
+
+**Decision log**
+- 2026-10-12: Procurement (ERD section D) and Onboarding/Offboarding (section E) are owned by
+  Javeria.
+- 2026-10-12: All ERD additions in §1.3 are accepted.
 
 ---
 
@@ -20,7 +25,7 @@ precedent (`06-hr-module-design.md`, migrations `0012`–`0020`), the IT BRD
 
 ERD v4 models the IT system as if it were standalone: INT keys, and its own users, roles,
 employees, locations, departments and audit tables. The SOP doesn't allow that (§7 rules 1–4), so
-the first job is mapping each ERD concept onto what already exists.
+each ERD concept is mapped onto what already exists. **This section applies to both IT tracks.**
 
 ### 1.1 ERD tables that must NOT be created in `it`
 
@@ -46,25 +51,17 @@ the first job is mapping each ERD concept onto what already exists.
 | Hard delete | `deleted_at timestamptz` on assets, movements and procurement rows (compliance-relevant) |
 | Transactional rows | carry both `company_id` and `site_id` (SOP §3; never derived from site) |
 
-### 1.3 Gaps in the ERD this plan proposes to fill (needs sign-off, see §8)
+### 1.3 Accepted ERD additions (2026-10-12)
 
-1. **`demands` has no vendor column**, but the BRD's "Vendor Assigned from Vendor Master" step
-   needs one. Proposed: `demands.vendor_id` (nullable, set at the vendor-assignment step).
-2. **Invoice approval has no approver record.** Only `invoices.status` exists. Proposed:
-   `invoices.approved_by`, `approved_at` and `approval_comments`, or reuse a generic approvals table.
-3. **Delivery Challan / Gate Pass files** have no storage column. Proposed: one generic
-   `it.documents` table (`entity_type`, `entity_id`, `doc_type`, `storage_path`) and a private
-   `it-documents` Storage bucket.
-4. **Stock is per-site, not global.** `stock_movements` needs `site_id` (+ `company_id`), otherwise
-   consumable stock levels can't be answered per plant.
-5. **`products` → `asset_types` link.** Without it, receiving a fixed-asset demand can't
-   auto-create an asset record. Proposed: `products.asset_type_id` (nullable).
-6. **Asset status vocabulary conflicts in the BRD**: "Available / Assigned / Under Repair" (as-is
-   process) vs "In Use / In Repair / Retired / Unassigned" (scope and screen list). Proposed: use
-   the scope list, plus `Disposed` / `Lost` for write-offs.
-7. **Current holder uniqueness.** ERD note 1 says the holder is the assignment with no return
-   date. Enforce it with a partial unique index:
-   `unique (asset_id) where return_date is null`.
+| # | Addition | Table owner |
+|---|---|---|
+| 1 | `demands.vendor_id` (nullable, set at the vendor-assignment step) | Javeria |
+| 2 | `invoices.approved_by`, `approved_at`, `approval_comments` | Javeria |
+| 3 | Generic `it.documents` table (`entity_type`, `entity_id`, `doc_type`, `storage_path`) + private `it-documents` Storage bucket, for Delivery Challan / Gate Pass / invoice files. Designed generically so the inventory track can attach files to assets later | Javeria |
+| 4 | `stock_movements.site_id` + `company_id`, so consumable stock is counted per site | **Talha** |
+| 5 | `products.asset_type_id` (nullable FK → `it.asset_types`), so receiving a fixed-asset product can create an asset record | Javeria (FK points at Talha's table) |
+| 6 | Asset status vocabulary: `Unassigned`, `In Use`, `In Repair`, `Retired`, `Disposed`, `Lost` | **Talha** |
+| 7 | Partial unique index on `asset_assignments (asset_id) where return_date is null`: at most one current holder per asset | **Talha** |
 
 ---
 
@@ -75,56 +72,74 @@ the first job is mapping each ERD concept onto what already exists.
 | A — Org & Access | (core tables, §1.1) | Senior dev (no IT work) |
 | B — Ticketing | `tickets`, `ticket_tasks`, `request_types` | Javeria |
 | C — Asset & Inventory | `assets`, `asset_types`, `asset_assignments`, `asset_values`, `asset_value_types`, `asset_maintenance`, `stock_movements` | **Talha** |
-| D — Procurement | `products`, `vendors`, `demands`, `demand_approvals`, `receiving_records`, `invoices`, `payments` | **Talha** (proposed; confirm, §8) |
-| E — Onboarding/Offboarding | `onboarding_offboarding`, `checklist_items` | Javeria (proposed; confirm, §8) |
+| D — Procurement | `products`, `vendors`, `demands`, `demand_approvals`, `receiving_records`, `invoices`, `payments` (+ `documents`) | Javeria |
+| E — Onboarding/Offboarding | `onboarding_offboarding`, `checklist_items` | Javeria |
 | F — Audit | `public.audit_log` | Shared helper, already exists |
 
 ### 2.1 Contracts between the two tracks
 
-These are the places our code touches each other's tables. Agree on them before either of us
-writes the matching migration.
+With procurement on Javeria's side, the dependency runs **both ways**. Agree on each contract
+before either of us writes the matching migration.
 
-| Contract | Direction | What's agreed |
+**Talha's tables that reference Javeria's**
+
+| FK | Used for | Ordering rule |
 |---|---|---|
-| `tickets.linked_asset_id → it.assets(id)` | Javeria depends on Talha | `it.assets` must be applied before her tickets migration, or she adds the FK in a later file |
-| `checklist_items.assignment_id → it.asset_assignments(id)` | Javeria depends on Talha | Same ordering rule |
-| Asset Assignment Form / Asset Return Form | Talha builds, Javeria calls | Exported Server Actions `assignAsset()` / `returnAsset()` + a reusable `<AssetAssignForm>` that her onboarding/offboarding checklist embeds |
-| `asset_maintenance.vendor_id`, `receiving_records.vendor_id` | Talha-internal | `it.vendors` lives in this track |
-| Asset detail → "linked tickets" tab | Talha reads Javeria's table | Read-only query on `it.tickets where linked_asset_id = …` |
-| `/it/dashboard` (SCR-06) | Shared page | Javeria owns the page; Talha supplies an `<InventoryKpis>` component |
-| `/it/admin/roles` (module role-permissions) | Shared page | Built once (copy `hr/admin/roles`), one section per track |
-| Foundation migration (schema, grants, `module:it`) | Shared | Written once by whoever starts first, staged in **that** author's folder; the other lists it under `Depends on` |
-| Shared files (`sidebar.tsx`, `route-permissions.ts`, `home-path.ts`, `types/database.ts`) | Both edit | Keep each edit small and in its own block; regenerate `types/database.ts` on `it/dev` after merges, not on feature branches |
+| `assets.vendor_id → it.vendors` | Supplier of the asset | Column created in Talha's Phase 2 **without** the FK; the constraint is added in `talha_it_00xx_link_procurement_fks.sql` once her vendors migration is applied |
+| `assets.receiving_id → it.receiving_records` | Trace an asset to its goods receipt | Same: column first, FK in the linking migration |
+| `asset_maintenance.vendor_id → it.vendors` | Repair vendor | Same linking migration (or after vendors exists, if hers lands first) |
+| `stock_movements.product_id → it.products` | Consumable stock | Phase 5 needs `it.products` applied first. **Ask Javeria to ship vendors + products early** |
+
+**Javeria's tables that reference Talha's**
+
+| FK | Used for | Ordering rule |
+|---|---|---|
+| `tickets.linked_asset_id → it.assets` | Ticket about a specific device | `it.assets` (Talha Phase 2) applied first, or she adds the FK later |
+| `checklist_items.assignment_id → it.asset_assignments` | Onboarding equipment issue / offboarding return | Talha Phase 3 applied first |
+| `products.asset_type_id → it.asset_types` | Addition #5 | Talha Phase 1 applied first |
+
+**Functions and components Talha provides for Javeria's flows**
+
+| Provided by Talha | Called from Javeria's flow |
+|---|---|
+| `assignAsset()` / `returnAsset()` Server Actions + embeddable `<AssetAssignForm>` / `<AssetReturnForm>` | Onboarding "Asset Allocation" task, offboarding "Asset Return Form" |
+| `registerAssetsFromReceipt(receivingId, …)`: creates draft asset rows linked to the receipt | Receiving a fixed-asset demand |
+| `recordStockMovement({ productId, siteId, type, qty, reference })` | Consumable demand exception path + receiving consumables |
+| `listOpenAssignments(personId)` | Offboarding: what the leaver still holds |
+
+**Shared surfaces**
+
+| Surface | Arrangement |
+|---|---|
+| Foundation migration (schema grants, `module:it`, `it.next_number()` sequence helper) | Written once by whoever starts first, staged in **that** author's folder; the other lists it under `Depends on` |
+| `/it/dashboard` (SCR-06) | Javeria owns the page; Talha supplies an `<InventoryKpis>` component |
+| `/it/admin/roles` | Built once (copy `hr/admin/roles`), one section per track |
+| `sidebar.tsx`, `route-permissions.ts`, `home-path.ts` | Both edit, each in their own block |
+| `types/database.ts` | Regenerated on `it/dev` after merges, not on feature branches |
 
 ---
 
-## 3. Permissions (`it.*`)
+## 3. Permissions (this track)
 
 Following the per-operation style HR moved to in `0017` (`<module>.<resource>.<op>`). Every
-insert must include `label`, because `0020` made `permissions.label` NOT NULL.
+insert must include `label`, because `0020` made `permissions.label` NOT NULL. Procurement and
+service-management keys (`it.vendors.*`, `it.demands.*`, `it.tickets.*`, …) are Javeria's to
+define.
 
 | Key | Label | Gates |
 |---|---|---|
-| `module:it` | IT | Opening `/it/**` at all. Grant to the base Employee role (employees need My Assets / raise demand) |
+| `module:it` | IT | Opening `/it/**` at all. Grant to the base Employee role (employees need My Assets) |
 | `it.assets.read` | View Asset Register | `/it/inventory`, asset detail |
 | `it.assets.create` | Register Assets | Add asset |
 | `it.assets.update` | Edit Assets | Edit, change status |
 | `it.assets.delete` | Retire/Delete Assets | Soft delete |
-| `it.assets.assign` | Assign/Return Assets | Assignment + return forms |
+| `it.assets.assign` | Assign/Return Assets | Assignment + return forms (also called from on/offboarding) |
 | `it.maintenance.update` | Log Repairs | R&M log |
+| `it.stock.read` | View Stock | Stock levels and movements |
 | `it.stock.update` | Record Stock Movements | Stock in/out |
-| `it.valuation.update` | Manage Valuations | Asset values, value types |
+| `it.valuation.update` | Manage Valuations | Asset values |
 | `it.inventory_settings.update` | Inventory Settings | Asset types, value types |
-| `it.vendors.update` | Manage Vendors | Vendor master |
-| `it.products.update` | Manage Products | Product master |
-| `it.demands.create` | Raise Demands | New demand |
-| `it.demands.read` | View All Demands | Demand queue (own demands are visible without this) |
-| `it.demands.approve` | Approve Demands | Department-head decision |
-| `it.demands.update` | Process Demands | Vendor assignment, receiving |
-| `it.invoices.update` | Manage Invoices | Log/verify invoices |
-| `it.invoices.approve` | Approve Invoices | Department-head invoice approval |
-| `it.payments.update` | Record Payments | Finance confirmation, payment reference |
-| `it.manage_role_permissions` | IT Role Permissions | `/it/admin/roles` (shared with Javeria) |
+| `it.manage_role_permissions` | IT Role Permissions | `/it/admin/roles` (shared with Javeria; whoever writes the foundation migration adds it) |
 
 **Limitation to flag:** `has_permission(key)` has no site/company argument today, even though the
 SOP (§6) describes `has_permission(code, site_id)`. A "Plant Site IT Team" that can only see its
@@ -142,25 +157,22 @@ the additional screens the BRD's process sections imply.
 | ID | Route | Who | Purpose |
 |---|---|---|---|
 | INV-01 | `/it/inventory/settings` | IT admin | Asset types (with Fixed/Consumable classification) and value types (New/Old, depreciation %, method, useful life) |
-| INV-02 | `/it/procurement/vendors` | IT / procurement | Vendor master: list, add, edit, deactivate |
-| INV-03 | `/it/procurement/products` | IT / procurement | Product master: name, category, unit, prices, asset type link, active |
 | SCR-05 | `/it/inventory` | IT | Asset register: search by tag/serial/holder; filter by type, status, site, company; add asset |
-| INV-04 | `/it/inventory/new`, `/it/inventory/[id]/edit` | IT | Asset form (BRD §5.5.1 fields); tag auto-generated |
-| INV-05 | `/it/inventory/[id]` | IT | Asset detail with tabs: Overview · Assignment history · Maintenance · Valuation · Movements · Linked tickets |
-| INV-06 | modal on INV-05 (+ embeddable) | IT | Asset Assignment Form and Asset Return Form (BRD fields) |
-| INV-07 | `/it/my-assets` | Every employee | Assets currently assigned to me; acknowledge handover |
-| INV-08 | `/it/inventory/maintenance` | IT | Repair & maintenance log across all assets, plus "send for repair" / "returned from repair" |
-| INV-09 | `/it/inventory/stock` | IT | Consumable stock levels per site; Stock In / Stock Out form; movement history |
-| INV-10 | `/it/procurement/demands` | Requester / IT | My demands + queue (with `it.demands.read`); new demand form (DMD-xxxxxx) |
-| INV-11 | `/it/procurement/demands/[id]` | IT | Demand lifecycle: approval → vendor → receiving → documents → invoice → payment, as a timeline |
-| INV-12 | `/it/procurement/approvals` | Dept head | Pending demands and invoices awaiting my decision |
-| INV-13 | `/it/inventory/reports` | IT mgmt | Inventory status, utilisation, warranty expiry, maintenance cost; CSV export |
+| INV-02 | `/it/inventory/new`, `/it/inventory/[id]/edit` | IT | Asset form (BRD §5.5.1 fields); tag auto-generated |
+| INV-03 | `/it/inventory/[id]` | IT | Asset detail with tabs: Overview · Assignment history · Maintenance · Valuation · Movements · Linked tickets (read-only from Javeria's `it.tickets`) · Origin (receipt/demand, read-only from Javeria's procurement tables) |
+| INV-04 | modal on INV-03 (+ embeddable) | IT | Asset Assignment Form and Asset Return Form (BRD fields) |
+| INV-05 | `/it/my-assets` | Every employee | Assets currently assigned to me; acknowledge handover |
+| INV-06 | `/it/inventory/maintenance` | IT | Repair & maintenance log across all assets, plus "send for repair" / "returned from repair" |
+| INV-07 | `/it/inventory/stock` | IT | Consumable stock levels per site; Stock In / Stock Out form; movement history |
+| INV-08 | `/it/inventory/reports` | IT mgmt | Inventory status, utilisation, warranty expiry, maintenance cost; CSV export |
 | SCR-06 (part) | `/it/dashboard` | IT | Inventory KPI cards + asset-status breakdown (component inside Javeria's page) |
 | — | `/it/admin/roles` | IT admin | Shared with Javeria (§2.1) |
 
 UI follows the HR pages: server components that query with `.schema("it")`, Server Actions with
 `requirePermission()` / `requireActiveUser()`, `PageHeader`, `Modal`, `StatusPill`, and
-`has_permission` RPCs to hide controls the viewer can't use.
+`has_permission` RPCs to hide controls the viewer can't use. Cross-schema joins to
+`public.persons` can't be embedded by supabase-js, so names are fetched separately (same as
+`hr/admin/categories/page.tsx`).
 
 ---
 
@@ -175,31 +187,34 @@ the Server Actions, and a test checklist for the tester. Phases are ordered by d
       a REST probe) can't see it. Dump it (`supabase db dump --schema it`, or Dashboard SQL) and
       commit it as `talha_it_0000_baseline_live_snapshot.sql`, marked "Applied: YES (pre-existing)".
       Then diff it against §1. If it contains ERD-style `users`/`roles`/`employees`/INT keys, it
-      needs a rework migration before anything is built on top of it.
-- [ ] Confirm the §8 decisions with Javeria and the senior dev.
+      needs a rework migration before anything is built on top of it. Share the result with
+      Javeria, since it affects her tables too.
 - [ ] Senior dev: register `module:it`, add `it` to Exposed Schemas, and create `it/dev` from the
       current base.
-- [ ] Agree on the foundation-migration author and the §2.1 contracts with Javeria.
+- [ ] Agree on the foundation-migration author and the §2.1 contracts with Javeria. Ask her to
+      sequence vendors + products early.
 
-### Phase 1 — Foundation and master data
-**Migration** `talha_it_0001_foundation.sql` (or Javeria's equivalent): schema grants mirroring
+### Phase 1 — Foundation and inventory settings
+**Migration** `talha_it_0001_foundation.sql` (skip if Javeria writes it): schema grants mirroring
 `0012` (`grant usage` + default privileges for `authenticated`), number-generator helper
-(`it.next_number('DMD')` backed by sequences, also usable for Javeria's `ONB-`/`OFB-`/ticket
-numbers), and `it.*` permission rows with labels.
-**Migration** `talha_it_0002_inventory_masters.sql`: `asset_types`, `asset_value_types`,
-`vendors`, `products`, with RLS (read: `module:it`; write: the matching `.update` key) and seeds
-for asset types (Laptop, Desktop, Monitor, Printer, Server, Network, Mobile, Peripheral,
-Software License; Fixed vs Consumable).
-**Screens**: INV-01, INV-02, INV-03, plus the `/it/admin/roles` section.
+(`it.next_number(prefix)` backed by sequences, also usable for her `ONB-`/`OFB-`/`DMD-`/ticket
+numbers), `module:it` + `it.manage_role_permissions`.
+**Migration** `talha_it_0002_inventory_settings.sql`: `asset_types`, `asset_value_types`, this
+track's `it.*` permission rows (with labels), and RLS (read: `module:it`; write:
+`it.inventory_settings.update`). Seeds asset types (Laptop, Desktop, Monitor, Printer, Server,
+Network, Mobile, Peripheral, Software License; Fixed vs Consumable) and value types (New, Old).
+**Screens**: INV-01, plus the inventory section of `/it/admin/roles`.
 **Shared-file edits**: IT nav group in `sidebar.tsx`, IT entries in `route-permissions.ts`.
-**Done when**: an IT admin can maintain all four masters and a non-IT employee can't reach them
-(proxy and RLS both).
+**Done when**: an IT admin can maintain asset types and value types, and a non-IT employee can't
+reach them (proxy and RLS both).
 
 ### Phase 2 — Asset register
-**Migration** `talha_it_0003_assets.sql`: `it.assets` (tag auto-generated, e.g. `FFL-LAP-000123`;
-unique `asset_tag` and `serial_number`; `company_id`, `site_id`, `status`, `condition`,
-`warranty_expiry`, `vendor_id`, `receiving_id` (FK added in Phase 7), `deleted_at`).
-**Screens**: SCR-05, INV-04, INV-05 (Overview tab).
+**Migration** `talha_it_0003_assets.sql`: `it.assets`. Tag auto-generated
+(`<COMPANY>-<TYPE>-<6-digit seq>`, e.g. `FFL-LAP-000123`, pending BA confirmation); unique
+`asset_tag` and `serial_number`; `company_id`, `site_id`, `status` (§1.3 #6), `condition`,
+`warranty_expiry`, `deleted_at`. `vendor_id` and `receiving_id` columns exist but have no FK yet
+(§2.1).
+**Screens**: SCR-05, INV-02, INV-03 (Overview tab).
 **Done when**: assets can be registered, searched by tag/serial, filtered and edited, and every
 change writes an audit-log row.
 
@@ -208,60 +223,50 @@ change writes an audit-log row.
 unique index (§1.3 #7); a security-definer `it.assign_asset()` / `it.return_asset()` pair that
 writes the assignment row and flips `assets.status` atomically, so the two can't drift; RLS that
 lets employees read their own assignments.
-**Screens**: INV-06 (assign/return forms), INV-05 Assignment history tab, INV-07 My Assets with
+**Screens**: INV-04 (assign/return forms), INV-03 Assignment history tab, INV-05 My Assets with
 handover acknowledgement.
-**Hand-off to Javeria**: export `assignAsset` / `returnAsset` and `<AssetAssignForm>` for her
-onboarding/offboarding checklist.
+**Hand-off to Javeria**: `assignAsset` / `returnAsset`, `<AssetAssignForm>` / `<AssetReturnForm>`,
+and `listOpenAssignments` for her on/offboarding checklist.
 **Done when**: an asset can't be assigned twice, a return frees it with the condition recorded,
 history is never overwritten, and the employee sees it under My Assets.
 
 ### Phase 4 — Repair and maintenance
 **Migration** `talha_it_0005_asset_maintenance.sql`. Opening a maintenance record sets the asset
-`In Repair`; closing it restores the previous status.
-**Screens**: INV-08 and the INV-05 Maintenance tab.
+`In Repair`; closing it restores the previous status. `vendor_id` FK to `it.vendors` if
+Javeria's vendors migration is already applied, otherwise added in the linking migration.
+**Screens**: INV-06 and the INV-03 Maintenance tab.
 
 ### Phase 5 — Consumables and stock movements
+**Depends on** Javeria's `it.products`.
 **Migration** `talha_it_0006_stock_movements.sql`: `it.stock_movements` with the ERD note 7 check
-(exactly one of `asset_id` / `product_id`), `site_id`, `company_id`, and a view
+(exactly one of `asset_id` / `product_id`), `site_id` + `company_id` (§1.3 #4), and a view
 `it.v_stock_levels` (sum of in minus out per product per site). Stock Out is blocked when it would
 go negative.
-**Screens**: INV-09 and the INV-05 Movements tab.
+**Screens**: INV-07 and the INV-03 Movements tab.
+**Hand-off to Javeria**: `recordStockMovement()` for consumable demands and receiving.
 
 ### Phase 6 — Valuation and depreciation
 **Migration** `talha_it_0007_asset_values.sql`: `it.asset_values` and a function computing
 current value / accumulated depreciation from the value type (straight-line and reducing-balance).
-**Screens**: INV-05 Valuation tab, value-type settings in INV-01.
+**Screens**: INV-03 Valuation tab.
 
-### Phase 7 — Procurement: demands and approvals
-**Migration** `talha_it_0008_demands.sql`: `demands` (+ `vendor_id`, §1.3 #1) and
-`demand_approvals`. Status flow: `Open → Categorized → Pending Approval → Approved | Rejected |
-Partially Approved → Assigned to Vendor → …`. Consumable demands take the exception path straight
-to a stock movement.
-**Screens**: INV-10, INV-11 (approval and vendor steps), INV-12.
-**Open dependency**: who counts as "the Department Head" for a demand (§8).
+### Phase 7 — Procurement linking
+**Depends on** Javeria's vendors + receiving migrations.
+**Migration** `talha_it_0008_link_procurement_fks.sql`: adds the deferred FKs (`assets.vendor_id`,
+`assets.receiving_id`, and `asset_maintenance.vendor_id` if not done in Phase 4).
+**Code**: `registerAssetsFromReceipt()` for her receiving step; INV-03 Origin tab (receipt →
+demand trail, read-only).
 
-### Phase 8 — Receiving and documents
-**Migration** `talha_it_0009_receiving.sql`: `receiving_records`, `it.documents` + the
-`it-documents` Storage bucket and policies, and the FK `assets.receiving_id`.
-On receiving: a fixed-asset product creates draft asset rows linked to the receipt; a consumable
-creates a Stock In movement. Full / Partial / Not Received tracking against the ordered quantity.
-**Screens**: receiving and documents steps of INV-11.
-
-### Phase 9 — Invoices and payments
-**Migration** `talha_it_0010_invoices_payments.sql`: `invoices` (+ approval columns, §1.3 #2),
-`payments`. Automatic quantity check of invoice vs receiving, flagged for review on mismatch.
-**Screens**: invoice and payment steps of INV-11, invoice items in INV-12.
-
-### Phase 10 — Dashboard and reports
+### Phase 8 — Dashboard and reports
 **Screens**: `<InventoryKpis>` for SCR-06 (total, in use, unassigned, in repair, retired,
-warranty expiring in 30/60/90 days), INV-13 reports with CSV export (same pattern as
+warranty expiring in 30/60/90 days), INV-08 reports with CSV export (same pattern as
 `admin/audit-log/export`).
 
-### Phase 11 — Notifications and hardening
+### Phase 9 — Notifications and hardening
 Portal + email notifications (via the existing `lib/email/graph-client.ts`, which no-ops until the
-`MS_GRAPH_*` env vars are set) for: demand awaiting approval, demand rejected/partial, asset
-assigned to you, warranty expiring. RLS review pass with the tester (can a plain employee read
-another person's assignments? can a non-approver approve?), plus `tsc` / `eslint` /
+`MS_GRAPH_*` env vars are set) for: asset assigned to you, asset return recorded, warranty
+expiring. RLS review pass with the tester (can a plain employee read another person's assignments?
+can someone without `it.assets.assign` call `assign_asset()`?), plus `tsc` / `eslint` /
 `npm run build` before the `it/dev` → `develop` PR.
 
 ---
@@ -285,7 +290,7 @@ another person's assignments? can a non-approver approve?), plus `tsc` / `eslint
 
 | Event | Direction | Handling |
 |---|---|---|
-| `it.employee_offboarded` (emitted by Javeria's track) | Consumed here | List the person's open assignments for the Return form (no automatic return, because physical recovery is required) |
+| `it.employee_offboarded` (emitted by Javeria's track) | Consumed here | `listOpenAssignments()` feeds her Return form (no automatic return, because physical recovery is required) |
 | `it.asset_assigned` / `it.asset_returned` | Emitted here (optional) | Only if another module needs it; none does yet |
 
 `core.integration_events` doesn't exist in the live DB yet, so until it does this is a direct
@@ -293,15 +298,14 @@ function call between the two IT tracks (same module, same schema), not an event
 
 ---
 
-## 8. Decisions needed before Phase 1
+## 8. Decisions
 
-| # | Question | Proposed answer | Decide with |
-|---|---|---|---|
-| 1 | Does procurement (ERD section D) belong to the inventory track? | Yes: assets FK into vendors and receiving, so splitting it creates cross-dependencies | Javeria, senior dev |
-| 2 | Who owns onboarding/offboarding (section E)? | Javeria owns the workflow; Talha supplies the assign/return forms it embeds | Javeria |
-| 3 | What is the live `it` schema's actual content? | Dump it first (Phase 0); rework if it follows the ERD literally | Whoever created it |
-| 4 | Asset status vocabulary | In Use / In Repair / Retired / Unassigned (+ Disposed, Lost) | IT BA |
-| 5 | Who is the "Department Head" approver for a demand or invoice? | A permission (`it.demands.approve`) scoped by department once scoped permissions exist; until then a global permission | Senior dev, IT BA |
-| 6 | Accept the ERD additions in §1.3 (demand vendor, invoice approval, documents, stock site, product→asset type)? | Yes | Senior dev |
-| 7 | Asset tag format | `<COMPANY>-<TYPE>-<6-digit seq>`, e.g. `FFL-LAP-000123` | IT BA |
-| 8 | Who writes the shared foundation migration (`module:it`, grants, number generator)? | Whoever starts Phase 1 first | Javeria |
+| # | Question | Status |
+|---|---|---|
+| 1 | Does procurement (ERD section D) belong to the inventory track? | **Decided 2026-10-12: Javeria** |
+| 2 | Who owns onboarding/offboarding (section E)? | **Decided 2026-10-12: Javeria** (Talha supplies the assign/return forms it embeds) |
+| 3 | Accept the ERD additions in §1.3? | **Decided 2026-10-12: accepted, including the status vocabulary (#6)** |
+| 4 | What is the live `it` schema's actual content? | Open: dump it first (Phase 0) |
+| 5 | Asset tag format (`FFL-LAP-000123`)? | Open: IT BA |
+| 6 | Who writes the shared foundation migration? | Open: whoever starts Phase 1 first, agree with Javeria |
+| 7 | Can Javeria ship vendors + products early, so Phases 4–5 aren't blocked? | Open: Javeria |
