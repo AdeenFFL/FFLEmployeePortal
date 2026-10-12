@@ -1,4 +1,4 @@
-# IT Module (M2) — Service Management, Procurement & Onboarding/Offboarding
+# IT Module (M2) — Service Management & Onboarding/Offboarding
 ## Implementation & Development Plan (Javaria's track)
 
 Companion to Talha's `07-it-inventory-plan.md`. Same conventions, same branch flow, same staged
@@ -7,27 +7,27 @@ tracks and isn't repeated here.** Where the two tracks meet, this plan mirrors h
 two documents stay consistent.
 
 Written against the Module Onboarding SOP (`01-platform-design-and-sop.md` §11), the IT BRD
-(`final_doc_updated.docx` §5.1–5.3, §5.5, §7.1, §7.3, §7.5–7.9, §8), and ERD v4
-(`ERD_Employee_Portal_v4_detailed (1).pdf`, sections B, D and E).
+(`final_doc_updated.docx` §5.1–5.3, §7.1, §7.3, §7.12–7.13, §8), and ERD v4
+(`ERD_Employee_Portal_v4_detailed (1).pdf`, sections B and E).
 
 | | |
 |---|---|
 | Module code / schema | `it` / `it` (shared with Talha) |
-| Coarse access | `module:it` (registered in `talha_it_0001_foundation.sql`) |
-| This track | **Service Management** (tickets, tasks, SLAs), **Procurement** (vendors, products, demands, approvals, receiving, documents, invoices, payments), **Onboarding/Offboarding**, IT dashboard |
-| Other track | **Inventory** (Talha, `it/talha`): assets, assignments, maintenance, stock movements, valuation |
+| Coarse access | `module:it` (registered on `develop` in `0021_module_it_permission.sql`) |
+| This track | **IT Service Management** (tickets, tasks, SLAs, dashboard, reports) and **Onboarding / Offboarding** |
+| Not this track | **Inventory** (Talha): assets, assignments, maintenance, stock, valuation. **Procurement**: see §8 #1 |
 | Branch flow | `IT/javaria` + `it/talha` → `IT/dev` (IT testing) → `develop` (senior dev) |
 | Migrations | Staged in `supabase/it-migrations/javaria/` (see that folder's README) |
 
 **Decision log**
-- 2026-10-12: Procurement (ERD section D) and Onboarding/Offboarding (section E) are owned by
-  this track (recorded in both plans).
-- 2026-10-12: Talha's ERD additions (his §1.3) accepted, including the ones this track builds
-  (#1 `demands.vendor_id`, #2 invoice approval columns, #3 `it.documents`, #5
-  `products.asset_type_id`).
-- 2026-10-12: Shared foundation migration is **Talha's** `talha_it_0001_foundation.sql` (grants,
-  `it.next_number()`, `module:it`, `it.manage_role_permissions`). This track's migrations depend
-  on it and don't redefine any of it.
+- 2026-10-12: This track's scope is IT Service Management and Onboarding/Offboarding only
+  (Javaria). Procurement is **not** part of it. Talha's `07` (§2, §8 #1) currently lists
+  procurement under this track and needs updating to match (§8 #1).
+- 2026-10-12: Shared foundation migration is Talha's `talha_it_0001_foundation.sql` (grants,
+  `it.next_number()`). This track's migrations depend on it and don't redefine any of it.
+- 2026-10-12: `module:it` was registered by the senior dev on `develop`
+  (`0021_module_it_permission.sql`), deliberately granted to no role. Granting it is an admin
+  decision on `/admin/roles`.
 
 ---
 
@@ -39,29 +39,25 @@ Written against the Module Onboarding SOP (`01-platform-design-and-sop.md` §11)
 |---|---|
 | `request_types` (`applies_to` in `'Ticket' / 'Onboarding' / 'Offboarding' / 'Replacement'`, capitalised) | **Owned here.** Reused as-is; `javaria_it_0001` adds `created_by` / `updated_by`, the `updated_at` trigger and RLS. |
 | `staff_roles` (`'Admin' / 'IT Staff' / 'Approver' / 'Finance'`) | **Not used.** IT access is `it.*` permissions on portal roles (both plans agree). Drop is open, see §8. |
-| `asset_types`, `asset_value_types` | Talha's. `products.asset_type_id` will point at `asset_types`. |
+| `asset_types`, `asset_value_types` | Talha's. |
 
 ### 1.2 ERD additions made by this track
 
-From the ticketing side (proposed here):
 1. **Subcategory:** `it.ticket_categories` with `parent_id` (one level), `tickets.category_id` +
    `subcategory_id`.
 2. **SLA targets:** `it.sla_policies` (priority → response / resolution hours); due dates are
    computed by trigger.
 3. **Ticket timeline:** `it.ticket_updates` (comment / internal work note / status change /
    assignment / priority change / escalation / system).
-4. **Ticket attachments:** `it.ticket_attachments` + private `it-ticket-attachments` bucket. Can be
-   folded into `it.documents` (below) once that exists, if we want one file table for the module.
+4. **Ticket attachments:** `it.ticket_attachments` + private `it-ticket-attachments` bucket.
 5. **Escalation, first response, satisfaction, reopen count, root cause** columns on `tickets`.
-6. **Extra BRD §5.3.1 fields:** requested-for, asset/system name, access required, manager approval
-   required, preferred contact method, remarks, department.
+6. **Extra BRD §5.3.1 fields:** requested-for, asset/system name, access required, manager
+   approval required, preferred contact method, remarks, department.
 7. **Statuses:** `Open → Assigned → In Progress ⇄ On Hold → Resolved → Closed`; priorities
    `Critical / High / Medium / Low`.
-
-From the procurement side (accepted in Talha's §1.3):
-- #1 `demands.vendor_id`, #2 `invoices.approved_by / approved_at / approval_comments`,
-  #3 generic `it.documents` (`entity_type`, `entity_id`, `doc_type`, `storage_path`) + private
-  `it-documents` bucket, #5 `products.asset_type_id → it.asset_types`.
+8. **Onboarding/Offboarding** (Phase 4): HOD IT sign-off record, employee confirmation, routing
+   by location (HQ vs plant-site team), checklist completion gate — none of these are in the ERD's
+   `onboarding_offboarding` / `checklist_items` and the BRD (§5.1.13, §5.2.4, §5.2.12–14) needs them.
 
 ### 1.3 Base-layer limitations this track works around
 
@@ -69,8 +65,8 @@ From the procurement side (accepted in Talha's §1.3):
   `it.person_names(ids)` and `it.list_it_staff()` (security definer, narrowly scoped).
 - `public.org_units` is admin-only → `it.list_org_units()` for the Location / Department pickers.
 - `public.audit_log` accepts inserts from admins only, so `logAuditEvent()` from a non-admin IT
-  user silently fails. Ticket history therefore lives in `it.ticket_updates`; procurement will
-  need the same per-record trail (or a senior-dev change to the audit_log insert policy, §8).
+  user silently fails. Ticket history therefore lives in `it.ticket_updates`; onboarding /
+  offboarding will keep the same kind of per-record trail (§8 #6).
 
 ---
 
@@ -82,30 +78,20 @@ From the procurement side (accepted in Talha's §1.3):
 |---|---|
 | `tickets.linked_asset_id → it.assets` | Column exists now as plain `uuid` (indexed); FK added in a later file once Talha's Phase 2 is applied |
 | `checklist_items.assignment_id → it.asset_assignments` | Onboarding/Offboarding phase starts after Talha's Phase 3 |
-| `products.asset_type_id → it.asset_types` | Talha's Phase 1 (`talha_it_0002`) applied first |
-
-**Talha's tables that reference this track's**, so we ship these early:
-
-| FK on his side | What he needs from us |
-|---|---|
-| `assets.vendor_id`, `asset_maintenance.vendor_id` | `it.vendors` |
-| `assets.receiving_id` | `it.receiving_records` |
-| `stock_movements.product_id` | `it.products` (blocks his Phase 5) |
 
 **Functions/components Talha provides, called from this track**
 
 | From Talha | Used in |
 |---|---|
-| `assignAsset()` / `returnAsset()`, `<AssetAssignForm>` / `<AssetReturnForm>` | Onboarding "Asset Allocation", offboarding "Asset Return Form" |
+| `assignAsset()` / `returnAsset()`, `<AssetAssignForm>` / `<AssetReturnForm>` | Onboarding "Asset Allocation" task, offboarding "Asset Return Form" |
 | `listOpenAssignments(personId)` | Offboarding: what the leaver still holds |
-| `registerAssetsFromReceipt(receivingId, …)` | Receiving a fixed-asset demand |
-| `recordStockMovement({ productId, siteId, type, qty, reference })` | Consumable demand exception path; receiving consumables |
+
+**What Talha reads from this track:** `it.tickets where linked_asset_id = …` for his asset
+"Linked tickets" tab (read-only).
 
 **Shared surfaces:** `/it/dashboard` is owned here (Talha supplies `<InventoryKpis>`);
 `/it/admin/roles` is built once, one section per track; `sidebar.tsx` / `route-permissions.ts` are
-edited in separate blocks; `types/database.ts` is regenerated on `IT/dev` after merges. Talha also
-reads `it.tickets where linked_asset_id = …` for his asset "Linked tickets" tab, and the
-receipt → demand trail for his "Origin" tab.
+edited in separate blocks; `types/database.ts` is regenerated on `IT/dev` after merges.
 
 **Keeping in touch:** any change to a row above is agreed with Talha first and updated in **both**
 plan files in the same PR.
@@ -114,8 +100,8 @@ plan files in the same PR.
 
 ## 3. Permissions (this track)
 
-`<module>.<resource>.<op>` style; every insert includes `label`. `module:it` and
-`it.manage_role_permissions` come from Talha's foundation.
+`<module>.<resource>.<op>` style; every insert includes `label`. `module:it` is the senior dev's
+(`develop` 0021); `it.manage_role_permissions` is in Talha's foundation.
 
 | Key | Label | Gates |
 |---|---|---|
@@ -124,15 +110,6 @@ plan files in the same PR.
 | `it.tickets.assign` | Assign & Prioritise IT Tickets | Assign any ticket, priority, escalate (IT Executive) |
 | `it.tickets.close` | Close IT Tickets | Formal closure |
 | `it.ticket_settings.update` | Ticket Settings | Categories, request types, SLA targets |
-| `it.vendors.update` | Manage Vendors | Vendor master |
-| `it.products.update` | Manage Products | Product master |
-| `it.demands.create` | Raise Demands | New demand (Site Support Team) |
-| `it.demands.read` | View All Demands | Demand queue (own demands visible without it) |
-| `it.demands.approve` | Approve Demands | Department-head decision |
-| `it.demands.update` | Process Demands | Vendor assignment, receiving, documents |
-| `it.invoices.update` | Manage Invoices | Log / verify invoices |
-| `it.invoices.approve` | Approve Invoices | Department-head invoice approval |
-| `it.payments.update` | Record Payments | Finance confirmation, payment reference |
 | `it.onboarding.create` | Raise Onboarding/Offboarding | HR raising ONB / OFB requests |
 | `it.onboarding.read` | View Onboarding/Offboarding | Checklist queue |
 | `it.onboarding.update` | Work Onboarding/Offboarding | Complete checklist items |
@@ -153,14 +130,12 @@ a scoped variant; `site_id` is stored on every row so it can be added without a 
 | SCR-02 | `/it/my-tickets`, `/it/my-tickets/[id]` | Every employee | My tickets; detail, comments, confirm resolution (rating) / reopen |
 | SCR-03 | `/it/tickets`, `/it/tickets/[id]` | IT staff | Queue with filters + SLA/escalation flags; workspace (triage, status, resolve, escalate, close, tasks, timeline) |
 | ITSM-01 | `/it/settings/tickets` | IT admin | Categories / subcategories, request types, SLA targets |
-| PRC-01 | `/it/procurement/vendors` | Procurement / IT | Vendor master |
-| PRC-02 | `/it/procurement/products` | Procurement / IT | Product master (incl. asset type link) |
-| PRC-03 | `/it/procurement/demands`, `/new` | Site Support / IT | My demands + queue; new demand (`DMD-xxxxxx`) |
-| PRC-04 | `/it/procurement/demands/[id]` | IT / procurement | Lifecycle timeline: approval → vendor → receiving → documents → invoice → payment |
-| PRC-05 | `/it/procurement/approvals` | Dept head | Demands and invoices awaiting my decision |
-| SCR-04 | `/it/onboarding`, `/new`, `/[id]` | HR / IT / HOD IT | ONB / OFB / Replacement checklists (BRD §5.1, §5.2) |
 | SCR-06 | `/it/dashboard` | IT | Ticket KPIs + `<InventoryKpis>` from Talha |
 | ITSM-02 | `/it/reports` | IT mgmt | Ticket Volume (§7.12), SLA Compliance (§7.13), CSV export |
+| SCR-04 | `/it/onboarding` | IT | ONB / OFB / Replacement checklists queue |
+| ONB-01 | `/it/onboarding/new` | HR | Raise ONB / OFB request (BRD §5.1.1, §5.2.1 fields) |
+| ONB-02 | `/it/onboarding/[id]` | IT / HOD IT | Checklist items with owner + timestamp, embedded asset forms, final review and sign-off |
+| ONB-03 | `/it/my-onboarding` | New joiner | Confirm email, access, software and asset received (BRD §5.1.13) |
 
 ---
 
@@ -169,7 +144,7 @@ a scoped variant; `site_id` is stored on every row so it can be added without a 
 Each phase is one PR from `IT/javaria` into `IT/dev`: staged migration(s), screens, Server
 Actions, and a test checklist for the tester.
 
-### Phase 1 — Ticketing core *(built, not yet applied or committed)*
+### Phase 1 — Ticketing core *(built and committed; not yet applied or browser-tested)*
 **Migration** `javaria_it_0001_tickets.sql` (depends on `talha_it_0001_foundation.sql`):
 `request_types` brought up to convention + RLS + ticket types seeded; `ticket_categories`,
 `sla_policies`, `tickets`, `ticket_updates`, `ticket_tasks`, `ticket_attachments` + bucket;
@@ -183,56 +158,35 @@ route-permission entries; `next.config.ts` `serverActions.bodySizeLimit` (attach
 assign, prioritise, escalate and close; a team member can work and resolve only tickets assigned
 to them; a plain employee can't read anyone else's ticket or any internal note (proxy and RLS).
 
-### Phase 2 — Procurement masters *(early, unblocks Talha)*
-**Migration** `javaria_it_0002_procurement_masters.sql`: `it.vendors`, `it.products` (+
-`asset_type_id`), RLS, `it.vendors.update` / `it.products.update`.
-**Screens**: PRC-01, PRC-02.
+### Phase 2 — Ticket settings
+**Screens**: ITSM-01. **Done when**: IT admin can maintain categories and request types, and
+change SLA hours so new tickets pick them up.
 
-### Phase 3 — Ticket settings
-**Screens**: ITSM-01. **Done when**: IT admin can change SLA hours and new tickets pick them up.
-
-### Phase 4 — Demands and approvals
-**Migration** `javaria_it_0003_demands.sql`: `demands` (+ `vendor_id`), `demand_approvals`
-(Approved / Rejected / Partially Approved with approved quantity). Status flow `Open → Categorized
-→ Pending Approval → Approved | Rejected | Partial → Assigned to Vendor → …`. Consumable demands
-take the exception path straight to Talha's `recordStockMovement()`.
-**Screens**: PRC-03, PRC-04 (approval and vendor steps), PRC-05.
-**Open dependency**: who is "the Department Head" for a demand (§8).
-
-### Phase 5 — Receiving and documents
-**Migration** `javaria_it_0004_receiving_documents.sql`: `receiving_records` (Full / Partial / Not
-Received vs ordered quantity; DC optional, gate pass), `it.documents` + `it-documents` bucket.
-On receiving: fixed-asset products → Talha's `registerAssetsFromReceipt()`; consumables →
-`recordStockMovement()`. **Then tell Talha so he can run his linking migration.**
-**Screens**: receiving and documents steps of PRC-04.
-
-### Phase 6 — Invoices and payments
-**Migration** `javaria_it_0005_invoices_payments.sql`: `invoices` (+ approval columns),
-`payments` (more than one per invoice). Automatic quantity / amount check of invoice vs receiving,
-flagged on mismatch; package compiled for Finance; payment reference recorded.
-**Screens**: invoice and payment steps of PRC-04, invoice items in PRC-05.
-
-### Phase 7 — Dashboard and reports
+### Phase 3 — Dashboard and reports
 **Screens**: SCR-06 (open tickets, avg resolution time, SLA compliance, pending ONB/OFB tasks,
 tickets by category, 90-day trend, `<InventoryKpis>`), ITSM-02 (volume and SLA reports, KPIs from
-BRD §5.3.18).
+BRD §5.3.18: first response time, resolution time, SLA compliance, closure rate, ageing,
+escalation rate, technician productivity).
 
-### Phase 8 — Onboarding / Offboarding *(after Talha's Phase 3)*
-**Migration** `javaria_it_0006_onboarding_offboarding.sql`: `onboarding_offboarding` (ONB- / OFB-
-numbers, Permanent / Contractual, location, due date, status), `checklist_items` (owner, status,
-due, completed_at, `assignment_id → asset_assignments`), routing by location (HQ vs plant-site
-team, BRD §5.2.4), checklist completion gate before final review (§5.2.12), HOD IT sign-off
-(§5.2.14), employee confirmation (§5.1.13); request types seeded (Onboarding / Offboarding /
-Replacement). Emits `it.employee_offboarded` (direct call to Talha's `listOpenAssignments()` until
+### Phase 4 — Onboarding / Offboarding *(asset steps need Talha's Phase 3)*
+**Migration** `javaria_it_0002_onboarding_offboarding.sql`: `onboarding_offboarding` (ONB- / OFB-
+numbers via `it.next_number()`, request type, employee, Permanent / Contractual, location, due
+date, status), `checklist_items` (owner, status, due, completed_at, `assignment_id →
+asset_assignments`), routing by location (HQ vs plant-site team, BRD §5.2.4), checklist
+completion gate before final review (§5.2.12), HOD IT sign-off (§5.2.14), employee confirmation
+(§5.1.13); request types seeded (Onboarding / Offboarding / Replacement); `it.onboarding.*`
+permissions. Emits `it.employee_offboarded` (direct call to Talha's `listOpenAssignments()` until
 `core.integration_events` exists).
-**Screens**: SCR-04.
+**Screens**: SCR-04, ONB-01, ONB-02, ONB-03.
+**Can start before Talha's Phase 3** with the non-asset checklist items (email, access, software,
+portal account); the asset allocation / return items plug in once his forms exist.
 **Open dependency**: who writes employment status on offboarding, HR or IT (`context.md` §6).
 
-### Phase 9 — Notifications and hardening
+### Phase 5 — Notifications and hardening
 Portal + email via `lib/email/graph-client.ts` (no-ops until `MS_GRAPH_*` is set): ticket
-created / assigned / resolved / SLA breach; demand awaiting approval, rejected / partial; invoice
-awaiting approval; ONB / OFB assigned and completed. RLS review pass with the tester, then `tsc` /
-`eslint` / `npm run build` before the `IT/dev` → `develop` PR.
+created / assigned / resolved / SLA breach; ONB / OFB assigned, completed, credentials ready
+(BRD §5.1.12). RLS review pass with the tester, then `tsc` / `eslint` / `npm run build` before the
+`IT/dev` → `develop` PR.
 
 ---
 
@@ -256,12 +210,11 @@ names `javaria_it_<NNNN>_<description>.sql`.
 
 | # | Question | Status |
 |---|---|---|
-| 1 | IT staff access: `it.staff_roles` or `it.*` permissions? | **Permissions** (both plans). Drop of `staff_roles` still open, Talha §8 #4a, senior dev |
-| 2 | Who writes the shared foundation migration? | **Decided 2026-10-12: Talha** (`talha_it_0001_foundation.sql`) |
-| 3 | Procurement and on/offboarding ownership | **Decided 2026-10-12: this track** |
+| 1 | Who owns Procurement (ERD section D: vendors, products, demands, receiving, invoices, payments)? | **Open — conflict.** Javaria: not this track. Talha's `07` §2 / §8 #1 says Javaria. Talha + senior dev to settle and update `07`; his Phases 4–5 depend on `it.vendors` / `it.products` existing |
+| 2 | IT staff access: `it.staff_roles` or `it.*` permissions? | **Permissions** (both plans). Drop of `staff_roles` still open, Talha §8 #4a, senior dev |
+| 3 | `module:it` grants | **Decided by senior dev** (`develop` 0021): registered, granted to no role. Talha's foundation also inserts `module:it` and grants it to Employee/Admin, which contradicts that; Talha to drop that part |
 | 4 | SLA targets per priority (response / resolution hours) | Open: placeholders Critical 1/4, High 2/8, Medium 4/24, Low 8/72 (wall-clock); IT BA |
 | 5 | Business-hours SLAs instead of 24/7? | Open: 24/7 for Phase 1; IT BA |
-| 6 | "Requested For" on tickets (raise on someone's behalf)? | Open: column exists, picker deferred until a person directory exists; IT BA |
-| 7 | Who is the "Department Head" approver for demands / invoices? | Open: global `it.demands.approve` until scoped permissions exist; senior dev, IT BA |
-| 8 | Let non-admin modules write `public.audit_log`? | Open: senior dev. Until then each IT record keeps its own trail |
-| 9 | Who owns offboarding as system of record (HR or IT)? | Open: `context.md` §6; BAs, senior dev |
+| 6 | Let non-admin modules write `public.audit_log`? | Open: senior dev. Until then each IT record keeps its own trail |
+| 7 | "Requested For" on tickets (raise on someone's behalf)? | Open: column exists, picker deferred until a person directory exists; IT BA |
+| 8 | Who owns offboarding as system of record (HR or IT)? | Open: `context.md` §6; BAs, senior dev |

@@ -7,7 +7,7 @@ nothing in this folder gets picked up by `supabase db push` by accident.
 ```
 supabase/it-migrations/
   talha/     ← Inventory, Assets, Procurement (it/talha)
-  javaria/   ← Service Management, Tickets, Procurement, Onboarding/Offboarding (IT/javaria)
+  javaria/   ← IT Service Management (tickets), Onboarding/Offboarding (IT/javaria)
 ```
 
 ## File naming
