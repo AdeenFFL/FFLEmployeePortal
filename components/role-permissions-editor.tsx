@@ -2,29 +2,29 @@
 
 import { useState, useTransition } from "react";
 import { ToggleSwitch } from "@/components/toggle-switch";
-import type { PermissionGroup } from "@/types/database";
+import type { Permission } from "@/types/database";
 
 type GrantMeta = { grantedByName: string | null; grantedAt: string | null };
 
 export function RolePermissionsEditor({
   roleId,
-  moduleAccessGroups,
-  groupsByModule,
+  moduleAccessPermissions,
+  permissionsBySection,
   initialGrantedIds,
-  grantMetaByModule,
+  grantMetaBySection,
   saveAction,
 }: {
   roleId: string;
-  moduleAccessGroups: PermissionGroup[];
-  groupsByModule: [string, PermissionGroup[]][];
+  moduleAccessPermissions: Permission[];
+  permissionsBySection: [string, Permission[]][];
   initialGrantedIds: string[];
-  grantMetaByModule: Record<string, GrantMeta | null>;
-  // The actual persistence call — admin/roles/page.tsx passes the global
-  // saveRolePermissionGroups (any module), a module's own screen (e.g. hr/admin/roles/page.tsx)
-  // passes its own scoped action restricted to that module's groups only.
+  grantMetaBySection: Record<string, GrantMeta | null>;
+  // The actual persistence call — admin/roles/page.tsx passes the global saveRolePermissions
+  // (any module), a module's own screen (e.g. hr/admin/roles/page.tsx) passes its own scoped
+  // action restricted to that module's permissions only.
   saveAction: (
     roleId: string,
-    changes: { permissionGroupId: string; granted: boolean }[],
+    changes: { permissionId: string; granted: boolean }[],
   ) => Promise<void>;
 }) {
   const [granted, setGranted] = useState(new Set(initialGrantedIds));
@@ -51,10 +51,13 @@ export function RolePermissionsEditor({
 
   function handleSave() {
     setError(null);
-    const allGroups = [...moduleAccessGroups, ...groupsByModule.flatMap(([, groups]) => groups)];
-    const changes = allGroups
-      .filter((g) => granted.has(g.id) !== committed.has(g.id))
-      .map((g) => ({ permissionGroupId: g.id, granted: granted.has(g.id) }));
+    const allPermissions = [
+      ...moduleAccessPermissions,
+      ...permissionsBySection.flatMap(([, permissions]) => permissions),
+    ];
+    const changes = allPermissions
+      .filter((p) => granted.has(p.id) !== committed.has(p.id))
+      .map((p) => ({ permissionId: p.id, granted: granted.has(p.id) }));
     if (changes.length === 0) return;
 
     startTransition(async () => {
@@ -69,7 +72,7 @@ export function RolePermissionsEditor({
 
   return (
     <div className="space-y-6">
-      {moduleAccessGroups.length > 0 && (
+      {moduleAccessPermissions.length > 0 && (
         <div className="rounded-xl border border-blue-200 bg-blue-50/40 p-4 shadow-sm">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-blue-700">
             Module Access
@@ -80,16 +83,18 @@ export function RolePermissionsEditor({
             module's own settings screen, not here.
           </p>
           <div className="divide-y divide-blue-100">
-            {moduleAccessGroups.map((group) => (
-              <div key={group.id} className="flex items-center justify-between gap-4 py-3">
+            {moduleAccessPermissions.map((permission) => (
+              <div key={permission.id} className="flex items-center justify-between gap-4 py-3">
                 <div>
-                  <p className="text-sm font-medium text-slate-800">{group.description ?? group.name}</p>
+                  <p className="text-sm font-medium text-slate-800">
+                    {permission.description ?? permission.key}
+                  </p>
                 </div>
                 <ToggleSwitch
                   type="button"
-                  pressed={granted.has(group.id)}
-                  label={group.name}
-                  onClick={() => toggle(group.id)}
+                  pressed={granted.has(permission.id)}
+                  label={permission.key}
+                  onClick={() => toggle(permission.id)}
                 />
               </div>
             ))}
@@ -97,7 +102,7 @@ export function RolePermissionsEditor({
         </div>
       )}
 
-      {groupsByModule.length === 0 && (
+      {permissionsBySection.length === 0 && (
         <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-400">
           Nothing to configure here yet — each module seeds its own permissions via its
           migration (see 01-platform-design-and-sop.md §11), there's no screen to create one by
@@ -105,16 +110,16 @@ export function RolePermissionsEditor({
         </p>
       )}
 
-      {groupsByModule.map(([moduleName, groups]) => {
-        const meta = grantMetaByModule[moduleName];
+      {permissionsBySection.map(([sectionLabel, permissions]) => {
+        const meta = grantMetaBySection[sectionLabel];
         return (
           <div
-            key={moduleName}
+            key={sectionLabel}
             className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
           >
             <div className="mb-3 flex items-center justify-between gap-4">
               <h2 className="text-sm font-semibold uppercase tracking-wide text-slate-500">
-                {moduleName}
+                {sectionLabel}
               </h2>
               {meta && (
                 <p className="whitespace-nowrap text-xs text-slate-400">
@@ -124,19 +129,19 @@ export function RolePermissionsEditor({
               )}
             </div>
             <div className="divide-y divide-slate-100">
-              {groups.map((group) => (
-                <div key={group.id} className="flex items-center justify-between gap-4 py-3">
+              {permissions.map((permission) => (
+                <div key={permission.id} className="flex items-center justify-between gap-4 py-3">
                   <div>
-                    <p className="text-sm font-medium text-slate-800">{group.name}</p>
-                    {group.description && (
-                      <p className="text-xs text-slate-400">{group.description}</p>
+                    <p className="text-sm font-medium text-slate-800">{permission.key}</p>
+                    {permission.description && (
+                      <p className="text-xs text-slate-400">{permission.description}</p>
                     )}
                   </div>
                   <ToggleSwitch
                     type="button"
-                    pressed={granted.has(group.id)}
-                    label={group.name}
-                    onClick={() => toggle(group.id)}
+                    pressed={granted.has(permission.id)}
+                    label={permission.key}
+                    onClick={() => toggle(permission.id)}
                   />
                 </div>
               ))}

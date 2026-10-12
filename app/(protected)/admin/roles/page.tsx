@@ -5,8 +5,8 @@ import { RolePermissionsEditor } from "@/components/role-permissions-editor";
 import { RoleFormPanel } from "@/components/role-form";
 import { IconLink, IconButton } from "@/components/icon-button";
 import { CopyIcon, PencilIcon, TrashIcon } from "@/components/icons";
-import { duplicateRole, deleteRole, saveRolePermissionGroups } from "./actions";
-import type { PermissionGroup } from "@/types/database";
+import { duplicateRole, deleteRole, saveRolePermissions } from "./actions";
+import type { Permission } from "@/types/database";
 
 export default async function AdminRolesPage({
   searchParams,
@@ -21,54 +21,35 @@ export default async function AdminRolesPage({
   const selectedRole = (roles ?? []).find((r) => r.id === selectedRoleId);
   const roleBeingEdited = editRole ? (roles ?? []).find((r) => r.id === editRole) : undefined;
 
-  const { data: permissionGroups } = await supabase
-    .from("permission_groups")
+  const { data: permissions } = await supabase
+    .from("permissions")
     .select("*")
     .order("module")
-    .order("name");
+    .order("key");
 
-  // Every permission_group here still only ever wraps one permission in practice (true
-  // many-permission bundles exist in the schema but nothing uses them yet) — this map lets the
-  // page tell "module:x" coarse-access groups apart from everything else without a second admin
-  // concept. See 01-platform-design-and-sop.md §11's module-onboarding convention: a module's
-  // own `module:<x>` permission always gets exactly one group, named after the key, and that's
-  // what surfaces here as "Module Access"; its `<module>.manage_*` fine-grained permissions get
-  // groups too (same convention) but are hidden from this screen — each module's own admin area
-  // is where those get configured per role instead (e.g. /hr/admin/roles).
-  const { data: groupPermissionRows } = await supabase
-    .from("permission_group_permissions")
-    .select("permission_group_id, permissions(key)");
-  const permissionKeysByGroupId = new Map<string, string[]>();
-  for (const row of groupPermissionRows ?? []) {
-    const key = row.permissions?.key;
-    if (!key) continue;
-    const list = permissionKeysByGroupId.get(row.permission_group_id) ?? [];
-    list.push(key);
-    permissionKeysByGroupId.set(row.permission_group_id, list);
-  }
-
-  // Fine-grained permissions that have their own module admin screen — hidden from this
-  // cross-module view entirely so there's exactly one place to configure each. Add a module's
-  // key prefix here once it ships its own "<module>.manage_*" config screen.
+  // A module's own `module:<x>` permission always surfaces here as "Module Access"; its
+  // `<module>.*` fine-grained permissions are hidden from this screen entirely once that module
+  // ships its own config screen — see 01-platform-design-and-sop.md §11's module-onboarding
+  // convention. Add a module's key prefix here once it ships its own "<module>.*" config screen
+  // (e.g. /hr/admin/roles).
   const MODULE_OWNED_PREFIXES = ["hr."];
 
-  const moduleAccessGroups: PermissionGroup[] = [];
-  const visibleGroups: PermissionGroup[] = [];
-  for (const group of permissionGroups ?? []) {
-    const keys = permissionKeysByGroupId.get(group.id) ?? [];
-    if (keys.length === 1 && keys[0].startsWith("module:")) {
-      moduleAccessGroups.push(group);
-    } else if (keys.length === 1 && MODULE_OWNED_PREFIXES.some((p) => keys[0].startsWith(p))) {
+  const moduleAccessPermissions: Permission[] = [];
+  const visiblePermissions: Permission[] = [];
+  for (const permission of permissions ?? []) {
+    if (permission.key.startsWith("module:")) {
+      moduleAccessPermissions.push(permission);
+    } else if (MODULE_OWNED_PREFIXES.some((p) => permission.key.startsWith(p))) {
       // skip — configured from within the owning module instead
     } else {
-      visibleGroups.push(group);
+      visiblePermissions.push(permission);
     }
   }
 
   const { data: grants } = selectedRoleId
     ? await supabase
-        .from("role_permission_groups")
-        .select("permission_group_id, granted_by, granted_at")
+        .from("role_permissions")
+        .select("permission_id, granted_by, granted_at")
         .eq("role_id", selectedRoleId)
     : { data: [] };
 
@@ -89,25 +70,26 @@ export default async function AdminRolesPage({
     );
   }
 
-  const grantByGroupId = new Map((grants ?? []).map((g) => [g.permission_group_id, g]));
+  const grantByPermissionId = new Map((grants ?? []).map((g) => [g.permission_id, g]));
 
-  const groupsByModule = new Map<string, PermissionGroup[]>();
-  for (const group of visibleGroups) {
-    if (!groupsByModule.has(group.module)) groupsByModule.set(group.module, []);
-    groupsByModule.get(group.module)!.push(group);
+  const permissionsByModule = new Map<string, Permission[]>();
+  for (const permission of visiblePermissions) {
+    const module = permission.module ?? "core";
+    if (!permissionsByModule.has(module)) permissionsByModule.set(module, []);
+    permissionsByModule.get(module)!.push(permission);
   }
-  const groupsByModuleEntries = [...groupsByModule.entries()];
+  const permissionsByModuleEntries = [...permissionsByModule.entries()];
 
   // "Last updated by X on Y" — once per module card, the most recent grant among that module's
-  // currently-granted groups (not shown per-row anymore).
+  // currently-granted permissions (not shown per-row anymore).
   const grantMetaByModule: Record<
     string,
     { grantedByName: string | null; grantedAt: string | null } | null
   > = {};
-  for (const [moduleName, groups] of groupsByModuleEntries) {
+  for (const [moduleName, modulePermissions] of permissionsByModuleEntries) {
     let latest: { granted_by: string | null; granted_at: string | null } | null = null;
-    for (const group of groups) {
-      const grant = grantByGroupId.get(group.id);
+    for (const permission of modulePermissions) {
+      const grant = grantByPermissionId.get(permission.id);
       if (!grant) continue;
       if (!latest || (grant.granted_at ?? "") > (latest.granted_at ?? "")) {
         latest = grant;
@@ -191,9 +173,7 @@ export default async function AdminRolesPage({
               <h2 className="text-base font-semibold text-slate-900">
                 {selectedRole.name} Permissions
               </h2>
-              <p className="text-sm text-slate-500">
-                Toggle which permission groups this role includes.
-              </p>
+              <p className="text-sm text-slate-500">Toggle which permissions this role has.</p>
             </div>
           )}
 
@@ -201,11 +181,11 @@ export default async function AdminRolesPage({
             <RolePermissionsEditor
               key={selectedRoleId}
               roleId={selectedRoleId}
-              moduleAccessGroups={moduleAccessGroups}
-              groupsByModule={groupsByModuleEntries}
-              initialGrantedIds={[...grantByGroupId.keys()]}
-              grantMetaByModule={grantMetaByModule}
-              saveAction={saveRolePermissionGroups}
+              moduleAccessPermissions={moduleAccessPermissions}
+              permissionsBySection={permissionsByModuleEntries}
+              initialGrantedIds={[...grantByPermissionId.keys()]}
+              grantMetaBySection={grantMetaByModule}
+              saveAction={saveRolePermissions}
             />
           )}
         </div>

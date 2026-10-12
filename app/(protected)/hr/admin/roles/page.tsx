@@ -2,8 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { RolePermissionsEditor } from "@/components/role-permissions-editor";
-import { saveHrRolePermissionGroups } from "./actions";
-import type { PermissionGroup } from "@/types/database";
+import { saveHrRolePermissions } from "./actions";
+import type { Permission } from "@/types/database";
 
 // HR's own fine-grained access config, kept out of the cross-module /admin/roles screen on
 // purpose — see that page's MODULE_OWNED_PREFIXES note. module:hr itself (whether a role can
@@ -36,40 +36,36 @@ export default async function HrRolesAdminPage({
   const selectedRoleId = roleParam ?? roles?.[0]?.id;
   const selectedRole = (roles ?? []).find((r) => r.id === selectedRoleId);
 
-  const { data: groups } = await supabase
-    .from("permission_groups")
-    .select("*, permission_group_permissions(permissions(key))")
-    .eq("module", "hr");
-
-  const groupByKey = new Map<string, PermissionGroup>();
-  for (const g of groups ?? []) {
-    const key = g.permission_group_permissions[0]?.permissions?.key;
-    if (key) groupByKey.set(key, g);
-  }
+  const { data: permissions } = await supabase
+    .from("permissions")
+    .select("*")
+    .eq("module", "hr")
+    .in("key", ALL_HR_PERMISSION_KEYS);
+  const permissionByKey = new Map((permissions ?? []).map((p) => [p.key, p]));
 
   const { data: grants } = selectedRoleId
     ? await supabase
-        .from("role_permission_groups")
-        .select("permission_group_id")
+        .from("role_permissions")
+        .select("permission_id")
         .eq("role_id", selectedRoleId)
     : { data: [] };
-  const grantedIds = (grants ?? []).map((g) => g.permission_group_id);
+  const grantedIds = (grants ?? []).map((g) => g.permission_id);
 
-  if (groupByKey.size < ALL_HR_PERMISSION_KEYS.length) {
+  if (permissionByKey.size < ALL_HR_PERMISSION_KEYS.length) {
     return (
       <div className="py-6">
         <PageHeader title="HR Role Permissions" />
         <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-400">
-          HR's permission groups haven't been fully seeded yet
+          HR's permissions haven't been fully seeded yet
           (supabase/migrations/0017_hr_crud_permissions.sql). Run that migration first.
         </p>
       </div>
     );
   }
 
-  const groupsByModule: [string, PermissionGroup[]][] = HR_PERMISSION_SECTIONS.map((section) => [
+  const permissionsBySection: [string, Permission[]][] = HR_PERMISSION_SECTIONS.map((section) => [
     section.label,
-    section.keys.map((key) => groupByKey.get(key)!),
+    section.keys.map((key) => permissionByKey.get(key)!),
   ]);
 
   return (
@@ -109,11 +105,11 @@ export default async function HrRolesAdminPage({
             <RolePermissionsEditor
               key={selectedRoleId}
               roleId={selectedRoleId}
-              moduleAccessGroups={[]}
-              groupsByModule={groupsByModule}
+              moduleAccessPermissions={[]}
+              permissionsBySection={permissionsBySection}
               initialGrantedIds={grantedIds}
-              grantMetaByModule={{}}
-              saveAction={saveHrRolePermissionGroups}
+              grantMetaBySection={{}}
+              saveAction={saveHrRolePermissions}
             />
           )}
         </div>

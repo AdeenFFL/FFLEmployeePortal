@@ -4,20 +4,20 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { logAuditEvent } from "@/lib/audit/log";
-import { applyRolePermissionGroupChanges } from "@/lib/admin/role-permission-groups";
+import { applyRolePermissionChanges } from "@/lib/admin/role-permissions";
 
 // Batched: the Roles & Permissions screen stages toggles locally (RolePermissionsEditor) and
 // commits them all at once via "Save Changes", rather than submitting per-toggle. This is the
-// GLOBAL entrypoint (any permission_group_id, any module) — gated by route:/admin/roles. A
-// module's own scoped screen (e.g. hr/admin/roles/actions.ts) calls the same shared
-// applyRolePermissionGroupChanges() but behind its own permission and restricted to its own
-// module's groups only.
-export async function saveRolePermissionGroups(
+// GLOBAL entrypoint (any permission, any module) — gated by route:/admin/roles. A module's own
+// scoped screen (e.g. hr/admin/roles/actions.ts) calls the same shared
+// applyRolePermissionChanges() but behind its own permission and restricted to its own module's
+// permissions only.
+export async function saveRolePermissions(
   roleId: string,
-  changes: { permissionGroupId: string; granted: boolean }[],
+  changes: { permissionId: string; granted: boolean }[],
 ) {
   const { supabase, personId, actorLabel } = await requirePermission("route:/admin/roles");
-  await applyRolePermissionGroupChanges({
+  await applyRolePermissionChanges({
     supabase,
     personId,
     actorLabel,
@@ -27,7 +27,7 @@ export async function saveRolePermissionGroups(
   });
 }
 
-// A genuinely blank-slate role — no permission groups granted at all, by design. The admin picks
+// A genuinely blank-slate role — no permissions granted at all, by design. The admin picks
 // Module Access and (inside each module) its fine-grained permissions afterward, same as this
 // role was built from scratch rather than copied from one of the 4 seed roles — there is nothing
 // in this codebase that assumes a role is, or descends from, "Admin"/"HR"/"IT"/"Employee".
@@ -90,15 +90,15 @@ export async function duplicateRole(roleId: string) {
   if (insertError) throw new Error(insertError.message);
 
   const { data: grants } = await supabase
-    .from("role_permission_groups")
-    .select("permission_group_id")
+    .from("role_permissions")
+    .select("permission_id")
     .eq("role_id", roleId);
 
   if (grants && grants.length > 0) {
-    const { error: grantsError } = await supabase.from("role_permission_groups").insert(
+    const { error: grantsError } = await supabase.from("role_permissions").insert(
       grants.map((g) => ({
         role_id: newRole.id,
-        permission_group_id: g.permission_group_id,
+        permission_id: g.permission_id,
         granted_by: personId,
       })),
     );
@@ -111,7 +111,7 @@ export async function duplicateRole(roleId: string) {
     actorLabel,
     module: "admin",
     action: "CREATED",
-    details: `Duplicated role '${source.name}' as '${newName}' (${grants?.length ?? 0} permission groups copied)`,
+    details: `Duplicated role '${source.name}' as '${newName}' (${grants?.length ?? 0} permissions copied)`,
   });
 
   revalidatePath("/admin/roles");

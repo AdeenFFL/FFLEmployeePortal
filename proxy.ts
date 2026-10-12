@@ -75,7 +75,7 @@ export async function proxy(request: NextRequest) {
 
   const permissionKey = permissionKeyForPath(pathname);
   if (permissionKey) {
-    // Delegates to the has_permission() SQL function (0010_permission_groups.sql) — it already
+    // Delegates to the has_permission() SQL function (0019_direct_role_permissions.sql) — it already
     // aggregates across every role the person holds and every permission group each role
     // includes, so there's nothing left to join here. Missing key or genuinely ungranted both
     // resolve to `false`, which is the whole point of NULL-safe boolean SQL, but they mean

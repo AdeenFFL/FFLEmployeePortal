@@ -20,7 +20,7 @@ type IconComponent = (props: { className?: string }) => React.ReactElement;
 // `permission` is a key from the `permissions` table (lib/auth/route-permissions.ts is the
 // canonical map of route -> required key). Omit it for something every signed-in person should
 // see regardless of role — everything else is shown only if the viewer's resolved permission set
-// (computed in app/(protected)/current-user.ts, keyed off role_permission_groups, never a role
+// (computed in app/(protected)/current-user.ts, keyed off role_permissions, never a role
 // *name*) actually contains it, so a brand-new custom role sees exactly what it was granted.
 type NavChild = { href: string; label: string; permission?: string };
 type NavLeaf = { type: "link"; href: string; label: string; icon: IconComponent; permission?: string };

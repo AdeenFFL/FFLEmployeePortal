@@ -1,7 +1,8 @@
-// Hand-written types mirroring supabase/migrations/0001-0010: the persons/user_accounts/
-// user_roles identity split, the base-skeleton strip (0009), then the permission-groups layer
-// (0010_permission_groups.sql — roles are now composed of permission groups, not raw
-// permissions). Shaped to match what `supabase gen types typescript` would produce
+// Hand-written types mirroring supabase/migrations/0001-0019: the persons/user_accounts/
+// user_roles identity split, the base-skeleton strip (0009), then roles -> permissions directly
+// via role_permissions (0019_direct_role_permissions.sql — replaced an earlier permission_groups
+// indirection layer that turned out to never actually group anything). Shaped to match what
+// `supabase gen types typescript` would produce
 // (Row/Insert/Update/Relationships per table). No live-generated types exist yet. Once
 // convenient, replace this file with the output of:
 //   npx supabase gen types typescript --project-id <ref> > types/database.ts
@@ -39,27 +40,13 @@ export type Permission = {
   created_at: string;
 };
 
-// Module-scoped bundle of permissions — the layer between raw `permissions` and `roles`. A
-// role is composed only of permission groups, never raw permissions directly (see
-// 0010_permission_groups.sql).
-export type PermissionGroup = {
-  id: string;
-  module: string;
-  name: string;
-  description: string | null;
-  created_by: string | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type PermissionGroupPermission = {
-  permission_group_id: string;
-  permission_id: string;
-};
-
-export type RolePermissionGroup = {
+// Direct role -> permission grant (0019_direct_role_permissions.sql). Replaced the old
+// permission_groups/permission_group_permissions/role_permission_groups chain — confirmed no
+// group there ever actually bundled more than one permission, so the indirection was pure
+// naming confusion with no real grouping behind it.
+export type RolePermission = {
   role_id: string;
-  permission_group_id: string;
+  permission_id: string;
   granted_by: string | null;
   granted_at: string;
 };
@@ -256,63 +243,28 @@ export type Database = {
         Update: Partial<Permission>;
         Relationships: [];
       };
-      permission_groups: {
-        Row: PermissionGroup;
-        Insert: Partial<PermissionGroup> & Pick<PermissionGroup, "module" | "name">;
-        Update: Partial<PermissionGroup>;
+      role_permissions: {
+        Row: RolePermission;
+        Insert: Pick<RolePermission, "role_id" | "permission_id"> &
+          Partial<Pick<RolePermission, "granted_by" | "granted_at">>;
+        Update: Partial<RolePermission>;
         Relationships: [
           {
-            foreignKeyName: "permission_groups_created_by_fkey";
-            columns: ["created_by"];
-            isOneToOne: false;
-            referencedRelation: "persons";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      permission_group_permissions: {
-        Row: PermissionGroupPermission;
-        Insert: PermissionGroupPermission;
-        Update: Partial<PermissionGroupPermission>;
-        Relationships: [
-          {
-            foreignKeyName: "permission_group_permissions_permission_group_id_fkey";
-            columns: ["permission_group_id"];
-            isOneToOne: false;
-            referencedRelation: "permission_groups";
-            referencedColumns: ["id"];
-          },
-          {
-            foreignKeyName: "permission_group_permissions_permission_id_fkey";
-            columns: ["permission_id"];
-            isOneToOne: false;
-            referencedRelation: "permissions";
-            referencedColumns: ["id"];
-          },
-        ];
-      };
-      role_permission_groups: {
-        Row: RolePermissionGroup;
-        Insert: Pick<RolePermissionGroup, "role_id" | "permission_group_id"> &
-          Partial<Pick<RolePermissionGroup, "granted_by" | "granted_at">>;
-        Update: Partial<RolePermissionGroup>;
-        Relationships: [
-          {
-            foreignKeyName: "role_permission_groups_role_id_fkey";
+            foreignKeyName: "role_permissions_role_id_fkey";
             columns: ["role_id"];
             isOneToOne: false;
             referencedRelation: "roles";
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "role_permission_groups_permission_group_id_fkey";
-            columns: ["permission_group_id"];
+            foreignKeyName: "role_permissions_permission_id_fkey";
+            columns: ["permission_id"];
             isOneToOne: false;
-            referencedRelation: "permission_groups";
+            referencedRelation: "permissions";
             referencedColumns: ["id"];
           },
           {
-            foreignKeyName: "role_permission_groups_granted_by_fkey";
+            foreignKeyName: "role_permissions_granted_by_fkey";
             columns: ["granted_by"];
             isOneToOne: false;
             referencedRelation: "persons";
