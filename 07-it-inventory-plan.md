@@ -305,7 +305,8 @@ function call between the two IT tracks (same module, same schema), not an event
 | 1 | Does procurement (ERD section D) belong to the inventory track? | **Decided 2026-10-12: Javeria** |
 | 2 | Who owns onboarding/offboarding (section E)? | **Decided 2026-10-12: Javeria** (Talha supplies the assign/return forms it embeds) |
 | 3 | Accept the ERD additions in §1.3? | **Decided 2026-10-12: accepted, including the status vocabulary (#6)** |
-| 4 | What is the live `it` schema's actual content? | Open: dump it first (Phase 0) |
+| 4 | What is the live `it` schema's actual content? | **Captured 2026-10-12** in `talha_it_0000`: `staff_roles`, `request_types`, `asset_types`, `asset_value_types` |
+| 4a | Drop `it.staff_roles`? It's a module-local role table with hardcoded role names (Admin / IT Staff / Approver / Finance), the pattern `0019` removed portal-wide; IT access should be `it.*` permissions on portal roles instead | Open: proposed drop once confirmed empty; senior dev + Javeria |
 | 5 | Asset tag format (`FFL-LAP-000123`)? | Open: IT BA |
 | 6 | Who writes the shared foundation migration? | Open: whoever starts Phase 1 first, agree with Javeria |
 | 7 | Can Javeria ship vendors + products early, so Phases 4–5 aren't blocked? | Open: Javeria |
