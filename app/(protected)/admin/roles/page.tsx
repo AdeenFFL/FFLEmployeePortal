@@ -191,8 +191,11 @@ export default async function AdminRolesPage({
         </div>
       </div>
 
+      {/* key forces a fresh mount on every real navigation that shows one of these panels —
+          see components/use-dismissable.ts's header comment for why this is required. */}
       {roleBeingEdited && (
         <RoleFormPanel
+          key={Date.now()}
           closeHref={`/admin/roles?role=${selectedRoleId}`}
           mode="edit"
           role={roleBeingEdited}
@@ -200,6 +203,7 @@ export default async function AdminRolesPage({
       )}
       {compose === "new" && (
         <RoleFormPanel
+          key={Date.now()}
           closeHref={`/admin/roles?role=${selectedRoleId}`}
           mode="new"
           role={null}

@@ -1,6 +1,8 @@
 "use client";
 
+import { useState, useTransition } from "react";
 import { useDismissable } from "@/components/use-dismissable";
+import { XIcon } from "@/components/icons";
 import type { Role, UserStatus, AuthMethod, EmploymentType } from "@/types/database";
 import { inviteOrUpdateUser, setUserPassword } from "./actions";
 
@@ -38,7 +40,28 @@ export function UserFormPanel({
   initialValues: UserFormValues;
 }) {
   const { visible, close } = useDismissable("/admin/users");
+  const [error, setError] = useState<string | null>(null);
+  const [isPending, startTransition] = useTransition();
+
   if (!visible) return null;
+
+  // Thrown errors from a Server Action bound directly to a <form action> bubble up to Next's
+  // nearest error boundary — in dev that's the full-page red "Runtime Error" overlay, for what
+  // should be an inline "you missed a field" message. Submitting through onSubmit + a transition
+  // instead lets the error be caught here and shown the same way every other form in this app
+  // already does it (see login/page.tsx, role-permissions-editor.tsx).
+  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+    const formData = new FormData(e.currentTarget);
+    startTransition(async () => {
+      try {
+        await inviteOrUpdateUser(formData);
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Something went wrong.");
+      }
+    });
+  }
 
   return (
     <div className="fixed inset-0 z-20">
@@ -51,13 +74,18 @@ export function UserFormPanel({
           <button
             type="button"
             onClick={close}
-            className="text-sm text-slate-500 hover:text-slate-700"
+            aria-label="Close"
+            className="text-slate-400 hover:text-slate-600"
           >
-            Close
+            <XIcon className="h-5 w-5" />
           </button>
         </div>
 
-        <form action={inviteOrUpdateUser} className="flex flex-col gap-4">
+        <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {error && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
+          )}
+
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-slate-700">Display Name</span>
             <input
@@ -74,9 +102,12 @@ export function UserFormPanel({
               type="email"
               required
               defaultValue={initialValues.email}
+              // readOnly, NOT disabled: a disabled field is excluded from FormData entirely on
+              // submit, which was silently dropping the email and tripping the server's "Email
+              // and Role are required" check even with a role selected. readOnly still blocks
+              // editing but keeps the value in the submission.
               readOnly={mode === "edit"}
-              disabled={mode === "edit"}
-              className={`${inputClass} disabled:bg-slate-100 disabled:text-slate-500`}
+              className={`${inputClass} ${mode === "edit" ? "bg-slate-100 text-slate-500" : ""}`}
             />
             {mode === "edit" && (
               <span className="text-xs text-slate-400">
@@ -219,9 +250,10 @@ export function UserFormPanel({
             </button>
             <button
               type="submit"
-              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+              disabled={isPending}
+              className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Save
+              {isPending ? "Saving…" : "Save"}
             </button>
           </div>
         </form>

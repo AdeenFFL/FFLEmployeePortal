@@ -263,6 +263,23 @@ export type ItRequestType = {
   updated_by: string | null;
 };
 
+// IT module (M2) — inventory settings (supabase/it-migrations/talha/talha_it_0002_inventory_settings.sql).
+export type AssetClassification = "Fixed" | "Consumable";
+export type AssetValueTypeName = "New" | "Old";
+export type DepreciationMethod = "Straight Line" | "Reducing Balance";
+
+export type AssetType = {
+  id: string;
+  name: string;
+  classification: AssetClassification;
+  description: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
 export type ItTicketCategory = {
   id: string;
   parent_id: string | null;
@@ -320,6 +337,19 @@ export type ItTicket = {
   satisfaction_rating: number | null;
   satisfaction_comment: string | null;
   sla_breach_notified_at: string | null; // javaria_it_0003
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type AssetValueType = {
+  id: string;
+  name: AssetValueTypeName;
+  depreciation_percentage: number;
+  depreciation_method: DepreciationMethod;
+  useful_life_years: number | null;
+  description: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -489,6 +519,31 @@ export type ItTicketAttachment = {
   size_bytes: number | null;
   uploaded_by: string | null;
   created_at: string;
+};
+
+// IT module (M2) — asset register (supabase/it-migrations/talha/talha_it_0003_assets.sql).
+export type Asset = {
+  id: string;
+  asset_tag: string;
+  serial_number: string;
+  asset_name: string;
+  asset_type_id: string;
+  manufacturer: string | null;
+  model_number: string | null;
+  company_id: string;
+  site_id: string | null;
+  purchase_date: string | null;
+  vendor_id: string | null;
+  receiving_id: string | null;
+  status: "Unassigned" | "In Use" | "In Repair" | "Retired" | "Disposed" | "Lost";
+  condition: string | null;
+  warranty_expiry: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+  deleted_at: string | null;
 };
 
 export type Database = {
@@ -775,10 +830,9 @@ export type Database = {
       };
     };
   };
-  // Only the tables the Service Management track uses. Talha's inventory tables get added to
-  // this block on IT/dev after merge (07-it-inventory-plan.md §2.1). Cross-schema FKs to
-  // public.persons / org_units aren't listed in Relationships (same reason as the hr block) —
-  // names are resolved through it.person_names() / it.list_org_units() instead.
+  // Cross-schema FKs to public.persons / org_units aren't listed in Relationships (same reason
+  // as the hr block) — names are resolved through it.person_names() / it.list_org_units()
+  // instead. Combines both IT tracks: Service Management (Javaria) and Inventory (Talha).
   it: {
     Tables: {
       request_types: {
@@ -926,6 +980,34 @@ export type Database = {
             columns: ["request_id"];
             isOneToOne: false;
             referencedRelation: "onboarding_offboarding";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      asset_types: {
+        Row: AssetType;
+        Insert: Partial<AssetType> & Pick<AssetType, "name" | "classification">;
+        Update: Partial<AssetType>;
+        Relationships: [];
+      };
+      asset_value_types: {
+        Row: AssetValueType;
+        Insert: Partial<AssetValueType> &
+          Pick<AssetValueType, "name" | "depreciation_percentage">;
+        Update: Partial<AssetValueType>;
+        Relationships: [];
+      };
+      assets: {
+        Row: Asset;
+        Insert: Partial<Asset> &
+          Pick<Asset, "serial_number" | "asset_name" | "asset_type_id" | "company_id">;
+        Update: Partial<Asset>;
+        Relationships: [
+          {
+            foreignKeyName: "assets_asset_type_id_fkey";
+            columns: ["asset_type_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_types";
             referencedColumns: ["id"];
           },
         ];

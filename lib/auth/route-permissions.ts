@@ -21,11 +21,17 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // More specific prefix first — permissionKeyForPath returns the first match.
   "/it/onboarding/new": "it.onboarding.create",
   "/it/onboarding": "it.onboarding.read",
+  "/it/inventory": "it.assets.read",
   "/it/settings/tickets": "it.ticket_settings.update",
-  // IT Dashboard (SCR-06) is for the IT team, per BRD §8; develop's 0021 gates it with
-  // module:it instead — reconcile when develop is merged in.
+  // SCR-06: the IT Dashboard is for IT team members who handle tickets, not every employee with
+  // module:it — reconciled per Javaria's own note anticipating this conflict (she built the real
+  // dashboard; it.tickets.read replaces the earlier module:it placeholder gate).
   "/it/dashboard": "it.tickets.read",
   "/it/reports": "it.tickets.read",
+  // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
+  // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
+  // the first match in insertion order).
+  "/it": "module:it",
   "/admin/users": "route:/admin/users",
   "/admin/roles": "route:/admin/roles",
   "/admin/departments": "route:/admin/departments",
@@ -37,10 +43,8 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
 // permissive default (routes with no entry are allowed through) instead of carrying a dead
 // permission that was granted to literally every role anyway.
 //
-// /it/dashboard is the same story, retired for the same reason as /hr/dashboard — it was a
-// one-off placeholder-stub permission with no module:it to fold into yet (IT isn't a real
-// module). Falls through to the same permissive default; give it a module:it gate once IT
-// actually gets built, the way HR did.
+// The "/it" catch-all exists purely as a fallback for any future /it/* page that forgets to add
+// its own specific entry — every existing /it/* page above has its own, more precise gate.
 
 export function permissionKeyForPath(pathname: string): string | null {
   for (const [route, permissionKey] of Object.entries(ROUTE_PERMISSIONS)) {

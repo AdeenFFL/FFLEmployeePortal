@@ -357,6 +357,56 @@ export async function setUserStatus(personId: string, status: UserStatus) {
   revalidatePath("/admin/users");
 }
 
+// Permanently deletes a person and genuinely ALL of their data — every hr.*/it.* row that
+// references them in any way (tickets they filed, tickets assigned to them, onboarding cases
+// they approved, shared config rows they created) cascades away too, per
+// 0022_cascade_person_deletes.sql. This is deliberately NOT the usual "actor reference stays,
+// only their own records go" pattern — a ticket assigned to this person is deleted even though
+// someone else filed it. There is no undo. Soft-delete (status-based, no data loss) is a
+// separate, not-yet-built feature — this is the hard-delete-only pass.
+export async function hardDeleteUser(personId: string) {
+  const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
+
+  if (personId === adminPersonId) {
+    throw new Error("You cannot delete your own account.");
+  }
+
+  const { data: account } = await supabase
+    .from("user_accounts")
+    .select("email, auth_user_id")
+    .eq("person_id", personId)
+    .maybeSingle();
+
+  // Deleting `persons` cascades through user_accounts, user_roles, and every hr.*/it.* row
+  // referencing this person — but NOT their Supabase Auth identity (user_accounts.auth_user_id
+  // references auth.users, not the other way around), so that's removed separately below.
+  const { error } = await supabase.from("persons").delete().eq("id", personId);
+  if (error) throw new Error(error.message);
+
+  if (account?.auth_user_id) {
+    const admin = createAdminClient();
+    const { error: authError } = await admin.auth.admin.deleteUser(account.auth_user_id);
+    // Best-effort: the DB-side deletion already succeeded and is the part that matters for
+    // "their data is gone". If this fails, the stranded Auth identity would just self-reprovision
+    // a fresh, role-less person on next sign-in (same as any new employee's first login) — not
+    // silent data leakage, just a loose end worth surfacing rather than blocking on.
+    if (authError) {
+      console.error(`Failed to delete auth user ${account.auth_user_id} for ${account.email}:`, authError);
+    }
+  }
+
+  await logAuditEvent({
+    supabase,
+    actorId: adminPersonId,
+    actorLabel,
+    module: "admin",
+    action: "DELETED",
+    details: `Permanently deleted user ${account?.email ?? personId} and all associated data`,
+  });
+
+  revalidatePath("/admin/users");
+}
+
 export async function revokeInvitation(email: string) {
   const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 

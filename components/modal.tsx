@@ -2,6 +2,7 @@
 
 import { createContext, useContext } from "react";
 import { useDismissable } from "@/components/use-dismissable";
+import { XIcon } from "@/components/icons";
 
 const ModalCloseContext = createContext<(() => void) | null>(null);
 
@@ -39,7 +40,7 @@ export function Modal({
               className="text-slate-400 hover:text-slate-600"
               aria-label="Close"
             >
-              ✕
+              <XIcon className="h-5 w-5" />
             </button>
           </div>
           {children}

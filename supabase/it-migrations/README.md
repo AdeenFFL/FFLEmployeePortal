@@ -18,9 +18,11 @@ portal-wide sequence number.
 
 ## At merge time (it/dev → develop)
 
-The senior dev decides which files to keep and in what order across both authors, then renames
+The senior dev decides which files to keep and in what order across both authors, then copies
 them into the main sequence (`supabase/migrations/00XX_it_<description>.sql`, matching the
-`00XX_it_*.sql` pattern reserved in `CODEOWNERS`). Delete the staged copy once it's been moved.
+`00XX_it_*.sql` pattern reserved in `CODEOWNERS`). The staged copy stays here as the historical
+record of each author's own branch — see "Reconciled into the main sequence" below for how
+0024-0029 map back to these files.
 
 ## Required header in every file
 
@@ -37,10 +39,60 @@ environment (`context.md` §4, 2026-09-16). Running a staged file against it cha
 for everyone, including the HR module and the other IT developer, even though the code is still
 on a feature branch. Snapshot or back up before anything that drops or alters a column.
 
+## Reconciled into the main sequence — 2026-10-13
+
+All 6 of the staged files below were verified **directly against the live database**
+(information_schema, pg_proc, pg_trigger, permissions/role_permissions — not just their own
+"Applied to live DB" headers, several of which had drifted from reality) and found fully
+applied. They've been replicated into `supabase/migrations/` in dependency order — nothing in
+them was re-run, this only gave the already-live state a linear, portal-wide migration history.
+
+**Kept here too, by explicit request** — the per-developer staged copy stays in place as the
+original historical record of each author's own work, alongside (not instead of) the
+replicated main-sequence file:
+
+| Staged file | Replicated as |
+|---|---|
+| `talha/talha_it_0001_foundation.sql` | `supabase/migrations/0024_it_foundation.sql` |
+| `javaria/javaria_it_0001_tickets.sql` | `supabase/migrations/0025_it_tickets.sql` |
+| `talha/talha_it_0002_inventory_settings.sql` | `supabase/migrations/0026_it_inventory_settings.sql` |
+| `javaria/javaria_it_0002_onboarding_offboarding.sql` | `supabase/migrations/0027_it_onboarding_offboarding.sql` |
+| `talha/talha_it_0003_assets.sql` | `supabase/migrations/0028_it_assets.sql` |
+| `javaria/javaria_it_0003_notifications.sql` | `supabase/migrations/0029_it_notifications.sql` |
+
+The two copies are expected to diverge over time in header/comment text only (the main-sequence
+file's header is rewritten to drop the staging-specific Author/Branch/Applied-to-live-DB lines);
+the SQL body should stay identical unless someone deliberately edits one. The main-sequence file
+under `supabase/migrations/` is the one that's authoritative and actually gets run by
+`supabase db push` on a fresh environment — this folder's copy is historical reference only.
+
+`talha/talha_it_0000_baseline_live_snapshot.sql` was never replicated — it's explicitly
+reference-only (every statement commented out, "DO NOT RUN"), not a migration.
+
+**One real conflict found and resolved during reconciliation:** `talha_it_0001_foundation.sql`'s
+`module:it` permission insert and `0021_module_it_permission.sql` (already in the main sequence,
+predating this reconciliation) both insert the `module:it` key with different descriptions.
+`on conflict (key) do nothing` made this safe either way — no error, no corruption — but since
+0021 runs first in the main sequence, its shorter description is the one that's actually live.
+0024 keeps Talha's insert verbatim (for fidelity to what her branch contains) with a comment
+explaining it's a confirmed no-op.
+
+**Untracked drift found, not fixed here (flagged for the team, not acted on unilaterally):**
+- `it.staff_roles` + `it.has_role(variadic roles text[])` — pre-date both IT tracks, hardcode
+  role names ('Admin', 'IT Staff', 'Approver', 'Finance') in a check constraint (exactly the
+  anti-pattern 0019_direct_role_permissions.sql removed from the rest of the app), and are
+  confirmed unused by any of the 6 reconciled files (everything uses `has_permission()` instead)
+  and confirmed empty. Talha's own `talha_it_0000` notes flagged this as "not owned by either IT
+  track yet... drop once confirmed empty and unused" — that condition is now met, but dropping
+  live schema objects outside this reconciliation's explicit scope wasn't done without asking.
+- A duplicate `it.set_updated_at()` function and a duplicate `trg_request_types_updated_at`
+  trigger on `it.request_types` exist alongside the tracked `public.set_updated_at()` version —
+  redundant (both just set `updated_at = now()`) but harmless. Not sourced from any of the 6
+  files; likely an early experiment before the convention settled. Candidate for a small cleanup
+  migration later.
+
 ## Applied log
 
 | File | Applied on | By | Notes |
 |---|---|---|---|
 | `talha/talha_it_0000_baseline_live_snapshot.sql` | pre-existing | — | Reference only, not runnable. The 4 tables that existed before any IT migration |
-| `javaria/javaria_it_0001_tickets.sql` | 2026-10-12 | Javaria | SQL Editor. Confirmed by the `it.tickets.*` permission rows existing |
-| `javaria/javaria_it_0002_onboarding_offboarding.sql` | 2026-10-12 | Javaria | SQL Editor. Confirmed by the `it.onboarding.*` permission rows existing |
