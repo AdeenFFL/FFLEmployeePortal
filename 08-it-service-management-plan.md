@@ -214,7 +214,17 @@ permissions. Emits `it.employee_offboarded` (direct call to Talha's `listOpenAss
 portal account); the asset allocation / return items plug in once his forms exist.
 **Open dependency**: who writes employment status on offboarding, HR or IT (`context.md` §6).
 
-### Phase 5 — Notifications and hardening
+### Phase 5 — Notifications and hardening *(notifications built, migration not applied; hardening pass still to do)*
+**As built** (`javaria_it_0003_notifications.sql` + `lib/it/notifications.ts`): `it.notifications`
+inbox written only by security-definer triggers (ticket created / assigned / resolved / closed /
+reopened / escalated / commented; onboarding new / task assigned / setup ready / final review /
+completed / cancelled / commented); the actor never notifies themselves except the requester's
+§5.3.3 acknowledgement. Top-bar bell shows the unread count and opens `/it/notifications`.
+Emails go out after each IT action via `after()` + Microsoft Graph; marked `skipped` while
+`MS_GRAPH_*` isn't configured. SLA breaches: `it.notify_sla_breaches()` — needs scheduling with
+pg_cron (instructions in the migration). Not done: the "nearing breach" warning, and sending
+credentials to a new joiner's personal email (deliberately — no passwords are stored).
+**Original scope:**
 Portal + email via `lib/email/graph-client.ts` (no-ops until `MS_GRAPH_*` is set): ticket
 created / assigned / resolved / SLA breach; ONB / OFB assigned, completed, credentials ready
 (BRD §5.1.12). RLS review pass with the tester, then `tsc` / `eslint` / `npm run build` before the

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
+import { queueItEmails } from "@/lib/it/notifications";
 import { TASK_STATUSES, TICKET_PRIORITIES, WORKING_STATUSES } from "@/lib/it/tickets";
 import type { ItTicketPriority, ItTicketStatus, ItTicketTaskStatus } from "@/types/database";
 
@@ -17,6 +18,7 @@ function fail(ticketId: string, message: string): never {
 }
 
 function done(ticketId: string, message: string): never {
+  queueItEmails(); // notification rows were written by DB triggers; deliver their emails
   revalidatePath("/it/tickets");
   revalidatePath(`/it/tickets/${ticketId}`);
   revalidatePath(`/it/my-tickets/${ticketId}`);
