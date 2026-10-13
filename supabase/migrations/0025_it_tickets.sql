@@ -1,9 +1,8 @@
--- Author:      Javaria
--- Branch:      IT/javaria
--- Feature:     Phase 1 — Ticketing core (08-it-service-management-plan.md §5)
--- Depends on:  talha_it_0001_foundation.sql (schema usage grant, it.next_number(), module:it);
---              talha_it_0000 baseline (it.request_types pre-exists, created directly in Supabase)
--- Applied to live DB: YES (2026-10-12, by Javaria, via Supabase SQL Editor)
+-- Employee Portal — IT module (M2), Service Management track: ticketing core. Replicated into
+-- the main sequence from supabase/it-migrations/javaria/javaria_it_0001_tickets.sql (Javaria,
+-- IT/javaria) — confirmed already live via direct inspection when IT/dev was reconciled
+-- (every table, trigger, function and permission below checked against information_schema /
+-- pg_proc / pg_trigger / permissions live), not re-run here.
 --
 -- Requirements: IT BRD §5.3 (To-Be ITSM process), §7.1 (IT Ticket Record), §8 SCR-01..03.
 -- Data model: ERD v4 section B, mapped onto portal conventions per
@@ -13,7 +12,8 @@
 --
 -- IT staff access uses it.* permission keys (plan §8 #1; same position as Talha's plan §8 #4a).
 -- The live it.staff_roles table (Admin / IT Staff / Approver / Finance) is not read or changed
--- here.
+-- here — it predates both IT tracks, is unused by either, and is confirmed empty; a candidate
+-- for a future cleanup migration, not addressed here.
 --
 -- tickets.linked_asset_id is a plain uuid for now. Its FK to it.assets is added in a later file
 -- once Talha's assets migration exists (07-it-inventory-plan.md §2.1).
@@ -883,7 +883,7 @@ insert into it.sla_policies (priority, response_hours, resolution_hours) values
 
 -- ===========================================================================
 -- PART G — Permissions. Staff permissions go to Admin only; assign them to IT roles on
--- /admin/roles (module:it is registered in talha_it_0001_foundation.sql).
+-- /admin/roles (module:it is registered in 0024_it_foundation.sql).
 -- ===========================================================================
 
 insert into permissions (key, module, label, description) values

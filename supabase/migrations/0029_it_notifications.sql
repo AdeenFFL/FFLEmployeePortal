@@ -1,8 +1,8 @@
--- Author:      Javaria
--- Branch:      IT/javaria
--- Feature:     Phase 5 — Notifications (08-it-service-management-plan.md §5)
--- Depends on:  javaria_it_0001_tickets.sql, javaria_it_0002_onboarding_offboarding.sql
--- Applied to live DB: NO
+-- Employee Portal — IT module (M2), Service Management track: Notifications. Replicated into
+-- the main sequence from supabase/it-migrations/javaria/javaria_it_0003_notifications.sql
+-- (Javaria, IT/javaria) — confirmed already live via direct inspection when IT/dev was
+-- reconciled (table, every notify_* function/trigger, and the sla_breach_notified_at column
+-- all checked against information_schema / pg_proc / pg_trigger live), not re-run here.
 --
 -- Requirements: BRD §5.3.3 (ticket acknowledgement), §5.3.7 (assignment), §5.3.11 (escalation /
 -- SLA breach), §5.3.13 (resolution), §5.1.4 / §5.2.5 (new request to IT Executive),

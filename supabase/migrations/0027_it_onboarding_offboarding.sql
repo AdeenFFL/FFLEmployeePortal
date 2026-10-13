@@ -1,10 +1,9 @@
--- Author:      Javaria
--- Branch:      IT/javaria
--- Feature:     Phase 4 — Onboarding / Offboarding (08-it-service-management-plan.md §5)
--- Depends on:  talha_it_0001_foundation.sql (schema usage grant, it.next_number());
---              javaria_it_0001_tickets.sql (it.request_types RLS + audit columns,
---              it.person_names(), it.list_org_units())
--- Applied to live DB: YES (2026-10-12, by Javaria, via Supabase SQL Editor)
+-- Employee Portal — IT module (M2), Service Management track: Onboarding / Offboarding.
+-- Replicated into the main sequence from
+-- supabase/it-migrations/javaria/javaria_it_0002_onboarding_offboarding.sql (Javaria,
+-- IT/javaria) — confirmed already live via direct inspection when IT/dev was reconciled
+-- (every table, trigger, function and permission below checked against information_schema /
+-- pg_proc / pg_trigger / permissions live), not re-run here.
 --
 -- Requirements: IT BRD §5.1 (onboarding), §5.2 (offboarding), §7.3 (checklist record), §8 SCR-04.
 -- Data model: ERD v4 section E (onboarding_offboarding, checklist_items), mapped onto portal
@@ -34,7 +33,7 @@
 --   Any of Open / Under Review / In Progress -> Cancelled (with a reason)
 
 -- ===========================================================================
--- PART A — Request types (it.request_types is owned by this track; see javaria_it_0001).
+-- PART A — Request types (it.request_types is owned by this track; see 0025_it_tickets.sql).
 -- ===========================================================================
 
 -- One type per kind, added only where none exists. The live DB already has New Joiner
@@ -951,7 +950,7 @@ as $$
   order by p.full_name;
 $$;
 
--- it.person_names() from javaria_it_0001, widened so onboarding screens can show names too:
+-- it.person_names() from 0025_it_tickets.sql, widened so onboarding screens can show names too:
 -- onboarding readers see anyone; requesters / new joiners see people on their own requests.
 create or replace function it.person_names(p_person_ids uuid[])
 returns table (person_id uuid, full_name text, designation text, employee_code text)

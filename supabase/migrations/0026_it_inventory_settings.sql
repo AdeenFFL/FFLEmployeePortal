@@ -1,17 +1,13 @@
--- Author:      Talha
--- Branch:      it/talha
--- Feature:     Phase 1 — inventory settings: asset types, asset value types, inventory
---              permissions (07-it-inventory-plan.md §3, §5 Phase 1)
--- Depends on:  talha_it_0001_foundation (or Javeria's equivalent: schema usage grant)
--- Applied to live DB: NO
+-- Employee Portal — IT module (M2), Inventory track: asset types, asset value types, inventory
+-- permissions. Replicated into the main sequence from
+-- supabase/it-migrations/talha/talha_it_0002_inventory_settings.sql (Talha, it/talha) —
+-- confirmed already live via direct inspection when IT/dev was reconciled, not re-run here.
 --
--- Brings the two pre-existing inventory tables (see talha_it_0000) up to the portal conventions
--- (SOP §7: audit columns, RLS on every table) without recreating them. The live RLS/policy/trigger
--- state wasn't visible in the baseline capture, so every statement is written to work whether
--- or not it already exists.
+-- Brings the two pre-existing inventory tables (talha_it_0000's baseline snapshot) up to the
+-- portal conventions (SOP §7: audit columns, RLS on every table) without recreating them.
 --
--- PRE-FLIGHT — run this first. If it returns rows, the depreciation_method check constraint
--- below will fail; fix or map those values before running the migration:
+-- PRE-FLIGHT — on a fresh environment, run this first. If it returns rows, the
+-- depreciation_method check constraint below will fail; fix or map those values first:
 --   select id, name, depreciation_method from it.asset_value_types
 --   where depreciation_method not in ('Straight Line', 'Reducing Balance');
 
@@ -53,8 +49,8 @@ alter table it.asset_value_types
 
 -- ---------------------------------------------------------------------------
 -- Part 3 — this track's permission keys (per-operation style from 0017; label from 0020).
--- Admin gets all of them, same as 0018 did for HR. Which other roles (e.g. the seeded "IT" role)
--- get what is config for /it/admin/roles, not this migration.
+-- Admin gets all of them, same as 0018 did for HR. Which other roles get what is config for
+-- /it/admin/roles, not this migration.
 -- ---------------------------------------------------------------------------
 
 insert into permissions (key, module, label, description) values
@@ -82,7 +78,7 @@ where r.name = 'Admin'
 on conflict do nothing;
 
 -- ---------------------------------------------------------------------------
--- Part 4 — RLS. Both tables are reference data: readable by any signed-in person (Javeria's
+-- Part 4 — RLS. Both tables are reference data: readable by any signed-in person (Javaria's
 -- product master, ticket forms and the employee-facing My Assets screen all show asset types),
 -- writable only with it.inventory_settings.update. Delete is allowed but FK restrict will block
 -- it once a type is in use; the UI deactivates (is_active) instead.
@@ -147,6 +143,6 @@ insert into it.asset_types (name, classification, description) values
   ('Other', 'Fixed', null)
 on conflict (name) do nothing;
 
--- Concrete grant for these pre-existing tables (default privileges from 0001 don't apply
+-- Concrete grant for these pre-existing tables (default privileges from 0024 don't apply
 -- retroactively to tables created before them).
 grant select, insert, update, delete on it.asset_types, it.asset_value_types to authenticated;

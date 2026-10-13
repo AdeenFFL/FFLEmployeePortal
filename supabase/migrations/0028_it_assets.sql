@@ -1,15 +1,10 @@
--- Author:      Talha
--- Branch:      it/talha
--- Feature:     Phase 2 - Asset register (it.assets) - see 07-it-inventory-plan.md
--- Depends on:  existing it.asset_types (already live).
---              Needs public.persons, public.companies, public.org_units,
---              public.set_updated_at(), public.has_permission(), it.next_number().
---              Permission rows (it.assets.*) are added in a SEPARATE file; this
---              file works without them (nobody gets access until they exist).
--- Applied to live DB: NO
-
--- Safe to undo while the table is still empty:
---   drop table it.assets;
+-- Employee Portal — IT module (M2), Inventory track: Asset register (it.assets). Replicated
+-- into the main sequence from supabase/it-migrations/talha/talha_it_0003_assets.sql (Talha,
+-- it/talha) — confirmed already live via direct inspection when IT/dev was reconciled, not
+-- re-run here.
+--
+-- Permission rows (it.assets.*) were added in 0026_it_inventory_settings.sql; this table works
+-- without them (nobody gets access until they exist).
 
 begin;
 
@@ -31,7 +26,7 @@ create table it.assets (
   site_id           uuid references public.org_units (id),            -- replaces ERD "current_location_id"
   purchase_date     date,
 
-  -- Columns exist now, but the links to Javeria's vendors / receiving tables
+  -- Columns exist now, but the links to Javaria's vendors / receiving tables
   -- are added later (Phase 7), once her tables exist.
   vendor_id         uuid,
   receiving_id      uuid,

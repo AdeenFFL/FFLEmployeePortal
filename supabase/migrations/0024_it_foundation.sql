@@ -1,13 +1,13 @@
--- Author:      Talha
--- Branch:      it/talha
--- Feature:     Phase 1 — shared IT foundation (07-it-inventory-plan.md §2.1, §5 Phase 1)
--- Depends on:  talha_it_0000 (baseline: the `it` schema already exists)
--- Applied to live DB: NO
+-- Employee Portal — IT module (M2) foundation: schema grants, a shared reference-number
+-- generator, and module:it itself. Replicated into the main sequence from
+-- supabase/it-migrations/talha/talha_it_0001_foundation.sql (Talha, it/talha) — confirmed
+-- already live via direct inspection when IT/dev was reconciled (information_schema +
+-- pg_proc + permissions/role_permissions checks), not re-run here.
 --
--- SHARED with Javeria's track. HOLD until her schema is in: if her first migration covers the
--- same ground (schema grants, module:it, a number generator), keep ONE of the two and delete
--- the other at merge time. Everything here is written to be safe to run on top of the
--- pre-existing `it` schema in either case (if not exists / on conflict / or replace).
+-- module:it's insert below is a confirmed no-op on a fresh apply: 0021_module_it_permission.sql
+-- already seeds that exact key (with a shorter description — mine ran first in this app's own
+-- history) and `on conflict (key) do nothing` makes this safe regardless of which one runs
+-- first. Kept here, unedited, for historical fidelity to what Talha's branch actually contains.
 --
 -- Also required, and NOT doable in SQL: add `it` to Supabase's Exposed Schemas list (Project
 -- Settings → API → Exposed schemas) before any app code calls `.schema("it")`. Same caveat as
