@@ -22,6 +22,11 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // More specific prefix first — permissionKeyForPath returns the first match.
   "/it/onboarding/new": "it.onboarding.create",
   "/it/onboarding": "it.onboarding.read",
+  "/it/inventory": "it.assets.read",
+  // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
+  // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
+  // the first match in insertion order).
+  "/it": "module:it",
   "/admin/users": "route:/admin/users",
   "/admin/roles": "route:/admin/roles",
   "/admin/departments": "route:/admin/departments",
@@ -32,6 +37,10 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
 // both regardless of role, so there is nothing to ever toggle — they fall through to this map's
 // permissive default (routes with no entry are allowed through) instead of carrying a dead
 // permission that was granted to literally every role anyway.
+//
+// /it/dashboard has its own explicit entry above (same key, module:it, as the catch-all would
+// give it anyway) purely for readability — the "/it" catch-all exists as a fallback for any
+// future /it/* page that forgets to add its own entry, not as the primary gate for existing ones.
 
 export function permissionKeyForPath(pathname: string): string | null {
   for (const [route, permissionKey] of Object.entries(ROUTE_PERMISSIONS)) {
