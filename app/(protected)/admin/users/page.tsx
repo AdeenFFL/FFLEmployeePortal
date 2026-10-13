@@ -366,7 +366,16 @@ export default async function AdminUsersPage({
       </div>
 
       {panel && (
-        <UserFormPanel mode={panel.mode} roles={roles ?? []} initialValues={panel.initialValues} />
+        // key forces a fresh mount (and therefore a reset useDismissable `visible`) on every
+        // real navigation that shows this panel — without it, closing once (which only does a
+        // local history.replaceState, not a server round trip) leaves the component's `visible`
+        // state stuck at false, so a later Edit click silently does nothing.
+        <UserFormPanel
+          key={Date.now()}
+          mode={panel.mode}
+          roles={roles ?? []}
+          initialValues={panel.initialValues}
+        />
       )}
     </div>
   );

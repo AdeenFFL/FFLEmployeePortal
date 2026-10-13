@@ -79,7 +79,10 @@ export default async function AdminSitesPage({
       <OrgUnitTable type={TYPE} basePath={BASE_PATH} units={units ?? []} />
 
       {panel && (
+        // key forces a fresh mount on every real navigation that shows this panel — see
+        // components/use-dismissable.ts's header comment for why this is required.
         <OrgUnitFormPanel
+          key={Date.now()}
           type={TYPE}
           basePath={BASE_PATH}
           mode={panel.mode}
