@@ -126,12 +126,14 @@ export function Sidebar({
       label: "IT Service Management",
       icon: TicketIcon,
       children: [
+        { href: "/it/dashboard", label: "Dashboard", permission: "it.tickets.read" },
         { href: "/it/tickets", label: "Ticket Queue", permission: "it.tickets.read" },
         {
           href: "/it/onboarding",
           label: "Onboarding / Offboarding",
           permission: "it.onboarding.read",
         },
+        { href: "/it/reports", label: "Reports", permission: "it.tickets.read" },
         {
           href: "/it/settings/tickets",
           label: "Ticket Settings",

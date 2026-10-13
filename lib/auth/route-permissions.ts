@@ -22,6 +22,10 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/onboarding/new": "it.onboarding.create",
   "/it/onboarding": "it.onboarding.read",
   "/it/settings/tickets": "it.ticket_settings.update",
+  // IT Dashboard (SCR-06) is for the IT team, per BRD §8; develop's 0021 gates it with
+  // module:it instead — reconcile when develop is merged in.
+  "/it/dashboard": "it.tickets.read",
+  "/it/reports": "it.tickets.read",
   "/admin/users": "route:/admin/users",
   "/admin/roles": "route:/admin/roles",
   "/admin/departments": "route:/admin/departments",

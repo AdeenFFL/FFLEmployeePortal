@@ -166,8 +166,16 @@ their FK and history). **No migration**: the write policies from `javaria_it_000
 **Done when**: IT admin can maintain categories and request types, and change SLA hours so new
 tickets pick them up.
 
-### Phase 3 — Dashboard and reports
-**Screens**: SCR-06 (open tickets, avg resolution time, SLA compliance, pending ONB/OFB tasks,
+### Phase 3 — Dashboard and reports *(built; not yet browser-tested)*
+**As built**: `/it/dashboard` (KPI tiles, weekly volume, tickets by category, open-ticket age,
+SLA by category, technician workload; 30 / 90 / 180-day range) and `/it/reports` (Ticket Volume,
+SLA Compliance, Technician Productivity, date range, CSV export via `/it/reports/export`). Both
+gated by `it.tickets.read`. Metrics computed in `lib/it/ticket-metrics.ts` from one paged ticket
+fetch, under the same RLS as every screen — **no migration**. Charts are single-series, one
+validated hue, with hover tooltips and table views. `<InventoryKpis>` from Talha slots in under
+the KPI row when his track ships. Note: `develop`'s `0021` gates `/it/dashboard` with `module:it`;
+this branch uses `it.tickets.read` (BRD §8 calls it the IT team's dashboard) — reconcile at merge.
+**Original scope**: SCR-06 (open tickets, avg resolution time, SLA compliance, pending ONB/OFB tasks,
 tickets by category, 90-day trend, `<InventoryKpis>`), ITSM-02 (volume and SLA reports, KPIs from
 BRD §5.3.18: first response time, resolution time, SLA compliance, closure rate, ageing,
 escalation rate, technician productivity).
