@@ -4,7 +4,7 @@
 -- Depends on:  talha_it_0001_foundation.sql (schema usage grant, it.next_number());
 --              javaria_it_0001_tickets.sql (it.request_types RLS + audit columns,
 --              it.person_names(), it.list_org_units())
--- Applied to live DB: NO
+-- Applied to live DB: YES (2026-10-12, by Javaria, via Supabase SQL Editor)
 --
 -- Requirements: IT BRD §5.1 (onboarding), §5.2 (offboarding), §7.3 (checklist record), §8 SCR-04.
 -- Data model: ERD v4 section E (onboarding_offboarding, checklist_items), mapped onto portal
