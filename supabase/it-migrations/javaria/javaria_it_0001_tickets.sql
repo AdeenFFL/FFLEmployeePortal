@@ -3,7 +3,7 @@
 -- Feature:     Phase 1 — Ticketing core (08-it-service-management-plan.md §5)
 -- Depends on:  talha_it_0001_foundation.sql (schema usage grant, it.next_number(), module:it);
 --              talha_it_0000 baseline (it.request_types pre-exists, created directly in Supabase)
--- Applied to live DB: NO
+-- Applied to live DB: YES (2026-10-12, by Javaria, via Supabase SQL Editor)
 --
 -- Requirements: IT BRD §5.3 (To-Be ITSM process), §7.1 (IT Ticket Record), §8 SCR-01..03.
 -- Data model: ERD v4 section B, mapped onto portal conventions per

@@ -336,6 +336,7 @@ export type ItTicket = {
   requester_confirmed_at: string | null;
   satisfaction_rating: number | null;
   satisfaction_comment: string | null;
+  sla_breach_notified_at: string | null; // javaria_it_0003
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -486,6 +487,26 @@ export type ItOnboardingUpdate = {
   update_type: ItOnboardingUpdateType;
   body: string;
   is_internal: boolean;
+  created_at: string;
+};
+
+// Notifications — mirrors javaria_it_0003_notifications.sql.
+export type ItNotificationEmailStatus = "pending" | "sent" | "failed" | "skipped";
+
+export type ItNotification = {
+  id: string;
+  recipient_person_id: string | null;
+  recipient_email: string | null;
+  event: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  ticket_id: string | null;
+  request_id: string | null;
+  read_at: string | null;
+  email_status: ItNotificationEmailStatus;
+  email_error: string | null;
+  emailed_at: string | null;
   created_at: string;
 };
 
@@ -942,6 +963,12 @@ export type Database = {
             referencedColumns: ["id"];
           },
         ];
+      };
+      notifications: {
+        Row: ItNotification;
+        Insert: Partial<ItNotification> & Pick<ItNotification, "event" | "title">;
+        Update: Partial<ItNotification>;
+        Relationships: [];
       };
       onboarding_updates: {
         Row: ItOnboardingUpdate;

@@ -42,3 +42,5 @@ on a feature branch. Snapshot or back up before anything that drops or alters a 
 | File | Applied on | By | Notes |
 |---|---|---|---|
 | `talha/talha_it_0000_baseline_live_snapshot.sql` | pre-existing | — | Reference only, not runnable. The 4 tables that existed before any IT migration |
+| `javaria/javaria_it_0001_tickets.sql` | 2026-10-12 | Javaria | SQL Editor. Confirmed by the `it.tickets.*` permission rows existing |
+| `javaria/javaria_it_0002_onboarding_offboarding.sql` | 2026-10-12 | Javaria | SQL Editor. Confirmed by the `it.onboarding.*` permission rows existing |

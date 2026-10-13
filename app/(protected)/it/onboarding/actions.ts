@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { requireActiveUser } from "@/lib/auth/require-user";
+import { queueItEmails } from "@/lib/it/notifications";
 import { CHECKLIST_STATUSES, LIFECYCLE_KINDS, TASK_DETAIL_FIELDS } from "@/lib/it/onboarding";
 import { TICKET_PRIORITIES } from "@/lib/it/tickets";
 import type {
@@ -30,6 +31,7 @@ function optional(formData: FormData, key: string) {
 }
 
 function refresh(requestId?: string) {
+  queueItEmails(); // notification rows were written by DB triggers; deliver their emails
   revalidatePath("/it/onboarding");
   revalidatePath("/it/my-onboarding");
   if (requestId) revalidatePath(`/it/onboarding/${requestId}`);

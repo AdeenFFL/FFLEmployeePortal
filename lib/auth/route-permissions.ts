@@ -14,7 +14,6 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/feedback": "hr.tickets.read",
   "/hr/admin/categories": "hr.categories.update",
   "/hr/admin/roles": "hr.manage_role_permissions",
-  "/it/dashboard": "module:it",
   // IT module — Service Management track (08-it-service-management-plan.md §4).
   "/it/my-tickets": "module:it",
   "/it/tickets": "it.tickets.read",
@@ -23,6 +22,12 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/onboarding/new": "it.onboarding.create",
   "/it/onboarding": "it.onboarding.read",
   "/it/inventory": "it.assets.read",
+  "/it/settings/tickets": "it.ticket_settings.update",
+  // SCR-06: the IT Dashboard is for IT team members who handle tickets, not every employee with
+  // module:it — reconciled per Javaria's own note anticipating this conflict (she built the real
+  // dashboard; it.tickets.read replaces the earlier module:it placeholder gate).
+  "/it/dashboard": "it.tickets.read",
+  "/it/reports": "it.tickets.read",
   // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
   // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
   // the first match in insertion order).
@@ -38,9 +43,8 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
 // permissive default (routes with no entry are allowed through) instead of carrying a dead
 // permission that was granted to literally every role anyway.
 //
-// /it/dashboard has its own explicit entry above (same key, module:it, as the catch-all would
-// give it anyway) purely for readability — the "/it" catch-all exists as a fallback for any
-// future /it/* page that forgets to add its own entry, not as the primary gate for existing ones.
+// The "/it" catch-all exists purely as a fallback for any future /it/* page that forgets to add
+// its own specific entry — every existing /it/* page above has its own, more precise gate.
 
 export function permissionKeyForPath(pathname: string): string | null {
   for (const [route, permissionKey] of Object.entries(ROUTE_PERMISSIONS)) {

@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { requireActiveUser } from "@/lib/auth/require-user";
+import { queueItEmails } from "@/lib/it/notifications";
 import { ATTACHMENT_BUCKET } from "@/lib/it/ticket-data";
 import {
   CONTACT_METHODS,
@@ -118,6 +119,7 @@ export async function createItTicket(formData: FormData) {
 
   revalidatePath("/it/my-tickets");
   revalidatePath("/it/tickets");
+  queueItEmails();
 
   const notice =
     failedUploads > 0
@@ -144,6 +146,7 @@ export async function addRequesterComment(ticketId: string, formData: FormData) 
 
   revalidatePath(path);
   revalidatePath(`/it/tickets/${ticketId}`);
+  queueItEmails();
 }
 
 // BRD §5.3.14 — requester confirms the fix and rates it.
@@ -165,6 +168,7 @@ export async function confirmResolution(ticketId: string, formData: FormData) {
 
   revalidatePath(path);
   revalidatePath(`/it/tickets/${ticketId}`);
+  queueItEmails();
   redirect(`${path}?notice=${encodeURIComponent("Thanks — your confirmation has been sent to IT.")}`);
 }
 
@@ -183,5 +187,6 @@ export async function reopenTicket(ticketId: string, formData: FormData) {
 
   revalidatePath(path);
   revalidatePath("/it/tickets");
+  queueItEmails();
   redirect(`${path}?notice=${encodeURIComponent("Ticket reopened and sent back to IT.")}`);
 }

@@ -158,12 +158,24 @@ route-permission entries; `next.config.ts` `serverActions.bodySizeLimit` (attach
 assign, prioritise, escalate and close; a team member can work and resolve only tickets assigned
 to them; a plain employee can't read anyone else's ticket or any internal note (proxy and RLS).
 
-### Phase 2 — Ticket settings
-**Screens**: ITSM-01. **Done when**: IT admin can maintain categories and request types, and
-change SLA hours so new tickets pick them up.
+### Phase 2 — Ticket settings *(built; not yet browser-tested)*
+**Screens**: ITSM-01 `/it/settings/tickets` — SLA hours per priority, request types (all four
+kinds), categories / subcategories with sort order. Deactivate instead of delete (tickets keep
+their FK and history). **No migration**: the write policies from `javaria_it_0001` already require
+`it.ticket_settings.update`.
+**Done when**: IT admin can maintain categories and request types, and change SLA hours so new
+tickets pick them up.
 
-### Phase 3 — Dashboard and reports
-**Screens**: SCR-06 (open tickets, avg resolution time, SLA compliance, pending ONB/OFB tasks,
+### Phase 3 — Dashboard and reports *(built; not yet browser-tested)*
+**As built**: `/it/dashboard` (KPI tiles, weekly volume, tickets by category, open-ticket age,
+SLA by category, technician workload; 30 / 90 / 180-day range) and `/it/reports` (Ticket Volume,
+SLA Compliance, Technician Productivity, date range, CSV export via `/it/reports/export`). Both
+gated by `it.tickets.read`. Metrics computed in `lib/it/ticket-metrics.ts` from one paged ticket
+fetch, under the same RLS as every screen — **no migration**. Charts are single-series, one
+validated hue, with hover tooltips and table views. `<InventoryKpis>` from Talha slots in under
+the KPI row when his track ships. Note: `develop`'s `0021` gates `/it/dashboard` with `module:it`;
+this branch uses `it.tickets.read` (BRD §8 calls it the IT team's dashboard) — reconcile at merge.
+**Original scope**: SCR-06 (open tickets, avg resolution time, SLA compliance, pending ONB/OFB tasks,
 tickets by category, 90-day trend, `<InventoryKpis>`), ITSM-02 (volume and SLA reports, KPIs from
 BRD §5.3.18: first response time, resolution time, SLA compliance, closure rate, ageing,
 escalation rate, technician productivity).
@@ -202,7 +214,17 @@ permissions. Emits `it.employee_offboarded` (direct call to Talha's `listOpenAss
 portal account); the asset allocation / return items plug in once his forms exist.
 **Open dependency**: who writes employment status on offboarding, HR or IT (`context.md` §6).
 
-### Phase 5 — Notifications and hardening
+### Phase 5 — Notifications and hardening *(notifications built, migration not applied; hardening pass still to do)*
+**As built** (`javaria_it_0003_notifications.sql` + `lib/it/notifications.ts`): `it.notifications`
+inbox written only by security-definer triggers (ticket created / assigned / resolved / closed /
+reopened / escalated / commented; onboarding new / task assigned / setup ready / final review /
+completed / cancelled / commented); the actor never notifies themselves except the requester's
+§5.3.3 acknowledgement. Top-bar bell shows the unread count and opens `/it/notifications`.
+Emails go out after each IT action via `after()` + Microsoft Graph; marked `skipped` while
+`MS_GRAPH_*` isn't configured. SLA breaches: `it.notify_sla_breaches()` — needs scheduling with
+pg_cron (instructions in the migration). Not done: the "nearing breach" warning, and sending
+credentials to a new joiner's personal email (deliberately — no passwords are stored).
+**Original scope:**
 Portal + email via `lib/email/graph-client.ts` (no-ops until `MS_GRAPH_*` is set): ticket
 created / assigned / resolved / SLA breach; ONB / OFB assigned, completed, credentials ready
 (BRD §5.1.12). RLS review pass with the tester, then `tsc` / `eslint` / `npm run build` before the
