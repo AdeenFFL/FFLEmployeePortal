@@ -18,9 +18,11 @@ portal-wide sequence number.
 
 ## At merge time (it/dev → develop)
 
-The senior dev decides which files to keep and in what order across both authors, then renames
+The senior dev decides which files to keep and in what order across both authors, then copies
 them into the main sequence (`supabase/migrations/00XX_it_<description>.sql`, matching the
-`00XX_it_*.sql` pattern reserved in `CODEOWNERS`). Delete the staged copy once it's been moved.
+`00XX_it_*.sql` pattern reserved in `CODEOWNERS`). The staged copy stays here as the historical
+record of each author's own branch — see "Reconciled into the main sequence" below for how
+0024-0029 map back to these files.
 
 ## Required header in every file
 
@@ -42,9 +44,12 @@ on a feature branch. Snapshot or back up before anything that drops or alters a 
 All 6 of the staged files below were verified **directly against the live database**
 (information_schema, pg_proc, pg_trigger, permissions/role_permissions — not just their own
 "Applied to live DB" headers, several of which had drifted from reality) and found fully
-applied. They've been replicated into `supabase/migrations/` in dependency order and deleted
-from here — nothing in them was re-run, this only gave the already-live state a linear,
-portal-wide migration history:
+applied. They've been replicated into `supabase/migrations/` in dependency order — nothing in
+them was re-run, this only gave the already-live state a linear, portal-wide migration history.
+
+**Kept here too, by explicit request** — the per-developer staged copy stays in place as the
+original historical record of each author's own work, alongside (not instead of) the
+replicated main-sequence file:
 
 | Staged file | Replicated as |
 |---|---|
@@ -55,8 +60,14 @@ portal-wide migration history:
 | `talha/talha_it_0003_assets.sql` | `supabase/migrations/0028_it_assets.sql` |
 | `javaria/javaria_it_0003_notifications.sql` | `supabase/migrations/0029_it_notifications.sql` |
 
-`talha/talha_it_0000_baseline_live_snapshot.sql` stays here — it's explicitly reference-only
-(every statement commented out, "DO NOT RUN"), not a migration to replicate.
+The two copies are expected to diverge over time in header/comment text only (the main-sequence
+file's header is rewritten to drop the staging-specific Author/Branch/Applied-to-live-DB lines);
+the SQL body should stay identical unless someone deliberately edits one. The main-sequence file
+under `supabase/migrations/` is the one that's authoritative and actually gets run by
+`supabase db push` on a fresh environment — this folder's copy is historical reference only.
+
+`talha/talha_it_0000_baseline_live_snapshot.sql` was never replicated — it's explicitly
+reference-only (every statement commented out, "DO NOT RUN"), not a migration.
 
 **One real conflict found and resolved during reconciliation:** `talha_it_0001_foundation.sql`'s
 `module:it` permission insert and `0021_module_it_permission.sql` (already in the main sequence,
