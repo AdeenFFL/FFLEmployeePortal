@@ -132,6 +132,11 @@ export function Sidebar({
           label: "Onboarding / Offboarding",
           permission: "it.onboarding.read",
         },
+        {
+          href: "/it/settings/tickets",
+          label: "Ticket Settings",
+          permission: "it.ticket_settings.update",
+        },
       ],
     },
     {

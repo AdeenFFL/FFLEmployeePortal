@@ -21,6 +21,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // More specific prefix first — permissionKeyForPath returns the first match.
   "/it/onboarding/new": "it.onboarding.create",
   "/it/onboarding": "it.onboarding.read",
+  "/it/settings/tickets": "it.ticket_settings.update",
   "/admin/users": "route:/admin/users",
   "/admin/roles": "route:/admin/roles",
   "/admin/departments": "route:/admin/departments",

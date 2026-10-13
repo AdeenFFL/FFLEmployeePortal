@@ -158,9 +158,13 @@ route-permission entries; `next.config.ts` `serverActions.bodySizeLimit` (attach
 assign, prioritise, escalate and close; a team member can work and resolve only tickets assigned
 to them; a plain employee can't read anyone else's ticket or any internal note (proxy and RLS).
 
-### Phase 2 — Ticket settings
-**Screens**: ITSM-01. **Done when**: IT admin can maintain categories and request types, and
-change SLA hours so new tickets pick them up.
+### Phase 2 — Ticket settings *(built; not yet browser-tested)*
+**Screens**: ITSM-01 `/it/settings/tickets` — SLA hours per priority, request types (all four
+kinds), categories / subcategories with sort order. Deactivate instead of delete (tickets keep
+their FK and history). **No migration**: the write policies from `javaria_it_0001` already require
+`it.ticket_settings.update`.
+**Done when**: IT admin can maintain categories and request types, and change SLA hours so new
+tickets pick them up.
 
 ### Phase 3 — Dashboard and reports
 **Screens**: SCR-06 (open tickets, avg resolution time, SLA compliance, pending ONB/OFB tasks,
