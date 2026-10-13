@@ -1,11 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { setUserStatus, revokeInvitation, resendInviteEmail } from "./actions";
+import { setUserStatus, revokeInvitation, resendInviteEmail, hardDeleteUser } from "./actions";
 import { UserFormPanel } from "./user-form";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { OptimisticToggle } from "@/components/optimistic-toggle";
 import { IconLink, IconButton } from "@/components/icon-button";
+import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { PencilIcon, TrashIcon, MailIcon } from "@/components/icons";
 import { getInitials } from "@/lib/format/initials";
 import type { UserStatus, AuthMethod, EmploymentType } from "@/types/database";
@@ -292,6 +293,13 @@ export default async function AdminUsersPage({
                         label="Edit user"
                         tone="primary"
                       />
+                      <form action={hardDeleteUser.bind(null, p.id)}>
+                        <ConfirmSubmitButton
+                          icon={<TrashIcon className="h-4 w-4" />}
+                          label="Permanently delete user"
+                          confirmMessage={`Permanently delete ${p.full_name ?? account?.email ?? "this user"}? This deletes their account and ALL associated data (tickets, messages, assets, onboarding records — including ones owned by other people but assigned to or touched by them). This cannot be undone.`}
+                        />
+                      </form>
                     </div>
                   </td>
                 </tr>
