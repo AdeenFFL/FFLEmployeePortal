@@ -15,6 +15,13 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/admin/categories": "hr.categories.update",
   "/hr/admin/roles": "hr.manage_role_permissions",
   "/it/dashboard": "module:it",
+  // IT module — Service Management track (08-it-service-management-plan.md §4).
+  "/it/my-tickets": "module:it",
+  "/it/tickets": "it.tickets.read",
+  "/it/my-onboarding": "module:it",
+  // More specific prefix first — permissionKeyForPath returns the first match.
+  "/it/onboarding/new": "it.onboarding.create",
+  "/it/onboarding": "it.onboarding.read",
   "/admin/users": "route:/admin/users",
   "/admin/roles": "route:/admin/roles",
   "/admin/departments": "route:/admin/departments",
