@@ -102,3 +102,6 @@ explaining it's a confirmed no-op.
 | `javaria/javaria_it_0002_onboarding_offboarding.sql` | 2026-10-13 (verified live) | — | Confirmed applied during reconciliation; replicated as `0027_it_onboarding_offboarding.sql`. Javaria's header says run 2026-10-12 |
 | `talha/talha_it_0003_assets.sql` | 2026-10-13 (verified live) | — | Confirmed applied during reconciliation; replicated as `0028_it_assets.sql` |
 | `javaria/javaria_it_0003_notifications.sql` | 2026-10-13 (verified live) | — | Confirmed applied during reconciliation; replicated as `0029_it_notifications.sql` |
+| `talha/talha_it_0004_asset_assignments.sql` | 2026-10-14 | Talha | Phase 3: asset assignment, return and My Assets. Not yet in the main sequence |
+| `talha/talha_it_0005_asset_maintenance.sql` | 2026-10-14 | Talha | Phase 4: repair and maintenance log. Not yet in the main sequence |
+| `talha/talha_it_0006_asset_values.sql` | 2026-10-14 | Talha | Phase 6: asset valuation and depreciation. Not yet in the main sequence |
