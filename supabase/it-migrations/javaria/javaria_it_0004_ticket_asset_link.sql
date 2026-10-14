@@ -7,7 +7,7 @@
 --              Talha's Phase 3 migration, which owns the FK tickets_linked_asset_id_fkey
 --              (07-it-inventory-plan.md: "tickets.linked_asset_id FK moves into the Phase 3
 --              migration") — already live on 2026-10-14
--- Applied to live DB: NO
+-- Applied to live DB: YES (2026-10-14, by Javaria, via Supabase SQL Editor)
 --
 -- Gap #1 from the asset review: a ticket stores a device id, but nothing checked the device
 -- exists, so a ticket could point at a non-existent or deleted asset and skew reports such as
