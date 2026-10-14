@@ -76,7 +76,7 @@ Written against the Module Onboarding SOP (`01-platform-design-and-sop.md` §11)
 
 | FK | Ordering rule |
 |---|---|
-| `tickets.linked_asset_id → it.assets` | **Done** in `javaria_it_0004_ticket_asset_link.sql` (asset-gap review #1, 2026-10-14): FK (`on delete restrict` — assets are only soft-deleted), no new links to soft-deleted assets, IT-side device search on the ticket workspace, device label shown to the requester. Employees can't pick their own device yet: that needs Talha's `asset_assignments` (his Phase 3) |
+| `tickets.linked_asset_id → it.assets` | **FK owned by Talha** (his Phase 3 migration, already live 2026-10-14). **This track** (`javaria_it_0004_ticket_asset_link.sql`, asset-gap review #1): no new links to soft-deleted assets, IT-side device search on the ticket workspace, device label shown to the requester. Employees can't pick their own device yet: that needs Talha's `asset_assignments` (his Phase 3) |
 | `checklist_items.assignment_id → it.asset_assignments` | Onboarding/Offboarding phase starts after Talha's Phase 3 |
 
 **Functions/components Talha provides, called from this track**
