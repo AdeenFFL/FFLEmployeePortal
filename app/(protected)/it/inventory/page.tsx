@@ -2,27 +2,8 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import type { Asset } from "@/types/database";
-
-type AssetStatus = Asset["status"];
-
-const STATUS_OPTIONS: AssetStatus[] = [
-  "Unassigned",
-  "In Use",
-  "In Repair",
-  "Retired",
-  "Disposed",
-  "Lost",
-];
-
-const STATUS_TONES: Record<AssetStatus, "positive" | "neutral" | "warning" | "negative" | "info"> = {
-  Unassigned: "info",
-  "In Use": "positive",
-  "In Repair": "warning",
-  Retired: "neutral",
-  Disposed: "neutral",
-  Lost: "negative",
-};
+import { fetchOrgUnits } from "@/lib/it/ticket-data";
+import { ASSET_STATUSES, ASSET_STATUS_TONES, formatDate, type AssetStatus } from "./asset-status";
 
 // Hard cap until the register gets pagination — well above any one filtered view today.
 const MAX_ROWS = 500;
@@ -36,14 +17,6 @@ function sanitizeSearch(value: string) {
   return value.replace(/[,()*%\\]/g, " ").trim();
 }
 
-function formatDate(value: string) {
-  return new Date(value).toLocaleDateString("en-GB", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-}
-
 export default async function AssetRegisterPage({
   searchParams,
 }: {
@@ -54,11 +27,12 @@ export default async function AssetRegisterPage({
     site?: string;
     company?: string;
     created?: string;
+    deleted?: string;
   }>;
 }) {
   const params = await searchParams;
   const search = sanitizeSearch(params.q ?? "");
-  const status = STATUS_OPTIONS.includes(params.status as AssetStatus)
+  const status = ASSET_STATUSES.includes(params.status as AssetStatus)
     ? (params.status as AssetStatus)
     : undefined;
   const supabase = await createClient();
@@ -79,18 +53,17 @@ export default async function AssetRegisterPage({
   if (params.company) query = query.eq("company_id", params.company);
 
   // Site/company names come from public tables: cross-schema embeds aren't typeable in
-  // supabase-js (see types/database.ts), so they're fetched separately. org_units is
-  // admin-readable only for now, so non-admins see "—" for site and get no site filter.
-  const [{ data: assets }, { data: assetTypes }, { data: companies }, { data: sites }, { data: canCreate }] =
+  // supabase-js (see types/database.ts), so they're fetched separately. Sites go through
+  // it.list_org_units() because public.org_units is admin-readable only.
+  const [{ data: assets }, { data: assetTypes }, { data: companies }, { sites, nameById: siteNameById }, { data: canCreate }] =
     await Promise.all([
       query.order("updated_at", { ascending: false }).limit(MAX_ROWS),
       supabase.schema("it").from("asset_types").select("id, name").order("name"),
       supabase.from("companies").select("id, name").order("name"),
-      supabase.from("org_units").select("id, name").eq("type", "Site").order("name"),
+      fetchOrgUnits(supabase),
       supabase.rpc("has_permission", { p_permission_key: "it.assets.create" }),
     ]);
 
-  const siteNameById = new Map((sites ?? []).map((s) => [s.id, s.name]));
   const hasFilters = Boolean(search || params.type || status || params.site || params.company);
 
   return (
@@ -113,6 +86,11 @@ export default async function AssetRegisterPage({
       {params.created && (
         <p className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
           Asset {params.created} registered.
+        </p>
+      )}
+      {params.deleted && (
+        <p className="mb-4 rounded-lg border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-700">
+          Asset {params.deleted} deleted.
         </p>
       )}
 
@@ -139,16 +117,16 @@ export default async function AssetRegisterPage({
         </select>
         <select name="status" defaultValue={status ?? ""} className={selectClass} aria-label="Status">
           <option value="">All statuses</option>
-          {STATUS_OPTIONS.map((s) => (
+          {ASSET_STATUSES.map((s) => (
             <option key={s} value={s}>
               {s}
             </option>
           ))}
         </select>
-        {(sites ?? []).length > 0 && (
+        {sites.length > 0 && (
           <select name="site" defaultValue={params.site ?? ""} className={selectClass} aria-label="Site">
             <option value="">All sites</option>
-            {(sites ?? []).map((s) => (
+            {sites.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.name}
               </option>
@@ -200,8 +178,10 @@ export default async function AssetRegisterPage({
           <tbody className="divide-y divide-slate-100">
             {(assets ?? []).map((asset) => (
               <tr key={asset.id} className="hover:bg-slate-50">
-                <td className="px-4 py-3 font-mono text-xs font-medium text-slate-900">
-                  {asset.asset_tag}
+                <td className="px-4 py-3 font-mono text-xs font-medium">
+                  <Link href={`/it/inventory/${asset.id}`} className="text-blue-600 hover:underline">
+                    {asset.asset_tag}
+                  </Link>
                 </td>
                 <td className="px-4 py-3 text-slate-900">{asset.asset_name}</td>
                 <td className="px-4 py-3 text-slate-600">{asset.asset_types?.name ?? "—"}</td>
@@ -210,7 +190,7 @@ export default async function AssetRegisterPage({
                   {(asset.site_id && siteNameById.get(asset.site_id)) ?? "—"}
                 </td>
                 <td className="px-4 py-3">
-                  <StatusPill label={asset.status} tone={STATUS_TONES[asset.status]} />
+                  <StatusPill label={asset.status} tone={ASSET_STATUS_TONES[asset.status]} />
                 </td>
                 <td className="px-4 py-3 text-slate-500">{formatDate(asset.updated_at)}</td>
               </tr>
