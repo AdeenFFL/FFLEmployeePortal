@@ -18,6 +18,57 @@ precedent (`06-hr-module-design.md`, migrations `0012`–`0020`), the IT BRD
 - 2026-10-12: Procurement (ERD section D) and Onboarding/Offboarding (section E) are owned by
   Javeria.
 - 2026-10-12: All ERD additions in §1.3 are accepted.
+- 2026-10-13: Both tracks' staged migrations were reconciled into the main sequence as
+  `0024`–`0029` (see `supabase/it-migrations/README.md`). New staged files keep their per-author
+  numbering (`talha_it_0004`, …); they get main-sequence numbers (`0030`+) at merge time.
+
+---
+
+## 0. Status — 2026-10-13
+
+Gap check of ERD v4 (25 tables) against `supabase/migrations/0001`–`0029`.
+
+### 0.1 ERD tables already covered (14)
+
+| ERD section | ERD tables | Where |
+|---|---|---|
+| A — Org & Access | `roles`, `users`, `employees`, `departments`, `locations` | Core tables per §1.1 (`roles`, `user_accounts`, `persons`, `org_units`, `companies`) |
+| B — Ticketing | `tickets`, `ticket_tasks`, `request_types` | `0025_it_tickets.sql` (+ `ticket_categories`, `sla_policies`, `ticket_updates`, `ticket_attachments`, not in the ERD) |
+| C — Inventory | `asset_types`, `asset_value_types`, `assets` | Baseline + `0026_it_inventory_settings.sql`, `0028_it_assets.sql` |
+| E — On/Offboarding | `onboarding_offboarding`, `checklist_items` | `0027_it_onboarding_offboarding.sql` (+ `onboarding_updates`) |
+| F — Audit | `audit_log` | `public.audit_log` (`0004`) |
+
+Also live and outside the ERD: `it.number_sequences` (`0024`), `it.notifications` (`0029`).
+
+### 0.2 ERD tables still missing (11)
+
+| Table | Owner | Blocked by | Phase |
+|---|---|---|---|
+| `asset_assignments` | **Talha** | — | 3 |
+| `asset_maintenance` | **Talha** | — (`vendor_id` FK deferred to Phase 7) | 4 |
+| `stock_movements` | **Talha** | `it.products` | 5 |
+| `asset_values` | **Talha** | — | 6 |
+| `vendors`, `products`, `demands`, `demand_approvals`, `receiving_records`, `invoices`, `payments` (+ `documents`, §1.3 #3) | Javeria | — | Her procurement track |
+
+### 0.3 Placeholder FKs (plain `uuid` columns, constraint not added yet)
+
+| Column | Target | Can be added when |
+|---|---|---|
+| `tickets.linked_asset_id` | `it.assets` | Phase 3 migration (`it.assets` is live; bundled to avoid a one-line migration) |
+| `checklist_items.assignment_id` | `it.asset_assignments` | Phase 3 migration (add it there) |
+| `assets.vendor_id`, `assets.receiving_id` | `it.vendors`, `it.receiving_records` | Javeria's procurement migrations, then Phase 7 |
+| `asset_maintenance.vendor_id` | `it.vendors` | Same |
+| `stock_movements.product_id` | `it.products` | Javeria ships `products` |
+
+### 0.4 Screen status
+
+| Screen | State |
+|---|---|
+| INV-01 `/it/inventory/settings` | Built (asset types CRUD + value types) |
+| SCR-05 `/it/inventory` | Built (list) |
+| INV-02 `/it/inventory/new`, `/[id]/edit` | Built (create + edit) |
+| INV-03 `/it/inventory/[id]` | Built: Overview, Linked tickets, Change status, soft Delete. Other sections arrive with Phases 3–7 |
+| INV-04 – INV-08, `<InventoryKpis>` | Not built |
 
 ---
 
@@ -181,20 +232,20 @@ UI follows the HR pages: server components that query with `.schema("it")`, Serv
 Each phase is one PR from `it/talha` into `it/dev`: one or more staged migrations, the screens,
 the Server Actions, and a test checklist for the tester. Phases are ordered by data dependency.
 
-### Phase 0 — Alignment and setup (no feature code)
-- [ ] **Capture the live `it` schema baseline.** The `it` schema was created directly in Supabase
+### Phase 0 — Alignment and setup (no feature code) — ✅ done
+- [x] **Capture the live `it` schema baseline.** The `it` schema was created directly in Supabase
       and isn't in any migration file. It also isn't on the Exposed Schemas list, so the app (and
       a REST probe) can't see it. Dump it (`supabase db dump --schema it`, or Dashboard SQL) and
       commit it as `talha_it_0000_baseline_live_snapshot.sql`, marked "Applied: YES (pre-existing)".
       Then diff it against §1. If it contains ERD-style `users`/`roles`/`employees`/INT keys, it
       needs a rework migration before anything is built on top of it. Share the result with
       Javeria, since it affects her tables too.
-- [ ] Senior dev: register `module:it`, add `it` to Exposed Schemas, and create `it/dev` from the
+- [x] Senior dev: register `module:it`, add `it` to Exposed Schemas, and create `it/dev` from the
       current base.
-- [ ] Agree on the foundation-migration author and the §2.1 contracts with Javeria. Ask her to
-      sequence vendors + products early.
+- [x] Agree on the foundation-migration author and the §2.1 contracts with Javeria. Ask her to
+      sequence vendors + products early. *(Foundation written by Talha → `0024`.)*
 
-### Phase 1 — Foundation and inventory settings
+### Phase 1 — Foundation and inventory settings — ✅ done (`0024`, `0026`; INV-01 built)
 **Migration** `talha_it_0001_foundation.sql` (skip if Javeria writes it): schema grants mirroring
 `0012` (`grant usage` + default privileges for `authenticated`), number-generator helper
 (`it.next_number(prefix)` backed by sequences, also usable for her `ONB-`/`OFB-`/`DMD-`/ticket
@@ -208,7 +259,13 @@ Network, Mobile, Peripheral, Software License; Fixed vs Consumable) and value ty
 **Done when**: an IT admin can maintain asset types and value types, and a non-IT employee can't
 reach them (proxy and RLS both).
 
-### Phase 2 — Asset register
+### Phase 2 — Asset register — ✅ done (2026-10-13; `0028` live)
+Built: register (rows link to detail), add, edit, INV-03 detail (Overview + Linked tickets),
+manual status change (Unassigned / Retired / Disposed / Lost only — `In Use` and `In Repair` are
+owned by the Phase 3/4 flows and locked on the page), and soft delete (blocked while `In Use` /
+`In Repair`). Site dropdowns and names now use `it.list_org_units()`, so non-admin IT staff see
+sites. Tag still uses the `AST-000001` placeholder until decision #5 is made; the
+`tickets.linked_asset_id` FK moves into the Phase 3 migration.
 **Migration** `talha_it_0003_assets.sql`: `it.assets`. Tag auto-generated
 (`<COMPANY>-<TYPE>-<6-digit seq>`, e.g. `FFL-LAP-000123`, pending BA confirmation); unique
 `asset_tag` and `serial_number`; `company_id`, `site_id`, `status` (§1.3 #6), `condition`,
@@ -222,7 +279,11 @@ change writes an audit-log row.
 **Migration** `talha_it_0004_asset_assignments.sql`: `it.asset_assignments` with the partial
 unique index (§1.3 #7); a security-definer `it.assign_asset()` / `it.return_asset()` pair that
 writes the assignment row and flips `assets.status` atomically, so the two can't drift; RLS that
-lets employees read their own assignments.
+lets employees read their own assignments. Also adds the `checklist_items.assignment_id →
+it.asset_assignments` FK that Javeria's `0027` left pending, and the `tickets.linked_asset_id →
+it.assets` FK from `0025`. Also needs a name lookup inventory staff can use: `it.person_names()`
+only resolves names for `it.tickets.read` holders, so the asset page and assignment history need
+it widened to `it.assets.read` (coordinate with Javeria — it's her function).
 **Screens**: INV-04 (assign/return forms), INV-03 Assignment history tab, INV-05 My Assets with
 handover acknowledgement.
 **Hand-off to Javeria**: `assignAsset` / `returnAsset`, `<AssetAssignForm>` / `<AssetReturnForm>`,
@@ -309,5 +370,5 @@ function call between the two IT tracks (same module, same schema), not an event
 | 4a | Drop `it.staff_roles`? It's a module-local role table with hardcoded role names (Admin / IT Staff / Approver / Finance), the pattern `0019` removed portal-wide; IT access should be `it.*` permissions on portal roles instead | Open: proposed drop once confirmed empty; senior dev + Javeria |
 | 4b | `public.audit_log` only accepts inserts from admins (`0004`), so IT staff actions don't get audited. Proposed core change: also allow inserts where `actor_id = current_person_id()` | Open: senior dev (core table) |
 | 5 | Asset tag format (`FFL-LAP-000123`)? | Open: IT BA |
-| 6 | Who writes the shared foundation migration? | Open: whoever starts Phase 1 first, agree with Javeria |
+| 6 | Who writes the shared foundation migration? | **Decided: Talha** (`talha_it_0001` → `0024`) |
 | 7 | Can Javeria ship vendors + products early, so Phases 4–5 aren't blocked? | Open: Javeria |

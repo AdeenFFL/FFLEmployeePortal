@@ -2,7 +2,7 @@
 -- Branch:      it/talha
 -- Feature:     Phase 1 — shared IT foundation (07-it-inventory-plan.md §2.1, §5 Phase 1)
 -- Depends on:  talha_it_0000 (baseline: the `it` schema already exists)
--- Applied to live DB: NO
+-- Applied to live DB: YES (2026-10-13, verified live during reconciliation)
 --
 -- SHARED with Javeria's track. HOLD until her schema is in: if her first migration covers the
 -- same ground (schema grants, module:it, a number generator), keep ONE of the two and delete

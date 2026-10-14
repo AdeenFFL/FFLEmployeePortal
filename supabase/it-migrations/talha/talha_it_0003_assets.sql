@@ -6,7 +6,7 @@
 --              public.set_updated_at(), public.has_permission(), it.next_number().
 --              Permission rows (it.assets.*) are added in a SEPARATE file; this
 --              file works without them (nobody gets access until they exist).
--- Applied to live DB: NO
+-- Applied to live DB: YES (2026-10-13, verified live during reconciliation)
 
 -- Safe to undo while the table is still empty:
 --   drop table it.assets;
