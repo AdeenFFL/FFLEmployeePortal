@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
-import { fetchCategoryMaps, fetchPersonNames } from "@/lib/it/ticket-data";
+import { checked, fetchCategoryMaps, fetchPersonNames } from "@/lib/it/ticket-data";
 import {
   formatDate,
   slaState,
@@ -79,7 +79,7 @@ export default async function ItTicketQueuePage({
   const q = (filters.q ?? "").replace(/[,()*%]/g, " ").trim();
   if (q) query = query.or(`ticket_number.ilike.%${q}%,subject.ilike.%${q}%`);
 
-  const { data: tickets } = await query;
+  const { data: tickets } = checked(await query);
   const rows = tickets ?? [];
 
   const names = await fetchPersonNames(

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
+import { checked } from "@/lib/it/ticket-data";
 import { formatDateTime } from "@/lib/it/tickets";
 import { markAllNotificationsRead } from "./actions";
 import { cardClass, secondaryButtonClass } from "../_components/ticket-ui";
@@ -8,12 +9,14 @@ import { cardClass, secondaryButtonClass } from "../_components/ticket-ui";
 // person only their own notifications.
 export default async function NotificationsPage() {
   const supabase = await createClient();
-  const { data: notifications } = await supabase
-    .schema("it")
-    .from("notifications")
-    .select("id, title, body, read_at, created_at")
-    .order("created_at", { ascending: false })
-    .limit(100);
+  const { data: notifications } = checked(
+    await supabase
+      .schema("it")
+      .from("notifications")
+      .select("id, title, body, read_at, created_at")
+      .order("created_at", { ascending: false })
+      .limit(100),
+  );
 
   const rows = notifications ?? [];
   const unread = rows.filter((n) => !n.read_at).length;

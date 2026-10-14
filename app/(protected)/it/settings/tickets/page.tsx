@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
+import { checked } from "@/lib/it/ticket-data";
 import { PRIORITY_TONE, TICKET_PRIORITIES } from "@/lib/it/tickets";
 import type { ItTicketCategory } from "@/types/database";
 import {
@@ -90,9 +91,21 @@ export default async function TicketSettingsPage({
   const supabase = await createClient();
 
   const [{ data: slas }, { data: requestTypes }, { data: categories }] = await Promise.all([
-    supabase.schema("it").from("sla_policies").select("*"),
-    supabase.schema("it").from("request_types").select("*").order("applies_to").order("name"),
-    supabase.schema("it").from("ticket_categories").select("*").order("sort_order").order("name"),
+    supabase.schema("it").from("sla_policies").select("*").then(checked),
+    supabase
+      .schema("it")
+      .from("request_types")
+      .select("*")
+      .order("applies_to")
+      .order("name")
+      .then(checked),
+    supabase
+      .schema("it")
+      .from("ticket_categories")
+      .select("*")
+      .order("sort_order")
+      .order("name")
+      .then(checked),
   ]);
 
   const slaByPriority = new Map((slas ?? []).map((s) => [s.priority, s]));

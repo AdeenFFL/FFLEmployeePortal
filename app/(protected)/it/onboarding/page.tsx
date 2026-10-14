@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
+import { checked, fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
 import {
   FINISHED_STATUSES,
   KIND_TONE,
@@ -66,7 +66,7 @@ export default async function OnboardingQueuePage({
   }
 
   const [{ data: requests }, orgUnits, canCreate] = await Promise.all([
-    query,
+    query.then(checked),
     fetchOrgUnits(supabase),
     hasItPermission(supabase, "it.onboarding.create"),
   ]);

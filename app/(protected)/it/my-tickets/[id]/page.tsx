@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import {
+  checked,
   fetchAssetLabels,
   fetchCategoryMaps,
   fetchOrgUnits,
@@ -37,12 +38,9 @@ export default async function MyItTicketDetailPage({
   const [{ id }, { notice, error }] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
 
-  const { data: ticket } = await supabase
-    .schema("it")
-    .from("tickets")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: ticket } = checked(
+    await supabase.schema("it").from("tickets").select("*").eq("id", id).maybeSingle(),
+  );
   if (!ticket) notFound();
 
   const [{ data: updates }, { data: attachments }, maps, orgUnits] = await Promise.all([

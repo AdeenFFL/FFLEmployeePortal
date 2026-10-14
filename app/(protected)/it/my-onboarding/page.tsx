@@ -1,7 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { fetchPersonNames } from "@/lib/it/ticket-data";
+import { checked, fetchPersonNames } from "@/lib/it/ticket-data";
 import { CHECKLIST_STATUS_TONE, LIFECYCLE_STATUS_TONE } from "@/lib/it/onboarding";
 import { formatDate } from "@/lib/it/tickets";
 import { addLifecycleUpdate, confirmOnboarding } from "../onboarding/actions";
@@ -25,13 +25,15 @@ export default async function MyOnboardingPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const { data: requests } = await supabase
-    .schema("it")
-    .from("onboarding_offboarding")
-    .select("*")
-    .eq("kind", "Onboarding")
-    .eq("person_id", personId ?? "")
-    .order("created_at", { ascending: false });
+  const { data: requests } = checked(
+    await supabase
+      .schema("it")
+      .from("onboarding_offboarding")
+      .select("*")
+      .eq("kind", "Onboarding")
+      .eq("person_id", personId ?? "")
+      .order("created_at", { ascending: false }),
+  );
 
   const rows = requests ?? [];
   const ids = rows.map((r) => r.id);

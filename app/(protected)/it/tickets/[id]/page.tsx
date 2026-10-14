@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import {
+  checked,
   fetchAssetLabels,
   fetchCategoryMaps,
   fetchOrgUnits,
@@ -66,12 +67,9 @@ export default async function ItTicketWorkspacePage({
   const [{ id }, { notice, error, assetQ }] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
 
-  const { data: ticket } = await supabase
-    .schema("it")
-    .from("tickets")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: ticket } = checked(
+    await supabase.schema("it").from("tickets").select("*").eq("id", id).maybeSingle(),
+  );
   if (!ticket) notFound();
 
   const [

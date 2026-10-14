@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
+import { checked, fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
 import {
   CHECKLIST_STATUSES,
   CHECKLIST_STATUS_TONE,
@@ -66,12 +66,14 @@ export default async function LifecycleRequestPage({
   const [{ id }, { notice, error, q }] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
 
-  const { data: request } = await supabase
-    .schema("it")
-    .from("onboarding_offboarding")
-    .select("*")
-    .eq("id", id)
-    .maybeSingle();
+  const { data: request } = checked(
+    await supabase
+      .schema("it")
+      .from("onboarding_offboarding")
+      .select("*")
+      .eq("id", id)
+      .maybeSingle(),
+  );
   if (!request) notFound();
 
   const [

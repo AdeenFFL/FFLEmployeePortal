@@ -6,6 +6,15 @@ type Client = SupabaseClient<Database>;
 
 export const ATTACHMENT_BUCKET = "it-ticket-attachments";
 
+// For a page's MAIN query: turn a Supabase error into a thrown error, so app/(protected)/it/
+// error.tsx explains it. Without this, a failed query reads as "no data" — e.g. the onboarding
+// queue showed "No requests" while the `it` schema was unreachable. Secondary lookups (names,
+// labels) stay best-effort and don't use this.
+export function checked<R extends { error: { message: string } | null }>(result: R): R {
+  if (result.error) throw new Error(result.error.message);
+  return result;
+}
+
 // public.persons is only readable by the person themself / admins, so names on tickets go
 // through it.person_names() — it returns only the people this viewer is allowed to see
 // (javaria_it_0001_tickets.sql, Part E).

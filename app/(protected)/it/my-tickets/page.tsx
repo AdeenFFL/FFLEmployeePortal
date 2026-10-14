@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
-import { fetchCategoryMaps } from "@/lib/it/ticket-data";
+import { checked, fetchCategoryMaps } from "@/lib/it/ticket-data";
 import { formatDate } from "@/lib/it/tickets";
 import {
   cardClass,
@@ -27,7 +27,8 @@ export default async function MyItTicketsPage({
       .from("tickets")
       .select("id, ticket_number, subject, category_id, priority, status, created_at")
       .or(`requester_person_id.eq.${personId},requested_for_person_id.eq.${personId}`)
-      .order("created_at", { ascending: false }),
+      .order("created_at", { ascending: false })
+      .then(checked),
     fetchCategoryMaps(supabase),
     // New joiners get a pointer to /it/my-onboarding (not a permanent nav item for everyone).
     supabase
