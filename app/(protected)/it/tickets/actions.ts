@@ -151,6 +151,24 @@ export async function addStaffUpdate(ticketId: string, formData: FormData) {
   done(ticketId, internal ? "Internal note added." : "Reply sent to the requester.");
 }
 
+// Link the ticket to the device it's about (or unlink with an empty assetId). The FK and
+// it.check_ticket_asset_link() reject unknown or soft-deleted assets.
+export async function setTicketAsset(ticketId: string, formData: FormData) {
+  const { supabase } = await requirePermission("it.tickets.read");
+
+  const assetId = text(formData, "assetId") || null;
+  const { data, error } = await supabase
+    .schema("it")
+    .from("tickets")
+    .update({ linked_asset_id: assetId })
+    .eq("id", ticketId)
+    .select("id");
+  if (error) fail(ticketId, error.message);
+  if (!data?.length) fail(ticketId, "You can only change the device on tickets you're working.");
+
+  done(ticketId, assetId ? "Device linked to the ticket." : "Device unlinked.");
+}
+
 // ERD ticket_tasks.
 export async function addTask(ticketId: string, formData: FormData) {
   const { supabase } = await requirePermission("it.tickets.read");

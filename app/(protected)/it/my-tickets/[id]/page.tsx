@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import {
+  fetchAssetLabels,
   fetchCategoryMaps,
   fetchOrgUnits,
   fetchPersonNames,
@@ -62,12 +63,13 @@ export default async function MyItTicketDetailPage({
     fetchOrgUnits(supabase),
   ]);
 
-  const [names, urls] = await Promise.all([
+  const [names, urls, assetLabels] = await Promise.all([
     fetchPersonNames(supabase, [
       ticket.assigned_to_person_id,
       ...(updates ?? []).map((u) => u.author_person_id),
     ]),
     signedAttachmentUrls(supabase, (attachments ?? []).map((a) => a.storage_path)),
+    fetchAssetLabels(supabase, [ticket.linked_asset_id]),
   ]);
 
   const awaitingConfirmation = ticket.status === "Resolved" && !ticket.requester_confirmed_at;
@@ -220,6 +222,11 @@ export default async function MyItTicketDetailPage({
             <Fact label="Department">
               {(ticket.department_id && orgUnits.nameById.get(ticket.department_id)) ?? "—"}
             </Fact>
+            {ticket.linked_asset_id && (
+              <Fact label="Device">
+                {assetLabels.get(ticket.linked_asset_id) ?? "Linked asset"}
+              </Fact>
+            )}
             {ticket.asset_system_name && (
               <Fact label="Asset / system">{ticket.asset_system_name}</Fact>
             )}

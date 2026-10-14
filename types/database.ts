@@ -1082,6 +1082,27 @@ export type Database = {
         Args: Record<string, never>;
         Returns: { id: string; name: string; type: OrgUnitType }[];
       };
+      // javaria_it_0004_ticket_asset_link.sql
+      search_assets_for_ticket: {
+        Args: { p_search: string };
+        Returns: {
+          asset_id: string;
+          asset_tag: string;
+          asset_name: string;
+          serial_number: string;
+          status: string;
+          site_id: string | null;
+        }[];
+      };
+      ticket_asset_labels: {
+        Args: { p_asset_ids: string[] };
+        Returns: {
+          asset_id: string;
+          asset_tag: string;
+          asset_name: string;
+          serial_number: string;
+        }[];
+      };
     };
   };
 };

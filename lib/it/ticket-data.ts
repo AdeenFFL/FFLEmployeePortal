@@ -51,6 +51,21 @@ export async function fetchCategoryMaps(supabase: Client) {
   };
 }
 
+// "AST-000123 · HP ProBook 450 (SN 5CG1234)" for the asset a ticket is about. Goes through
+// it.ticket_asset_labels() because most ticket viewers can't read it.assets directly
+// (javaria_it_0004_ticket_asset_link.sql).
+export async function fetchAssetLabels(supabase: Client, ids: (string | null | undefined)[]) {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (unique.length === 0) return new Map<string, string>();
+
+  const { data } = await supabase
+    .schema("it")
+    .rpc("ticket_asset_labels", { p_asset_ids: unique });
+  return new Map(
+    (data ?? []).map((a) => [a.asset_id, `${a.asset_tag} · ${a.asset_name} (SN ${a.serial_number})`]),
+  );
+}
+
 export async function hasItPermission(supabase: Client, key: string) {
   const { data } = await supabase.rpc("has_permission", { p_permission_key: key });
   return Boolean(data);

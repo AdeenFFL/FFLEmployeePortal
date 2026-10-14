@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import {
+  fetchAssetLabels,
   fetchCategoryMaps,
   fetchOrgUnits,
   fetchPersonNames,
@@ -23,6 +24,7 @@ import {
   closeTicket,
   resolveTicket,
   setEscalation,
+  setTicketAsset,
   triageTicket,
   updateTaskStatus,
   updateTicketStatus,
@@ -59,9 +61,9 @@ export default async function ItTicketWorkspacePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ notice?: string; error?: string }>;
+  searchParams: Promise<{ notice?: string; error?: string; assetQ?: string }>;
 }) {
-  const [{ id }, { notice, error }] = await Promise.all([params, searchParams]);
+  const [{ id }, { notice, error, assetQ }] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
 
   const { data: ticket } = await supabase
@@ -101,7 +103,14 @@ export default async function ItTicketWorkspacePage({
     hasItPermission(supabase, "it.tickets.close"),
   ]);
 
-  const [names, urls] = await Promise.all([
+  const isClosed = ticket.status === "Closed";
+  const isAssignee = Boolean(personId) && ticket.assigned_to_person_id === personId;
+  const canWork = !isClosed && canUpdate && (isAssignee || canAssign);
+  const canComment = !isClosed && (canUpdate || canAssign);
+  // Same rule as the tickets update policy: executives, or the assignee with it.tickets.update.
+  const canSetDevice = !isClosed && (canAssign || (canUpdate && isAssignee));
+
+  const [names, urls, assetLabels, { data: assetMatches }] = await Promise.all([
     fetchPersonNames(supabase, [
       ticket.requester_person_id,
       ticket.requested_for_person_id,
@@ -111,12 +120,11 @@ export default async function ItTicketWorkspacePage({
       ...(tasks ?? []).map((t) => t.assigned_to_person_id),
     ]),
     signedAttachmentUrls(supabase, (attachments ?? []).map((a) => a.storage_path)),
+    fetchAssetLabels(supabase, [ticket.linked_asset_id]),
+    canSetDevice && assetQ?.trim()
+      ? supabase.schema("it").rpc("search_assets_for_ticket", { p_search: assetQ })
+      : Promise.resolve({ data: null }),
   ]);
-
-  const isClosed = ticket.status === "Closed";
-  const isAssignee = Boolean(personId) && ticket.assigned_to_person_id === personId;
-  const canWork = !isClosed && canUpdate && (isAssignee || canAssign);
-  const canComment = !isClosed && (canUpdate || canAssign);
 
   const nameOf = (pid: string | null) => (pid ? (names.get(pid) ?? "—") : "—");
 
@@ -327,6 +335,72 @@ export default async function ItTicketWorkspacePage({
 
         {/* ---------------- Side column ---------------- */}
         <div className="space-y-6">
+          {(ticket.linked_asset_id || canSetDevice) && (
+            <Panel title="Device">
+              {ticket.linked_asset_id ? (
+                <div className="mb-3 flex items-start justify-between gap-2">
+                  <p className="text-sm text-slate-800">
+                    {assetLabels.get(ticket.linked_asset_id) ?? "Linked asset"}
+                  </p>
+                  {canSetDevice && (
+                    <form action={setTicketAsset.bind(null, ticket.id)}>
+                      <input type="hidden" name="assetId" value="" />
+                      <button type="submit" className="text-sm text-slate-500 hover:text-red-600">
+                        Unlink
+                      </button>
+                    </form>
+                  )}
+                </div>
+              ) : (
+                <p className="mb-3 text-sm text-slate-500">
+                  Not linked to an asset
+                  {ticket.asset_system_name && ` — requester wrote “${ticket.asset_system_name}”`}.
+                </p>
+              )}
+              {canSetDevice && (
+                <>
+                  <form method="get" className="flex gap-2">
+                    <input
+                      name="assetQ"
+                      defaultValue={assetQ ?? ""}
+                      placeholder="Tag, serial, name or model"
+                      aria-label="Search assets"
+                      className={inputClass}
+                    />
+                    <button type="submit" className={secondaryButtonClass}>
+                      Search
+                    </button>
+                  </form>
+                  {assetQ?.trim() && (
+                    <form action={setTicketAsset.bind(null, ticket.id)} className="mt-3 space-y-2">
+                      {(assetMatches ?? []).length === 0 ? (
+                        <p className="text-xs text-slate-400">No asset matches “{assetQ}”.</p>
+                      ) : (
+                        <>
+                          {(assetMatches ?? []).map((a) => (
+                            <label key={a.asset_id} className="flex items-start gap-2 text-sm">
+                              <input type="radio" name="assetId" value={a.asset_id} required className="mt-1" />
+                              <span>
+                                <span className="font-medium text-slate-800">{a.asset_tag}</span>{" "}
+                                {a.asset_name}
+                                <span className="block text-xs text-slate-400">
+                                  SN {a.serial_number} · {a.status}
+                                </span>
+                              </span>
+                            </label>
+                          ))}
+                          <button type="submit" className={primaryButtonClass}>
+                            Link device
+                          </button>
+                        </>
+                      )}
+                    </form>
+                  )}
+                </>
+              )}
+            </Panel>
+          )}
+
           {canAssign && !isClosed && (
             <Panel title="Triage">
               <form action={triageTicket.bind(null, ticket.id)} className="space-y-3">
