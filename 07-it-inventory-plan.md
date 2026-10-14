@@ -264,10 +264,10 @@ Built: register (rows link to detail), add, edit, INV-03 detail (Overview + Link
 manual status change (Unassigned / Retired / Disposed / Lost only — `In Use` and `In Repair` are
 owned by the Phase 3/4 flows and locked on the page), and soft delete (blocked while `In Use` /
 `In Repair`). Site dropdowns and names now use `it.list_org_units()`, so non-admin IT staff see
-sites. Tag still uses the `AST-000001` placeholder until decision #5 is made; the
+sites. Tags are typed in by hand on Add and Edit (decision #5, 2026-10-14); the
 `tickets.linked_asset_id` FK moves into the Phase 3 migration.
-**Migration** `talha_it_0003_assets.sql`: `it.assets`. Tag auto-generated
-(`<COMPANY>-<TYPE>-<6-digit seq>`, e.g. `FFL-LAP-000123`, pending BA confirmation); unique
+**Migration** `talha_it_0003_assets.sql`: `it.assets`. Tag originally auto-generated
+(`AST-000001`); since decision #5 it is entered manually (`talha_it_0007` drops the default); unique
 `asset_tag` and `serial_number`; `company_id`, `site_id`, `status` (§1.3 #6), `condition`,
 `warranty_expiry`, `deleted_at`. `vendor_id` and `receiving_id` columns exist but have no FK yet
 (§2.1).
@@ -369,6 +369,6 @@ function call between the two IT tracks (same module, same schema), not an event
 | 4 | What is the live `it` schema's actual content? | **Captured 2026-10-12** in `talha_it_0000`: `staff_roles`, `request_types`, `asset_types`, `asset_value_types` |
 | 4a | Drop `it.staff_roles`? It's a module-local role table with hardcoded role names (Admin / IT Staff / Approver / Finance), the pattern `0019` removed portal-wide; IT access should be `it.*` permissions on portal roles instead | Open: proposed drop once confirmed empty; senior dev + Javeria |
 | 4b | `public.audit_log` only accepts inserts from admins (`0004`), so IT staff actions don't get audited. Proposed core change: also allow inserts where `actor_id = current_person_id()` | Open: senior dev (core table) |
-| 5 | Asset tag format (`FFL-LAP-000123`)? | Open: IT BA |
+| 5 | Asset tag format (`FFL-LAP-000123`)? | **Decided 2026-10-14: asset tags are entered manually** (no enforced format; unique ignoring case; `talha_it_0007_asset_tag_manual.sql` removes the database default) |
 | 6 | Who writes the shared foundation migration? | **Decided: Talha** (`talha_it_0001` → `0024`) |
 | 7 | Can Javeria ship vendors + products early, so Phases 4–5 aren't blocked? | Open: Javeria |
