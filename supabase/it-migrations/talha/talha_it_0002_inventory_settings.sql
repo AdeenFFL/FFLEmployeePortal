@@ -3,7 +3,7 @@
 -- Feature:     Phase 1 — inventory settings: asset types, asset value types, inventory
 --              permissions (07-it-inventory-plan.md §3, §5 Phase 1)
 -- Depends on:  talha_it_0001_foundation (or Javeria's equivalent: schema usage grant)
--- Applied to live DB: NO
+-- Applied to live DB: YES (2026-10-13, verified live during reconciliation)
 --
 -- Brings the two pre-existing inventory tables (see talha_it_0000) up to the portal conventions
 -- (SOP §7: audit columns, RLS on every table) without recreating them. The live RLS/policy/trigger

@@ -96,3 +96,9 @@ explaining it's a confirmed no-op.
 | File | Applied on | By | Notes |
 |---|---|---|---|
 | `talha/talha_it_0000_baseline_live_snapshot.sql` | pre-existing | — | Reference only, not runnable. The 4 tables that existed before any IT migration |
+| `talha/talha_it_0001_foundation.sql` | 2026-10-13 (verified live) | — | Confirmed applied during reconciliation; replicated as `0024_it_foundation.sql` |
+| `javaria/javaria_it_0001_tickets.sql` | 2026-10-13 (verified live) | — | Confirmed applied during reconciliation; replicated as `0025_it_tickets.sql`. Javaria's header says run 2026-10-12 |
+| `talha/talha_it_0002_inventory_settings.sql` | 2026-10-13 (verified live) | — | Confirmed applied during reconciliation; replicated as `0026_it_inventory_settings.sql` |
+| `javaria/javaria_it_0002_onboarding_offboarding.sql` | 2026-10-13 (verified live) | — | Confirmed applied during reconciliation; replicated as `0027_it_onboarding_offboarding.sql`. Javaria's header says run 2026-10-12 |
+| `talha/talha_it_0003_assets.sql` | 2026-10-13 (verified live) | — | Confirmed applied during reconciliation; replicated as `0028_it_assets.sql` |
+| `javaria/javaria_it_0003_notifications.sql` | 2026-10-13 (verified live) | — | Confirmed applied during reconciliation; replicated as `0029_it_notifications.sql` |
