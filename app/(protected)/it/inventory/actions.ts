@@ -5,7 +5,12 @@ import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { logAuditEvent } from "@/lib/audit/log";
 import type { Asset } from "@/types/database";
-import { MANUAL_STATUSES, SYSTEM_MANAGED_STATUSES } from "./asset-status";
+import {
+  MANUAL_STATUSES,
+  RETURN_STATUSES,
+  SYSTEM_MANAGED_STATUSES,
+  type ReturnStatus,
+} from "./asset-status";
 
 export type AssetFormState = { error: string | null };
 
@@ -301,4 +306,66 @@ export async function deleteAsset(assetId: string) {
 
   revalidatePath("/it/inventory");
   redirect(`/it/inventory?deleted=${encodeURIComponent(current.asset_tag)}`);
+}
+
+// INV-04 — record that the holder gave the asset back. Goes through it.return_asset(), which
+// closes the assignment and sets the asset's new status in one transaction, so the two can't
+// drift. Also meant for Javaria's offboarding "Asset Return Form" (07-it-inventory-plan.md §2.1).
+export async function returnAsset(assetId: string, formData: FormData) {
+  const { supabase, personId, actorLabel } = await requirePermission("it.assets.assign");
+
+  const newStatus = text(formData, "new_status") as ReturnStatus;
+  const returnDate = optionalText(formData, "return_date");
+  const returnedCondition = optionalText(formData, "returned_condition");
+  const remarks = optionalText(formData, "remarks");
+  if (!RETURN_STATUSES.includes(newStatus)) {
+    redirect(detailUrl(assetId, "error", "Choose what happens to the asset after the return."));
+  }
+
+  const [{ data: asset }, { data: assignment }] = await Promise.all([
+    supabase
+      .schema("it")
+      .from("assets")
+      .select("asset_tag")
+      .eq("id", assetId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    supabase
+      .schema("it")
+      .from("asset_assignments")
+      .select("id, assigned_date")
+      .eq("asset_id", assetId)
+      .is("return_date", null)
+      .maybeSingle(),
+  ]);
+  if (!asset) redirect(detailUrl(assetId, "error", "This asset no longer exists."));
+  if (!assignment) redirect(detailUrl(assetId, "error", "This asset isn't currently assigned."));
+  if (returnDate && returnDate < assignment.assigned_date) {
+    redirect(detailUrl(assetId, "error", "The return date can't be before the date it was assigned."));
+  }
+
+  const { error } = await supabase.schema("it").rpc("return_asset", {
+    p_assignment_id: assignment.id,
+    p_returned_condition: returnedCondition,
+    p_remarks: remarks,
+    p_new_status: newStatus,
+    ...(returnDate ? { p_return_date: returnDate } : {}),
+  });
+  if (error) redirect(detailUrl(assetId, "error", error.message));
+
+  await logAuditEvent({
+    supabase,
+    actorId: personId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details:
+      `Returned asset ${asset.asset_tag}; now ${newStatus}` +
+      (returnedCondition ? ` (condition: ${returnedCondition})` : ""),
+  });
+
+  revalidatePath("/it/inventory");
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/my-assets");
+  redirect(detailUrl(assetId, "notice", `Return recorded. ${asset.asset_tag} is now ${newStatus}.`));
 }
