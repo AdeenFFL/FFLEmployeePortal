@@ -1000,7 +1000,7 @@ export type Database = {
       assets: {
         Row: Asset;
         Insert: Partial<Asset> &
-          Pick<Asset, "serial_number" | "asset_name" | "asset_type_id" | "company_id">;
+          Pick<Asset, "asset_tag" | "serial_number" | "asset_name" | "asset_type_id" | "company_id">;
         Update: Partial<Asset>;
         Relationships: [
           {

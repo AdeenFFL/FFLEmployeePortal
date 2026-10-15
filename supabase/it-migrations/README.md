@@ -106,3 +106,4 @@ explaining it's a confirmed no-op.
 | `talha/talha_it_0005_asset_maintenance.sql` | 2026-10-14 | Talha | Phase 4: repair and maintenance log. Not yet in the main sequence |
 | `talha/talha_it_0006_asset_values.sql` | 2026-10-14 | Talha | Phase 6: asset valuation and depreciation. Not yet in the main sequence |
 | `javaria/javaria_it_0004_ticket_asset_link.sql` | 2026-10-14 | Javaria | Ticket ↔ asset: soft-delete guard, device search and label helpers. Depends on `talha_it_0004` (owns the `tickets_linked_asset_id_fkey` FK). Not yet in the main sequence |
+| `talha/talha_it_0007_asset_tag_manual.sql` | 2026-10-14 | Talha | Decision 5: asset tags entered manually (drops the default, adds not-blank check and case-insensitive unique index). Not yet in the main sequence |

@@ -44,6 +44,17 @@ export function AssetForm({
       )}
 
       <div className="grid gap-4 md:grid-cols-2">
+        <div className="md:col-span-2">
+          <label className={labelClass}>Asset tag *</label>
+          {/* No enforced format (decision 5): the placeholder is only a hint. */}
+          <input
+            name="asset_tag"
+            required
+            defaultValue={asset?.asset_tag ?? ""}
+            placeholder="e.g. FFL-LAP-001"
+            className={inputClass}
+          />
+        </div>
         <div>
           <label className={labelClass}>Asset name *</label>
           <input
@@ -156,11 +167,7 @@ export function AssetForm({
         </div>
       </div>
 
-      {!asset && (
-        <p className="text-xs text-slate-500">
-          The asset tag is created automatically when you save. New assets start as Unassigned.
-        </p>
-      )}
+      {!asset && <p className="text-xs text-slate-500">New assets start as Unassigned.</p>}
 
       <div className="flex gap-3">
         <button
