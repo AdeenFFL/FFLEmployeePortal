@@ -18,6 +18,12 @@ export const SYSTEM_MANAGED_STATUSES: AssetStatus[] = ["In Use", "In Repair"];
 // What the "Change status" control on the asset detail page may set.
 export const MANUAL_STATUSES: AssetStatus[] = ["Unassigned", "Retired", "Disposed", "Lost"];
 
+// What a return may set the asset to. it.return_asset() also accepts "In Repair", but that would
+// leave the asset In Repair with no repair record to close it — repairs get their own form in
+// Phase 4.
+export const RETURN_STATUSES = ["Unassigned", "Retired"] as const;
+export type ReturnStatus = (typeof RETURN_STATUSES)[number];
+
 export const ASSET_STATUS_TONES: Record<
   AssetStatus,
   "positive" | "neutral" | "warning" | "negative" | "info"

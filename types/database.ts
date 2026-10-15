@@ -546,6 +546,29 @@ export type Asset = {
   deleted_at: string | null;
 };
 
+// it.asset_assignments (talha_it_0004). Written only through it.assign_asset / it.return_asset /
+// it.acknowledge_assignment — never inserted or updated directly.
+export type AssetAssignment = {
+  id: string;
+  asset_id: string;
+  person_id: string;
+  company_id: string;
+  site_id: string | null;
+  assigned_by_person_id: string;
+  returned_to_person_id: string | null;
+  assigned_date: string;
+  return_date: string | null;
+  assigned_condition: string | null;
+  returned_condition: string | null;
+  status: "Active" | "Returned";
+  remarks: string | null;
+  acknowledged_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -1012,6 +1035,20 @@ export type Database = {
           },
         ];
       };
+      asset_assignments: {
+        Row: AssetAssignment;
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "asset_assignments_asset_id_fkey";
+            columns: ["asset_id"];
+            isOneToOne: false;
+            referencedRelation: "assets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -1102,6 +1139,30 @@ export type Database = {
           asset_name: string;
           serial_number: string;
         }[];
+      };
+      assign_asset: {
+        Args: {
+          p_asset_id: string;
+          p_person_id: string;
+          p_condition?: string | null;
+          p_remarks?: string | null;
+          p_assigned_date?: string;
+        };
+        Returns: string;
+      };
+      return_asset: {
+        Args: {
+          p_assignment_id: string;
+          p_returned_condition?: string | null;
+          p_remarks?: string | null;
+          p_return_date?: string;
+          p_new_status?: "Unassigned" | "In Repair" | "Retired";
+        };
+        Returns: undefined;
+      };
+      acknowledge_assignment: {
+        Args: { p_assignment_id: string };
+        Returns: undefined;
       };
     };
   };

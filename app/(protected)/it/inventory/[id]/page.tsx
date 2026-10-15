@@ -15,11 +15,12 @@ import {
   secondaryButtonClass,
   StatusBadge,
 } from "../../_components/ticket-ui";
-import { changeAssetStatus, deleteAsset } from "../actions";
+import { changeAssetStatus, deleteAsset, returnAsset } from "../actions";
 import {
   ASSET_STATUS_TONES,
   formatDate,
   MANUAL_STATUSES,
+  RETURN_STATUSES,
   SYSTEM_MANAGED_STATUSES,
 } from "../asset-status";
 import { DeleteAssetButton } from "./delete-asset-button";
@@ -61,6 +62,7 @@ export default async function AssetDetailPage({
     canUpdate,
     canDelete,
     canReadTickets,
+    canAssign,
   ] = await Promise.all([
     supabase.from("companies").select("name").eq("id", asset.company_id).maybeSingle(),
     fetchOrgUnits(supabase),
@@ -68,7 +70,21 @@ export default async function AssetDetailPage({
     hasItPermission(supabase, "it.assets.update"),
     hasItPermission(supabase, "it.assets.delete"),
     hasItPermission(supabase, "it.tickets.read"),
+    hasItPermission(supabase, "it.assets.assign"),
   ]);
+
+  // The open assignment, for the Return panel. The holder's name arrives with Part 2 of Phase 3
+  // (it needs a people lookup inventory staff can use).
+  const { data: openAssignment } =
+    canAssign && asset.status === "In Use"
+      ? await supabase
+          .schema("it")
+          .from("asset_assignments")
+          .select("id, assigned_date, assigned_condition")
+          .eq("asset_id", asset.id)
+          .is("return_date", null)
+          .maybeSingle()
+      : { data: null };
 
   // Only shown to the IT queue: without it.tickets.read, RLS would return just the viewer's own
   // tickets, which would read as "this asset has no other tickets".
@@ -168,6 +184,55 @@ export default async function AssetDetailPage({
         </div>
 
         <div className="space-y-6">
+          {openAssignment && (
+            <Panel title="Return asset">
+              <p className="mb-3 text-sm text-slate-500">
+                Assigned since {formatDate(openAssignment.assigned_date)}
+                {openAssignment.assigned_condition
+                  ? ` (condition at handover: ${openAssignment.assigned_condition})`
+                  : ""}
+                .
+              </p>
+              <form action={returnAsset.bind(null, asset.id)} className="space-y-3">
+                <div>
+                  {/* Left empty = today, decided by the database (no server-timezone guess). */}
+                  <label className={labelClass}>Return date (leave empty for today)</label>
+                  <input
+                    type="date"
+                    name="return_date"
+                    min={openAssignment.assigned_date}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Condition on return</label>
+                  <input
+                    name="returned_condition"
+                    placeholder="e.g. Good, screen scratched"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Remarks</label>
+                  <input name="remarks" placeholder="Optional" className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>After the return, the asset is</label>
+                  <select name="new_status" defaultValue="Unassigned" className={inputClass}>
+                    {RETURN_STATUSES.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <button type="submit" className={primaryButtonClass}>
+                  Record return
+                </button>
+              </form>
+            </Panel>
+          )}
+
           {canUpdate && (
             <Panel title="Change status">
               {isSystemManaged ? (
