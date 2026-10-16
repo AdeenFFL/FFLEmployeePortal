@@ -4,7 +4,7 @@
 --              (08-it-service-management-plan.md §5 Phase 6, it-ticket-routing-plan addendum)
 -- Depends on:  javaria_it_0001_tickets.sql, javaria_it_0002_onboarding_offboarding.sql,
 --              javaria_it_0003_notifications.sql (functions replaced below)
--- Applied to live DB: NO
+-- Applied to live DB: YES (2026-10-16, by Javaria, via Supabase SQL Editor)
 --
 -- What this does
 --   * Each ticket gets a HANDLING SITE: the requester's own site (persons.site_id), or the HQ
