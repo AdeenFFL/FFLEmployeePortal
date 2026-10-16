@@ -20,16 +20,12 @@ import { AssetReturnForm } from "../_components/asset-return-form";
 import { changeAssetStatus, closeMaintenance, deleteAsset, openMaintenance } from "../actions";
 import {
   ASSET_STATUS_TONES,
+  formatCost,
   formatDate,
   MANUAL_STATUSES,
   SYSTEM_MANAGED_STATUSES,
 } from "../asset-status";
 import { DeleteAssetButton } from "./delete-asset-button";
-
-function formatCost(value: number | null) {
-  if (value === null) return "—";
-  return `PKR ${Number(value).toLocaleString("en-PK", { maximumFractionDigits: 2 })}`;
-}
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
