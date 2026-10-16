@@ -15,7 +15,7 @@ import {
   secondaryButtonClass,
   StatusBadge,
 } from "../../_components/ticket-ui";
-import { changeAssetStatus, deleteAsset, returnAsset } from "../actions";
+import { assignAsset, changeAssetStatus, deleteAsset, returnAsset } from "../actions";
 import {
   ASSET_STATUS_TONES,
   formatDate,
@@ -24,6 +24,7 @@ import {
   SYSTEM_MANAGED_STATUSES,
 } from "../asset-status";
 import { DeleteAssetButton } from "./delete-asset-button";
+import { PersonPicker } from "./person-picker";
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -34,8 +35,9 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-// INV-03 — one asset. Overview + linked tickets for now; the assignment, maintenance, movements,
-// valuation and origin sections arrive with Phases 3–7 (07-it-inventory-plan.md §4).
+// INV-03 — one asset. Overview, assignment history (+ assign / return panels) and linked tickets;
+// the maintenance, movements, valuation and origin sections arrive with Phases 4–7
+// (07-it-inventory-plan.md §4).
 export default async function AssetDetailPage({
   params,
   searchParams,
@@ -73,18 +75,38 @@ export default async function AssetDetailPage({
     hasItPermission(supabase, "it.assets.assign"),
   ]);
 
-  // The open assignment, for the Return panel. The holder's name arrives with Part 2 of Phase 3
-  // (it needs a people lookup inventory staff can use).
-  const { data: openAssignment } =
-    canAssign && asset.status === "In Use"
-      ? await supabase
-          .schema("it")
-          .from("asset_assignments")
-          .select("id, assigned_date, assigned_condition")
-          .eq("asset_id", asset.id)
-          .is("return_date", null)
-          .maybeSingle()
-      : { data: null };
+  // Assignment history, newest first (rows are never overwritten — a return only fills in the
+  // return columns). The open row, if any, feeds the Return panel.
+  const { data: assignmentRows, error: historyError } = await supabase
+    .schema("it")
+    .from("asset_assignments")
+    .select(
+      "id, person_id, assigned_by_person_id, returned_to_person_id, assigned_date, return_date, assigned_condition, returned_condition, acknowledged_at, remarks",
+    )
+    .eq("asset_id", asset.id)
+    .order("assigned_date", { ascending: false })
+    .order("created_at", { ascending: false });
+  const history = assignmentRows ?? [];
+  const openAssignment = history.find((a) => a.return_date === null) ?? null;
+
+  // Names via it.asset_person_names (talha_it_0008): any it.assets.read holder, and it has no
+  // active filter, so people who have since left still show by name.
+  const { data: historyPeople } = history.length
+    ? await supabase.schema("it").rpc("asset_person_names", {
+        p_person_ids: [
+          ...new Set(
+            history
+              .flatMap((a) => [a.person_id, a.assigned_by_person_id, a.returned_to_person_id])
+              .filter((pid): pid is string => Boolean(pid)),
+          ),
+        ],
+      })
+    : { data: null };
+  const nameOf = (pid: string | null) =>
+    (pid && historyPeople?.find((p) => p.person_id === pid)?.full_name) || "—";
+
+  const showAssign = canAssign && asset.status === "Unassigned";
+  const showReturn = canAssign && asset.status === "In Use" && openAssignment !== null;
 
   // Only shown to the IT queue: without it.tickets.read, RLS would return just the viewer's own
   // tickets, which would read as "this asset has no other tickets".
@@ -162,6 +184,66 @@ export default async function AssetDetailPage({
             )}
           </Panel>
 
+          <Panel title="Assignment history">
+            {historyError ? (
+              <p className="text-sm text-red-600">
+                Couldn&apos;t load the assignment history: {historyError.message}
+              </p>
+            ) : history.length === 0 ? (
+              <p className="text-sm text-slate-400">This asset has never been assigned.</p>
+            ) : (
+              <div className="-mx-5 overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-5 py-2">Holder</th>
+                      <th className="px-3 py-2">Assigned</th>
+                      <th className="px-3 py-2">Returned</th>
+                      <th className="px-3 py-2">Condition</th>
+                      <th className="px-3 py-2">Acknowledged</th>
+                      <th className="px-5 py-2">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 align-top">
+                    {history.map((a) => (
+                      <tr key={a.id}>
+                        <td className="px-5 py-2 font-medium text-slate-900">{nameOf(a.person_id)}</td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {formatDate(a.assigned_date)}
+                          <span className="block text-xs text-slate-500">
+                            by {nameOf(a.assigned_by_person_id)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {a.return_date ? (
+                            <>
+                              {formatDate(a.return_date)}
+                              <span className="block text-xs text-slate-500">
+                                to {nameOf(a.returned_to_person_id)}
+                              </span>
+                            </>
+                          ) : (
+                            <StatusPill label="Current" tone="positive" />
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-700">
+                          <span className="block">Out: {a.assigned_condition ?? "—"}</span>
+                          {a.return_date && (
+                            <span className="block">Back: {a.returned_condition ?? "—"}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {a.acknowledged_at ? formatDateTime(a.acknowledged_at) : "—"}
+                        </td>
+                        <td className="px-5 py-2 text-slate-700">{a.remarks ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
           {canReadTickets && (
             <Panel title="Linked tickets">
               {(tickets ?? []).length === 0 ? (
@@ -184,10 +266,44 @@ export default async function AssetDetailPage({
         </div>
 
         <div className="space-y-6">
-          {openAssignment && (
+          {showAssign && (
+            <Panel title="Assign asset">
+              <form action={assignAsset.bind(null, asset.id)} className="space-y-3">
+                <div>
+                  <label className={labelClass}>Employee *</label>
+                  <PersonPicker name="person_id" />
+                </div>
+                <div>
+                  {/* Left empty = today, decided by the database (no server-timezone guess). */}
+                  <label className={labelClass}>Assigned date (leave empty for today)</label>
+                  <input type="date" name="assigned_date" className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Condition at handover</label>
+                  <input
+                    name="condition"
+                    defaultValue={asset.condition ?? ""}
+                    placeholder="e.g. New, Good"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Remarks</label>
+                  <input name="remarks" placeholder="Optional" className={inputClass} />
+                </div>
+                <button type="submit" className={primaryButtonClass}>
+                  Assign asset
+                </button>
+              </form>
+            </Panel>
+          )}
+
+          {showReturn && openAssignment && (
             <Panel title="Return asset">
               <p className="mb-3 text-sm text-slate-500">
-                Assigned since {formatDate(openAssignment.assigned_date)}
+                Held by{" "}
+                <span className="font-medium text-slate-900">{nameOf(openAssignment.person_id)}</span>{" "}
+                since {formatDate(openAssignment.assigned_date)}
                 {openAssignment.assigned_condition
                   ? ` (condition at handover: ${openAssignment.assigned_condition})`
                   : ""}

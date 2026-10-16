@@ -369,3 +369,85 @@ export async function returnAsset(assetId: string, formData: FormData) {
   revalidatePath("/it/my-assets");
   redirect(detailUrl(assetId, "notice", `Return recorded. ${asset.asset_tag} is now ${newStatus}.`));
 }
+
+// Employee picker on the Assign panel. it.search_people (talha_it_0008) returns active employees
+// only, returns nothing for fewer than 2 letters, and refuses callers without it.assets.assign.
+export type PersonOption = {
+  person_id: string;
+  full_name: string;
+  designation: string | null;
+  employee_code: string | null;
+};
+
+export async function searchPeople(query: string): Promise<PersonOption[]> {
+  const { supabase } = await requirePermission("it.assets.assign");
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const { data, error } = await supabase
+    .schema("it")
+    .rpc("search_people", { p_query: q, p_limit: 20 });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+// The latest date an assignment may carry. The server runs on UTC, which can be hours behind
+// local time, so "today" for the user may already be tomorrow for the server — allow one day of
+// slack and only refuse dates beyond that.
+function latestAllowedAssignedDate() {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// INV-04 — give an Unassigned asset to an employee. Goes through it.assign_asset(), which locks
+// the asset, refuses anything not Unassigned, writes the assignment row and sets the asset
+// In Use in one transaction. Also meant for Javaria's onboarding "Asset Allocation" task.
+export async function assignAsset(assetId: string, formData: FormData) {
+  const { supabase, personId, actorLabel } = await requirePermission("it.assets.assign");
+
+  const holderId = text(formData, "person_id");
+  const assignedDate = optionalText(formData, "assigned_date");
+  const condition = optionalText(formData, "condition");
+  const remarks = optionalText(formData, "remarks");
+  if (!holderId) redirect(detailUrl(assetId, "error", "Choose the employee to assign this asset to."));
+  if (assignedDate && assignedDate > latestAllowedAssignedDate()) {
+    redirect(detailUrl(assetId, "error", "The assigned date can't be in the future."));
+  }
+
+  const [{ data: asset }, { data: names }] = await Promise.all([
+    supabase
+      .schema("it")
+      .from("assets")
+      .select("asset_tag")
+      .eq("id", assetId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    supabase.schema("it").rpc("asset_person_names", { p_person_ids: [holderId] }),
+  ]);
+  if (!asset) redirect(detailUrl(assetId, "error", "This asset no longer exists."));
+  const holderName = names?.[0]?.full_name ?? "the selected employee";
+
+  const { error } = await supabase.schema("it").rpc("assign_asset", {
+    p_asset_id: assetId,
+    p_person_id: holderId,
+    p_condition: condition,
+    p_remarks: remarks,
+    ...(assignedDate ? { p_assigned_date: assignedDate } : {}),
+  });
+  if (error) redirect(detailUrl(assetId, "error", error.message));
+
+  await logAuditEvent({
+    supabase,
+    actorId: personId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details: `Assigned asset ${asset.asset_tag} to ${holderName}`,
+  });
+
+  revalidatePath("/it/inventory");
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/my-assets");
+  redirect(detailUrl(assetId, "notice", `Assigned to ${holderName}.`));
+}

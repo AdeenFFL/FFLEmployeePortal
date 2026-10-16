@@ -569,6 +569,45 @@ export type AssetAssignment = {
   updated_by: string | null;
 };
 
+// it.asset_maintenance (talha_it_0005). Read-only for the app: written only through
+// it.open_maintenance / it.close_maintenance (Phase 4).
+export type AssetMaintenance = {
+  id: string;
+  asset_id: string;
+  company_id: string;
+  site_id: string | null;
+  vendor_id: string | null;
+  issue_type: string;
+  description: string | null;
+  service_date: string;
+  cost: number;
+  status: "Open" | "Completed";
+  resolution: string | null;
+  returned_date: string | null;
+  remarks: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+// it.asset_values (talha_it_0006).
+export type AssetValue = {
+  id: string;
+  asset_id: string;
+  value_type_id: string;
+  purchase_value: number;
+  current_value: number;
+  accumulated_depreciation: number;
+  salvage_value: number;
+  valuation_date: string;
+  remarks: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
 export type Database = {
   public: {
     Tables: {
@@ -1049,6 +1088,42 @@ export type Database = {
           },
         ];
       };
+      asset_maintenance: {
+        Row: AssetMaintenance;
+        Insert: never;
+        Update: never;
+        Relationships: [
+          {
+            foreignKeyName: "asset_maintenance_asset_id_fkey";
+            columns: ["asset_id"];
+            isOneToOne: false;
+            referencedRelation: "assets";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      asset_values: {
+        Row: AssetValue;
+        Insert: Partial<AssetValue> &
+          Pick<AssetValue, "asset_id" | "value_type_id" | "purchase_value" | "current_value">;
+        Update: Partial<AssetValue>;
+        Relationships: [
+          {
+            foreignKeyName: "asset_values_asset_id_fkey";
+            columns: ["asset_id"];
+            isOneToOne: false;
+            referencedRelation: "assets";
+            referencedColumns: ["id"];
+          },
+          {
+            foreignKeyName: "asset_values_value_type_id_fkey";
+            columns: ["value_type_id"];
+            isOneToOne: false;
+            referencedRelation: "asset_value_types";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -1163,6 +1238,24 @@ export type Database = {
       acknowledge_assignment: {
         Args: { p_assignment_id: string };
         Returns: undefined;
+      };
+      search_people: {
+        Args: { p_query: string; p_limit?: number };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          designation: string | null;
+          employee_code: string | null;
+        }[];
+      };
+      asset_person_names: {
+        Args: { p_person_ids: string[] };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          designation: string | null;
+          employee_code: string | null;
+        }[];
       };
     };
   };
