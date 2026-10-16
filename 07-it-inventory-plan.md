@@ -73,7 +73,8 @@ Added in `talha_it_0004` (live 2026-10-14): `tickets.linked_asset_id → it.asse
 | INV-03 `/it/inventory/[id]` | Built: Overview, Assignment history (+ Assign / Return), Maintenance (+ Send for repair / Close repair), Linked tickets, Change status, soft Delete. Still waiting: Movements (Phase 5), Valuation (Phase 6), and the vendor link / Origin section (Phase 7) |
 | INV-04 assign / return | Built: panels on INV-03, also exported as `<AssetAssignForm>` / `<AssetReturnForm>` for Javeria's on/offboarding pages |
 | INV-05 `/it/my-assets` | Built (open assignments, Model column, Acknowledge) |
-| INV-06 – INV-08, `<InventoryKpis>` | Not built |
+| INV-06 `/it/inventory/maintenance` | Built: Repair Log across all assets (filters: status, asset tag, sent-date range; max 500 rows). Read-only — repairs start and close on INV-03 |
+| INV-07 – INV-08, `<InventoryKpis>` | Not built |
 
 ---
 
@@ -218,7 +219,7 @@ the additional screens the BRD's process sections imply.
 | INV-03 | `/it/inventory/[id]` | IT | Asset detail with tabs: Overview · Assignment history · Maintenance · Valuation · Movements · Linked tickets (read-only from Javeria's `it.tickets`) · Origin (receipt/demand, read-only from Javeria's procurement tables) |
 | INV-04 | modal on INV-03 (+ embeddable) | IT | Asset Assignment Form and Asset Return Form (BRD fields) |
 | INV-05 | `/it/my-assets` | Every employee | Assets currently assigned to me; acknowledge handover |
-| INV-06 | `/it/inventory/maintenance` | IT | Repair & maintenance log across all assets, plus "send for repair" / "returned from repair" |
+| INV-06 | `/it/inventory/maintenance` | IT | Repair Log: read-only list of repairs across all assets (filters: status, asset tag, sent-date range). Repairs are started ("send for repair") and closed on the asset page (INV-03) |
 | INV-07 | `/it/inventory/stock` | IT | Consumable stock levels per site; Stock In / Stock Out form; movement history |
 | INV-08 | `/it/inventory/reports` | IT mgmt | Inventory status, utilisation, warranty expiry, maintenance cost; CSV export |
 | SCR-06 (part) | `/it/dashboard` | IT | Inventory KPI cards + asset-status breakdown (component inside Javeria's page) |
@@ -313,7 +314,8 @@ assigned to its holder while in repair) and a Close repair panel (resolution, co
 date; the asset goes back to In Use or Unassigned), plus the Maintenance section listing the
 asset's repair history. Changes go only through `it.open_maintenance` / `it.close_maintenance`
 via the `openMaintenance` / `closeMaintenance` Server Actions. `vendor_id` stays empty until
-Phase 7. **Still to do:** INV-06, the repair-log page across all assets.
+Phase 7. INV-06, the Repair Log across all assets (`/it/inventory/maintenance`, `it.assets.read`),
+is built too: read-only, with status / asset tag / sent-date filters.
 **Migration** `talha_it_0005_asset_maintenance.sql`. Opening a maintenance record sets the asset
 `In Repair`; closing it restores the previous status. `vendor_id` FK to `it.vendors` if
 Javeria's vendors migration is already applied, otherwise added in the linking migration.
