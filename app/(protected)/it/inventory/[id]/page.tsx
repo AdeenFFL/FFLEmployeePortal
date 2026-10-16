@@ -17,7 +17,7 @@ import {
 } from "../../_components/ticket-ui";
 import { AssetAssignForm } from "../_components/asset-assign-form";
 import { AssetReturnForm } from "../_components/asset-return-form";
-import { changeAssetStatus, deleteAsset } from "../actions";
+import { changeAssetStatus, closeMaintenance, deleteAsset, openMaintenance } from "../actions";
 import {
   ASSET_STATUS_TONES,
   formatDate,
@@ -25,6 +25,11 @@ import {
   SYSTEM_MANAGED_STATUSES,
 } from "../asset-status";
 import { DeleteAssetButton } from "./delete-asset-button";
+
+function formatCost(value: number | null) {
+  if (value === null) return "—";
+  return `PKR ${Number(value).toLocaleString("en-PK", { maximumFractionDigits: 2 })}`;
+}
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -35,9 +40,9 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-// INV-03 — one asset. Overview, assignment history (+ assign / return panels) and linked tickets;
-// the maintenance, movements, valuation and origin sections arrive with Phases 4–7
-// (07-it-inventory-plan.md §4).
+// INV-03 — one asset. Overview, assignment history (+ assign / return panels), maintenance
+// (+ send for repair / close repair panels) and linked tickets; the movements, valuation and
+// origin sections arrive with Phases 5–7 (07-it-inventory-plan.md §4).
 export default async function AssetDetailPage({
   params,
   searchParams,
@@ -65,6 +70,8 @@ export default async function AssetDetailPage({
     canDelete,
     canReadTickets,
     canAssign,
+    canMaintain,
+    { data: maintenanceRows, error: maintenanceError },
   ] = await Promise.all([
     supabase.from("companies").select("name").eq("id", asset.company_id).maybeSingle(),
     fetchOrgUnits(supabase),
@@ -73,7 +80,19 @@ export default async function AssetDetailPage({
     hasItPermission(supabase, "it.assets.delete"),
     hasItPermission(supabase, "it.tickets.read"),
     hasItPermission(supabase, "it.assets.assign"),
+    hasItPermission(supabase, "it.maintenance.update"),
+    // Repair history (talha_it_0005), newest first. Read-only here: changes go through
+    // it.open_maintenance / it.close_maintenance.
+    supabase
+      .schema("it")
+      .from("asset_maintenance")
+      .select("id, issue_type, description, service_date, returned_date, status, resolution, cost, remarks")
+      .eq("asset_id", id)
+      .order("service_date", { ascending: false })
+      .order("created_at", { ascending: false }),
   ]);
+  const repairs = maintenanceRows ?? [];
+  const openRepair = repairs.find((r) => r.status === "Open") ?? null;
 
   // Assignment history, newest first (rows are never overwritten — a return only fills in the
   // return columns). The open row, if any, feeds the Return panel.
@@ -107,6 +126,9 @@ export default async function AssetDetailPage({
 
   const showAssign = canAssign && asset.status === "Unassigned";
   const showReturn = canAssign && asset.status === "In Use" && openAssignment !== null;
+  // it.open_maintenance refuses Retired / Disposed / Lost and already-In-Repair assets.
+  const showSendForRepair = canMaintain && (asset.status === "Unassigned" || asset.status === "In Use");
+  const showCloseRepair = canMaintain && asset.status === "In Repair";
 
   // Only shown to the IT queue: without it.tickets.read, RLS would return just the viewer's own
   // tickets, which would read as "this asset has no other tickets".
@@ -244,6 +266,56 @@ export default async function AssetDetailPage({
             )}
           </Panel>
 
+          <Panel title="Maintenance">
+            {maintenanceError ? (
+              <p className="text-sm text-red-600">
+                Couldn&apos;t load the repair history: {maintenanceError.message}
+              </p>
+            ) : repairs.length === 0 ? (
+              <p className="text-sm text-slate-400">No repairs recorded.</p>
+            ) : (
+              <div className="-mx-5 overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-5 py-2">Issue</th>
+                      <th className="px-3 py-2">Sent</th>
+                      <th className="px-3 py-2">Returned</th>
+                      <th className="px-3 py-2">Resolution</th>
+                      <th className="px-3 py-2">Cost</th>
+                      <th className="px-5 py-2">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 align-top">
+                    {repairs.map((r) => (
+                      <tr key={r.id}>
+                        <td className="px-5 py-2 text-slate-900">
+                          <span className="font-medium">{r.issue_type}</span>
+                          {r.description && (
+                            <span className="block text-xs text-slate-500">{r.description}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">{formatDate(r.service_date)}</td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {r.status === "Open" ? (
+                            <StatusPill label="Open" tone="warning" />
+                          ) : (
+                            formatDate(r.returned_date)
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">{r.resolution ?? "—"}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+                          {r.status === "Open" ? "—" : formatCost(r.cost)}
+                        </td>
+                        <td className="px-5 py-2 text-slate-700">{r.remarks ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
           {canReadTickets && (
             <Panel title="Linked tickets">
               {(tickets ?? []).length === 0 ? (
@@ -280,6 +352,100 @@ export default async function AssetDetailPage({
                 assignedCondition={openAssignment.assigned_condition}
                 holderName={nameOf(openAssignment.person_id)}
               />
+            </Panel>
+          )}
+
+          {showSendForRepair && (
+            <Panel title="Send for repair">
+              {asset.status === "In Use" && openAssignment && (
+                <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  This asset is held by {nameOf(openAssignment.person_id)}. It stays assigned to them
+                  while in repair and returns to In Use when you close the repair.
+                </p>
+              )}
+              <form action={openMaintenance.bind(null, asset.id)} className="space-y-3">
+                <div>
+                  <label className={labelClass}>Issue type *</label>
+                  <input
+                    name="issue_type"
+                    required
+                    placeholder="e.g. Screen, Battery, Keyboard"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Description</label>
+                  <textarea name="description" rows={2} placeholder="Optional" className={inputClass} />
+                </div>
+                <div>
+                  {/* Left empty = today, decided by the database (no server-timezone guess). */}
+                  <label className={labelClass}>Service date (leave empty for today)</label>
+                  <input type="date" name="service_date" className={inputClass} />
+                </div>
+                <button type="submit" className={primaryButtonClass}>
+                  Send for repair
+                </button>
+              </form>
+            </Panel>
+          )}
+
+          {showCloseRepair && (
+            <Panel title="Close repair">
+              {openRepair ? (
+                <>
+                  <p className="mb-3 text-sm text-slate-500">
+                    In repair since {formatDate(openRepair.service_date)}:{" "}
+                    <span className="font-medium text-slate-900">{openRepair.issue_type}</span>.
+                  </p>
+                  <form
+                    action={closeMaintenance.bind(null, asset.id, openRepair.id)}
+                    className="space-y-3"
+                  >
+                    <div>
+                      <label className={labelClass}>Resolution *</label>
+                      <textarea
+                        name="resolution"
+                        required
+                        rows={2}
+                        placeholder="e.g. Battery replaced"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Cost (PKR)</label>
+                      <input
+                        type="number"
+                        name="cost"
+                        min="0"
+                        step="0.01"
+                        placeholder="Optional"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Returned date (leave empty for today)</label>
+                      <input
+                        type="date"
+                        name="returned_date"
+                        min={openRepair.service_date}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Remarks</label>
+                      <input name="remarks" placeholder="Optional" className={inputClass} />
+                    </div>
+                    <button type="submit" className={primaryButtonClass}>
+                      Close repair
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  This asset is In Repair but has no open repair record, so it can&apos;t be closed
+                  here. Ask an administrator to correct the record in the database.
+                </p>
+              )}
             </Panel>
           )}
 

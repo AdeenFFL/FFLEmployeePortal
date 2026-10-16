@@ -405,10 +405,10 @@ export async function searchPeople(query: string): Promise<PersonOption[]> {
   return data ?? [];
 }
 
-// The latest date an assignment may carry. The server runs on UTC, which can be hours behind
-// local time, so "today" for the user may already be tomorrow for the server — allow one day of
-// slack and only refuse dates beyond that.
-function latestAllowedAssignedDate() {
+// The latest date a form (assign, send for repair, close repair) may carry. The server runs on UTC,
+// which can be hours behind local time, so "today" for the user may already be tomorrow for the
+// server — allow one day of slack and only refuse dates beyond that.
+function latestAllowedDate() {
   const d = new Date();
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
@@ -425,7 +425,7 @@ export async function assignAsset(assetId: string, formData: FormData) {
   const condition = optionalText(formData, "condition");
   const remarks = optionalText(formData, "remarks");
   if (!holderId) redirect(resultUrl(formData, assetId, "error", "Choose the employee to assign this asset to."));
-  if (assignedDate && assignedDate > latestAllowedAssignedDate()) {
+  if (assignedDate && assignedDate > latestAllowedDate()) {
     redirect(resultUrl(formData, assetId, "error", "The assigned date can't be in the future."));
   }
 
@@ -465,4 +465,119 @@ export async function assignAsset(assetId: string, formData: FormData) {
   revalidatePath("/it/my-assets");
   revalidatePath(returnPath(formData, assetId));
   redirect(resultUrl(formData, assetId, "notice", `Assigned to ${holderName}.`));
+}
+
+// INV-06 / Phase 4 — send an asset for repair. it.open_maintenance() (talha_it_0005) refuses
+// Retired / Disposed / Lost and already-In-Repair assets, and sets the asset In Repair. Blank
+// optional fields are left OUT of the call so the database defaults apply (never sent as "").
+export async function openMaintenance(assetId: string, formData: FormData) {
+  const { supabase, personId, actorLabel } = await requirePermission("it.maintenance.update");
+
+  const issueType = text(formData, "issue_type");
+  const description = text(formData, "description");
+  const serviceDate = text(formData, "service_date");
+  if (!issueType) redirect(detailUrl(assetId, "error", "Enter the issue type."));
+  if (serviceDate && serviceDate > latestAllowedDate()) {
+    redirect(detailUrl(assetId, "error", "The service date can't be in the future."));
+  }
+
+  const { data: asset } = await supabase
+    .schema("it")
+    .from("assets")
+    .select("asset_tag")
+    .eq("id", assetId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!asset) redirect(detailUrl(assetId, "error", "This asset no longer exists."));
+
+  const { error } = await supabase.schema("it").rpc("open_maintenance", {
+    p_asset_id: assetId,
+    p_issue_type: issueType,
+    ...(description ? { p_description: description } : {}),
+    ...(serviceDate ? { p_service_date: serviceDate } : {}),
+  });
+  if (error) redirect(detailUrl(assetId, "error", error.message));
+
+  await logAuditEvent({
+    supabase,
+    actorId: personId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details: `Sent asset ${asset.asset_tag} for repair: ${issueType}`,
+  });
+
+  revalidatePath("/it/inventory");
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/my-assets");
+  redirect(detailUrl(assetId, "notice", `${asset.asset_tag} sent for repair.`));
+}
+
+// Phase 4 — repair finished. it.close_maintenance() completes the record and puts the asset back
+// to In Use (someone still holds it) or Unassigned. An empty returned date must be OMITTED, not
+// sent as null: null would mark the record Completed with no date, which its check refuses.
+export async function closeMaintenance(assetId: string, maintenanceId: string, formData: FormData) {
+  const { supabase, personId, actorLabel } = await requirePermission("it.maintenance.update");
+
+  const resolution = text(formData, "resolution");
+  const costText = text(formData, "cost");
+  const returnedDate = text(formData, "returned_date");
+  const remarks = text(formData, "remarks");
+  if (!resolution) redirect(detailUrl(assetId, "error", "Describe how the repair was resolved."));
+
+  const cost = costText ? Number(costText) : null;
+  if (cost !== null && (!Number.isFinite(cost) || cost < 0)) {
+    redirect(detailUrl(assetId, "error", "Cost must be a number of 0 or more."));
+  }
+  if (returnedDate && returnedDate > latestAllowedDate()) {
+    redirect(detailUrl(assetId, "error", "The returned date can't be in the future."));
+  }
+
+  const [{ data: asset }, { data: record }] = await Promise.all([
+    supabase
+      .schema("it")
+      .from("assets")
+      .select("asset_tag")
+      .eq("id", assetId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    supabase
+      .schema("it")
+      .from("asset_maintenance")
+      .select("service_date, status")
+      .eq("id", maintenanceId)
+      .eq("asset_id", assetId)
+      .maybeSingle(),
+  ]);
+  if (!asset) redirect(detailUrl(assetId, "error", "This asset no longer exists."));
+  if (!record) redirect(detailUrl(assetId, "error", "Repair record not found."));
+  if (record.status !== "Open") redirect(detailUrl(assetId, "error", "This repair is already closed."));
+  if (returnedDate && returnedDate < record.service_date) {
+    redirect(detailUrl(assetId, "error", "The returned date can't be before the date it was sent."));
+  }
+
+  const { error } = await supabase.schema("it").rpc("close_maintenance", {
+    p_maintenance_id: maintenanceId,
+    p_resolution: resolution,
+    ...(cost !== null ? { p_cost: cost } : {}),
+    ...(returnedDate ? { p_returned_date: returnedDate } : {}),
+    ...(remarks ? { p_remarks: remarks } : {}),
+  });
+  if (error) redirect(detailUrl(assetId, "error", error.message));
+
+  await logAuditEvent({
+    supabase,
+    actorId: personId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details:
+      `Closed repair on asset ${asset.asset_tag}: ${resolution}` +
+      (cost !== null ? ` (cost ${cost})` : ""),
+  });
+
+  revalidatePath("/it/inventory");
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/my-assets");
+  redirect(detailUrl(assetId, "notice", `Repair closed on ${asset.asset_tag}.`));
 }

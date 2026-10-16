@@ -1257,6 +1257,25 @@ export type Database = {
           employee_code: string | null;
         }[];
       };
+      open_maintenance: {
+        Args: {
+          p_asset_id: string;
+          p_issue_type: string;
+          p_description?: string;
+          p_service_date?: string;
+        };
+        Returns: string;
+      };
+      close_maintenance: {
+        Args: {
+          p_maintenance_id: string;
+          p_resolution: string;
+          p_cost?: number;
+          p_returned_date?: string;
+          p_remarks?: string;
+        };
+        Returns: undefined;
+      };
     };
   };
 };
