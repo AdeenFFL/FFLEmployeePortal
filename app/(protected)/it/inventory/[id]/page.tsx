@@ -15,16 +15,16 @@ import {
   secondaryButtonClass,
   StatusBadge,
 } from "../../_components/ticket-ui";
-import { assignAsset, changeAssetStatus, deleteAsset, returnAsset } from "../actions";
+import { AssetAssignForm } from "../_components/asset-assign-form";
+import { AssetReturnForm } from "../_components/asset-return-form";
+import { changeAssetStatus, deleteAsset } from "../actions";
 import {
   ASSET_STATUS_TONES,
   formatDate,
   MANUAL_STATUSES,
-  RETURN_STATUSES,
   SYSTEM_MANAGED_STATUSES,
 } from "../asset-status";
 import { DeleteAssetButton } from "./delete-asset-button";
-import { PersonPicker } from "./person-picker";
 
 function Panel({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -268,84 +268,18 @@ export default async function AssetDetailPage({
         <div className="space-y-6">
           {showAssign && (
             <Panel title="Assign asset">
-              <form action={assignAsset.bind(null, asset.id)} className="space-y-3">
-                <div>
-                  <label className={labelClass}>Employee *</label>
-                  <PersonPicker name="person_id" />
-                </div>
-                <div>
-                  {/* Left empty = today, decided by the database (no server-timezone guess). */}
-                  <label className={labelClass}>Assigned date (leave empty for today)</label>
-                  <input type="date" name="assigned_date" className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>Condition at handover</label>
-                  <input
-                    name="condition"
-                    defaultValue={asset.condition ?? ""}
-                    placeholder="e.g. New, Good"
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Remarks</label>
-                  <input name="remarks" placeholder="Optional" className={inputClass} />
-                </div>
-                <button type="submit" className={primaryButtonClass}>
-                  Assign asset
-                </button>
-              </form>
+              <AssetAssignForm assetId={asset.id} defaultCondition={asset.condition} />
             </Panel>
           )}
 
           {showReturn && openAssignment && (
             <Panel title="Return asset">
-              <p className="mb-3 text-sm text-slate-500">
-                Held by{" "}
-                <span className="font-medium text-slate-900">{nameOf(openAssignment.person_id)}</span>{" "}
-                since {formatDate(openAssignment.assigned_date)}
-                {openAssignment.assigned_condition
-                  ? ` (condition at handover: ${openAssignment.assigned_condition})`
-                  : ""}
-                .
-              </p>
-              <form action={returnAsset.bind(null, asset.id)} className="space-y-3">
-                <div>
-                  {/* Left empty = today, decided by the database (no server-timezone guess). */}
-                  <label className={labelClass}>Return date (leave empty for today)</label>
-                  <input
-                    type="date"
-                    name="return_date"
-                    min={openAssignment.assigned_date}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Condition on return</label>
-                  <input
-                    name="returned_condition"
-                    placeholder="e.g. Good, screen scratched"
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Remarks</label>
-                  <input name="remarks" placeholder="Optional" className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>After the return, the asset is</label>
-                  <select name="new_status" defaultValue="Unassigned" className={inputClass}>
-                    {RETURN_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-                <button type="submit" className={primaryButtonClass}>
-                  Record return
-                </button>
-              </form>
+              <AssetReturnForm
+                assetId={asset.id}
+                assignedDate={openAssignment.assigned_date}
+                assignedCondition={openAssignment.assigned_condition}
+                holderName={nameOf(openAssignment.person_id)}
+              />
             </Panel>
           )}
 

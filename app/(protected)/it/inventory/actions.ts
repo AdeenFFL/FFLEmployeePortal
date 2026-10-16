@@ -209,6 +209,19 @@ function detailUrl(assetId: string, kind: "notice" | "error", message: string) {
   return `/it/inventory/${assetId}?${kind}=${encodeURIComponent(message)}`;
 }
 
+// The page an assign / return form came from. <AssetAssignForm> / <AssetReturnForm> post a
+// `return_to` path so they can be embedded on other IT pages (e.g. Javaria's on/offboarding).
+// Only plain paths under /it/ are accepted — never another site — else the asset detail page.
+function returnPath(formData: FormData, assetId: string) {
+  const path = text(formData, "return_to");
+  const safe = /^\/it\/[A-Za-z0-9\-_/]*$/.test(path) && !path.includes("//");
+  return safe ? path : `/it/inventory/${assetId}`;
+}
+
+function resultUrl(formData: FormData, assetId: string, kind: "notice" | "error", message: string) {
+  return `${returnPath(formData, assetId)}?${kind}=${encodeURIComponent(message)}`;
+}
+
 // Manual status changes only (Retired / Disposed / Lost / back to Unassigned). "In Use" and
 // "In Repair" belong to the assignment (Phase 3) and maintenance (Phase 4) flows, so an asset
 // in either can't be moved by hand — that would leave an open assignment or repair behind.
@@ -319,7 +332,7 @@ export async function returnAsset(assetId: string, formData: FormData) {
   const returnedCondition = optionalText(formData, "returned_condition");
   const remarks = optionalText(formData, "remarks");
   if (!RETURN_STATUSES.includes(newStatus)) {
-    redirect(detailUrl(assetId, "error", "Choose what happens to the asset after the return."));
+    redirect(resultUrl(formData, assetId, "error", "Choose what happens to the asset after the return."));
   }
 
   const [{ data: asset }, { data: assignment }] = await Promise.all([
@@ -338,10 +351,10 @@ export async function returnAsset(assetId: string, formData: FormData) {
       .is("return_date", null)
       .maybeSingle(),
   ]);
-  if (!asset) redirect(detailUrl(assetId, "error", "This asset no longer exists."));
-  if (!assignment) redirect(detailUrl(assetId, "error", "This asset isn't currently assigned."));
+  if (!asset) redirect(resultUrl(formData, assetId, "error", "This asset no longer exists."));
+  if (!assignment) redirect(resultUrl(formData, assetId, "error", "This asset isn't currently assigned."));
   if (returnDate && returnDate < assignment.assigned_date) {
-    redirect(detailUrl(assetId, "error", "The return date can't be before the date it was assigned."));
+    redirect(resultUrl(formData, assetId, "error", "The return date can't be before the date it was assigned."));
   }
 
   const { error } = await supabase.schema("it").rpc("return_asset", {
@@ -351,7 +364,7 @@ export async function returnAsset(assetId: string, formData: FormData) {
     p_new_status: newStatus,
     ...(returnDate ? { p_return_date: returnDate } : {}),
   });
-  if (error) redirect(detailUrl(assetId, "error", error.message));
+  if (error) redirect(resultUrl(formData, assetId, "error", error.message));
 
   await logAuditEvent({
     supabase,
@@ -367,7 +380,8 @@ export async function returnAsset(assetId: string, formData: FormData) {
   revalidatePath("/it/inventory");
   revalidatePath(`/it/inventory/${assetId}`);
   revalidatePath("/it/my-assets");
-  redirect(detailUrl(assetId, "notice", `Return recorded. ${asset.asset_tag} is now ${newStatus}.`));
+  revalidatePath(returnPath(formData, assetId));
+  redirect(resultUrl(formData, assetId, "notice", `Return recorded. ${asset.asset_tag} is now ${newStatus}.`));
 }
 
 // Employee picker on the Assign panel. it.search_people (talha_it_0008) returns active employees
@@ -410,9 +424,9 @@ export async function assignAsset(assetId: string, formData: FormData) {
   const assignedDate = optionalText(formData, "assigned_date");
   const condition = optionalText(formData, "condition");
   const remarks = optionalText(formData, "remarks");
-  if (!holderId) redirect(detailUrl(assetId, "error", "Choose the employee to assign this asset to."));
+  if (!holderId) redirect(resultUrl(formData, assetId, "error", "Choose the employee to assign this asset to."));
   if (assignedDate && assignedDate > latestAllowedAssignedDate()) {
-    redirect(detailUrl(assetId, "error", "The assigned date can't be in the future."));
+    redirect(resultUrl(formData, assetId, "error", "The assigned date can't be in the future."));
   }
 
   const [{ data: asset }, { data: names }] = await Promise.all([
@@ -425,7 +439,7 @@ export async function assignAsset(assetId: string, formData: FormData) {
       .maybeSingle(),
     supabase.schema("it").rpc("asset_person_names", { p_person_ids: [holderId] }),
   ]);
-  if (!asset) redirect(detailUrl(assetId, "error", "This asset no longer exists."));
+  if (!asset) redirect(resultUrl(formData, assetId, "error", "This asset no longer exists."));
   const holderName = names?.[0]?.full_name ?? "the selected employee";
 
   const { error } = await supabase.schema("it").rpc("assign_asset", {
@@ -435,7 +449,7 @@ export async function assignAsset(assetId: string, formData: FormData) {
     p_remarks: remarks,
     ...(assignedDate ? { p_assigned_date: assignedDate } : {}),
   });
-  if (error) redirect(detailUrl(assetId, "error", error.message));
+  if (error) redirect(resultUrl(formData, assetId, "error", error.message));
 
   await logAuditEvent({
     supabase,
@@ -449,5 +463,6 @@ export async function assignAsset(assetId: string, formData: FormData) {
   revalidatePath("/it/inventory");
   revalidatePath(`/it/inventory/${assetId}`);
   revalidatePath("/it/my-assets");
-  redirect(detailUrl(assetId, "notice", `Assigned to ${holderName}.`));
+  revalidatePath(returnPath(formData, assetId));
+  redirect(resultUrl(formData, assetId, "notice", `Assigned to ${holderName}.`));
 }

@@ -24,9 +24,10 @@ precedent (`06-hr-module-design.md`, migrations `0012`–`0020`), the IT BRD
 
 ---
 
-## 0. Status — 2026-10-13
+## 0. Status — 2026-10-16
 
-Gap check of ERD v4 (25 tables) against `supabase/migrations/0001`–`0029`.
+Gap check of ERD v4 (25 tables) against `supabase/migrations/0001`–`0029` plus the staged files
+applied to the live DB since (`talha_it_0004`–`0008`, see `supabase/it-migrations/README.md`).
 
 ### 0.1 ERD tables already covered (14)
 
@@ -40,25 +41,27 @@ Gap check of ERD v4 (25 tables) against `supabase/migrations/0001`–`0029`.
 
 Also live and outside the ERD: `it.number_sequences` (`0024`), `it.notifications` (`0029`).
 
-### 0.2 ERD tables still missing (11)
+Live since, staged only (no main-sequence number yet): `asset_assignments` (`talha_it_0004`),
+`asset_maintenance` (`talha_it_0005`; screens are Phase 4), `asset_values` (`talha_it_0006`;
+screens are Phase 6).
+
+### 0.2 ERD tables still missing (8)
 
 | Table | Owner | Blocked by | Phase |
 |---|---|---|---|
-| `asset_assignments` | **Talha** | — | 3 |
-| `asset_maintenance` | **Talha** | — (`vendor_id` FK deferred to Phase 7) | 4 |
 | `stock_movements` | **Talha** | `it.products` | 5 |
-| `asset_values` | **Talha** | — | 6 |
 | `vendors`, `products`, `demands`, `demand_approvals`, `receiving_records`, `invoices`, `payments` (+ `documents`, §1.3 #3) | Javeria | — | Her procurement track |
 
 ### 0.3 Placeholder FKs (plain `uuid` columns, constraint not added yet)
 
 | Column | Target | Can be added when |
 |---|---|---|
-| `tickets.linked_asset_id` | `it.assets` | Phase 3 migration (`it.assets` is live; bundled to avoid a one-line migration) |
-| `checklist_items.assignment_id` | `it.asset_assignments` | Phase 3 migration (add it there) |
 | `assets.vendor_id`, `assets.receiving_id` | `it.vendors`, `it.receiving_records` | Javeria's procurement migrations, then Phase 7 |
 | `asset_maintenance.vendor_id` | `it.vendors` | Same |
 | `stock_movements.product_id` | `it.products` | Javeria ships `products` |
+
+Added in `talha_it_0004` (live 2026-10-14): `tickets.linked_asset_id → it.assets` and
+`checklist_items.assignment_id → it.asset_assignments`.
 
 ### 0.4 Screen status
 
@@ -67,8 +70,10 @@ Also live and outside the ERD: `it.number_sequences` (`0024`), `it.notifications
 | INV-01 `/it/inventory/settings` | Built (asset types CRUD + value types) |
 | SCR-05 `/it/inventory` | Built (list) |
 | INV-02 `/it/inventory/new`, `/[id]/edit` | Built (create + edit) |
-| INV-03 `/it/inventory/[id]` | Built: Overview, Linked tickets, Change status, soft Delete. Other sections arrive with Phases 3–7 |
-| INV-04 – INV-08, `<InventoryKpis>` | Not built |
+| INV-03 `/it/inventory/[id]` | Built: Overview, Assignment history, Linked tickets, Change status, soft Delete. Maintenance, Valuation, Movements and Origin arrive with Phases 4–7 |
+| INV-04 assign / return | Built: panels on INV-03, also exported as `<AssetAssignForm>` / `<AssetReturnForm>` for Javeria's on/offboarding pages |
+| INV-05 `/it/my-assets` | Built (open assignments, Model column, Acknowledge) |
+| INV-06 – INV-08, `<InventoryKpis>` | Not built |
 
 ---
 
@@ -275,7 +280,18 @@ sites. Tags are typed in by hand on Add and Edit (decision #5, 2026-10-14); the
 **Done when**: assets can be registered, searched by tag/serial, filtered and edited, and every
 change writes an audit-log row.
 
-### Phase 3 — Assignment, return and My Assets
+### Phase 3 — Assignment, return and My Assets — ✅ done (2026-10-16; `talha_it_0004`, `0008` live)
+Built: INV-03 Assign panel (Unassigned assets; live employee picker over `it.search_people`,
+active employees only) and Return panel (holder's name; new status Unassigned or Retired —
+`In Repair` is left to Phase 4's repair form so no repair is opened without a record), the
+Assignment history section (names via `it.asset_person_names`, which keeps showing people who
+have left), and INV-05 My Assets with Acknowledge. Names don't use Javeria's `person_names()`:
+`talha_it_0008` adds the inventory-side lookups instead, leaving her function untouched.
+Hand-off: `assignAsset` / `returnAsset` / `searchPeople` (Server Actions),
+`<AssetAssignForm>` / `<AssetReturnForm>` (`app/(protected)/it/inventory/_components/`, each
+takes an optional `returnTo` path under `/it/`), and `listOpenAssignments()` (`lib/it/assets.ts`).
+`listOpenAssignments` reads through RLS, so it returns rows only to `it.assets.read` holders or
+the person themself — on/offboarding staff without `it.assets.read` get an empty list.
 **Migration** `talha_it_0004_asset_assignments.sql`: `it.asset_assignments` with the partial
 unique index (§1.3 #7); a security-definer `it.assign_asset()` / `it.return_asset()` pair that
 writes the assignment row and flips `assets.status` atomically, so the two can't drift; RLS that
