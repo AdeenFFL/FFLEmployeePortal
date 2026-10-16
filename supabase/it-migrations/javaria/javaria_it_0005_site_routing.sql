@@ -902,7 +902,8 @@ on conflict (key) do nothing;
 
 -- Rollout safety: everyone who can assign today keeps seeing every site.
 insert into role_permissions (role_id, permission_id, granted_by)
-select distinct rp.role_id, p_new.id, null
+-- (null::uuid, not bare null: with DISTINCT, Postgres types an untyped null as text.)
+select distinct rp.role_id, p_new.id, null::uuid
 from role_permissions rp
 join permissions p_old on p_old.id = rp.permission_id and p_old.key = 'it.tickets.assign'
 cross join permissions p_new
