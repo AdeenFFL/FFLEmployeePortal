@@ -70,7 +70,7 @@ Added in `talha_it_0004` (live 2026-10-14): `tickets.linked_asset_id → it.asse
 | INV-01 `/it/inventory/settings` | Built (asset types CRUD + value types) |
 | SCR-05 `/it/inventory` | Built (list) |
 | INV-02 `/it/inventory/new`, `/[id]/edit` | Built (create + edit) |
-| INV-03 `/it/inventory/[id]` | Built: Overview, Assignment history, Linked tickets, Change status, soft Delete. Maintenance, Valuation, Movements and Origin arrive with Phases 4–7 |
+| INV-03 `/it/inventory/[id]` | Built: Overview, Assignment history (+ Assign / Return), Maintenance (+ Send for repair / Close repair), Linked tickets, Change status, soft Delete. Still waiting: Movements (Phase 5), Valuation (Phase 6), and the vendor link / Origin section (Phase 7) |
 | INV-04 assign / return | Built: panels on INV-03, also exported as `<AssetAssignForm>` / `<AssetReturnForm>` for Javeria's on/offboarding pages |
 | INV-05 `/it/my-assets` | Built (open assignments, Model column, Acknowledge) |
 | INV-06 – INV-08, `<InventoryKpis>` | Not built |
@@ -307,7 +307,13 @@ and `listOpenAssignments` for her on/offboarding checklist.
 **Done when**: an asset can't be assigned twice, a return frees it with the condition recorded,
 history is never overwritten, and the employee sees it under My Assets.
 
-### Phase 4 — Repair and maintenance
+### Phase 4 — Repair and maintenance — ✅ done (2026-10-16; `talha_it_0005` live)
+Built on INV-03: a Send for repair panel (Unassigned or In Use assets; an In Use asset stays
+assigned to its holder while in repair) and a Close repair panel (resolution, cost, returned
+date; the asset goes back to In Use or Unassigned), plus the Maintenance section listing the
+asset's repair history. Changes go only through `it.open_maintenance` / `it.close_maintenance`
+via the `openMaintenance` / `closeMaintenance` Server Actions. `vendor_id` stays empty until
+Phase 7. **Still to do:** INV-06, the repair-log page across all assets.
 **Migration** `talha_it_0005_asset_maintenance.sql`. Opening a maintenance record sets the asset
 `In Repair`; closing it restores the previous status. `vendor_id` FK to `it.vendors` if
 Javeria's vendors migration is already applied, otherwise added in the linking migration.
