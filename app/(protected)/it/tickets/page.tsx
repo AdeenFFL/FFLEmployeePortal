@@ -1,7 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
-import { checked, fetchCategoryMaps, fetchPersonNames } from "@/lib/it/ticket-data";
+import {
+  checked,
+  fetchCategoryMaps,
+  fetchOrgUnits,
+  fetchPersonNames,
+  fetchTicketScope,
+} from "@/lib/it/ticket-data";
 import {
   formatDate,
   slaState,
@@ -21,6 +27,7 @@ import {
 import type { ItTicketPriority, ItTicketStatus } from "@/types/database";
 
 type Filters = {
+  site?: string;
   status?: string;
   priority?: string;
   category?: string;
@@ -46,20 +53,30 @@ export default async function ItTicketQueuePage({
   const assignee = filters.assignee ?? "";
   const supabase = await createClient();
 
-  const [{ data: personId }, { data: staff }, maps] = await Promise.all([
+  const [{ data: personId }, { data: staff }, maps, scope, orgUnits] = await Promise.all([
     supabase.rpc("current_person_id"),
     supabase.schema("it").rpc("list_it_staff"),
     fetchCategoryMaps(supabase),
+    fetchTicketScope(supabase),
+    fetchOrgUnits(supabase),
   ]);
+
+  // Sites this viewer can filter by: every site for HQ, otherwise their own IT team's sites.
+  const siteOptions = scope.readAll
+    ? orgUnits.sites
+    : orgUnits.sites.filter((s) => scope.siteIds.includes(s.id));
 
   let query = supabase
     .schema("it")
     .from("tickets")
     .select(
-      "id, ticket_number, subject, category_id, priority, status, requester_person_id, assigned_to_person_id, created_at, resolution_due_at, resolved_at, is_escalated",
+      "id, ticket_number, subject, category_id, priority, status, requester_person_id, assigned_to_person_id, created_at, resolution_due_at, resolved_at, is_escalated, handling_site_id",
     )
     .order("created_at", { ascending: false })
     .limit(PAGE_LIMIT);
+
+  if (filters.site === "unrouted") query = query.is("handling_site_id", null);
+  else if (filters.site) query = query.eq("handling_site_id", filters.site);
 
   if (status === "active") query = query.neq("status", "Closed");
   else if (TICKET_STATUSES.includes(status as ItTicketStatus)) {
@@ -106,9 +123,21 @@ export default async function ItTicketQueuePage({
     <div className="py-6">
       <PageHeader
         title="IT Ticket Queue"
-        description="Every IT support ticket across the organization."
+        description={
+          scope.readAll
+            ? "Every site's IT tickets (HQ view)."
+            : siteOptions.length > 0
+              ? `Tickets handled at ${siteOptions.map((s) => s.name).join(", ")}.`
+              : "Tickets assigned to you."
+        }
       />
       <FormMessage error={filters.error} notice={filters.notice} />
+      {!scope.readAll && scope.siteIds.length === 0 && (
+        <div className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+          You&apos;re not on any site&apos;s IT team yet, so you only see tickets assigned to you.
+          Ask an IT admin to add you under IT Settings → Sites &amp; IT staff.
+        </div>
+      )}
 
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         {summary.map((s) => (
@@ -168,6 +197,17 @@ export default async function ItTicketQueuePage({
             </option>
           ))}
         </select>
+        {(scope.readAll || siteOptions.length > 1) && (
+          <select name="site" defaultValue={filters.site ?? ""} aria-label="Handled at" className={inputClass}>
+            <option value="">All my sites</option>
+            {siteOptions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.name}
+              </option>
+            ))}
+            {scope.readAll && <option value="unrouted">HQ / unrouted</option>}
+          </select>
+        )}
         <select name="assignee" defaultValue={assignee} aria-label="Assignee" className={inputClass}>
           <option value="">Anyone</option>
           <option value="mine">Assigned to me</option>
@@ -214,6 +254,7 @@ export default async function ItTicketQueuePage({
                 <tr>
                   <th className="px-4 py-3 font-medium">Ticket</th>
                   <th className="px-4 py-3 font-medium">Subject</th>
+                  <th className="px-4 py-3 font-medium">Site</th>
                   <th className="px-4 py-3 font-medium">Category</th>
                   <th className="px-4 py-3 font-medium">Priority</th>
                   <th className="px-4 py-3 font-medium">Requester</th>
@@ -238,6 +279,10 @@ export default async function ItTicketQueuePage({
                       )}
                     </td>
                     <td className="max-w-xs truncate px-4 py-3 text-slate-800">{t.subject}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">
+                      {(t.handling_site_id && orgUnits.nameById.get(t.handling_site_id)) ??
+                        "HQ / unrouted"}
+                    </td>
                     <td className="px-4 py-3 text-slate-600">
                       {(t.category_id && maps.categoryNameById.get(t.category_id)) ?? "—"}
                     </td>

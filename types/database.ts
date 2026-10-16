@@ -257,10 +257,30 @@ export type ItRequestType = {
   applies_to: ItRequestTypeAppliesTo;
   description: string | null;
   is_active: boolean;
+  handled_at: ItHandledAt; // javaria_it_0005
   created_at: string;
   updated_at: string;
   created_by: string | null;
   updated_by: string | null;
+};
+
+// Phase 6.1 site routing — mirrors javaria_it_0005_site_routing.sql.
+export type ItHandledAt = "site" | "hq";
+export type ItSiteRole = "manager" | "member";
+
+export type ItSettings = {
+  id: boolean;
+  hq_site_id: string | null;
+  updated_at: string;
+  updated_by: string | null;
+};
+
+export type ItSiteItStaff = {
+  site_id: string;
+  person_id: string;
+  role: ItSiteRole;
+  created_at: string;
+  created_by: string | null;
 };
 
 // IT module (M2) — inventory settings (supabase/it-migrations/talha/talha_it_0002_inventory_settings.sql).
@@ -287,6 +307,7 @@ export type ItTicketCategory = {
   description: string | null;
   is_active: boolean;
   sort_order: number;
+  handled_at: ItHandledAt; // javaria_it_0005
   created_at: string;
   updated_at: string;
 };
@@ -337,6 +358,7 @@ export type ItTicket = {
   satisfaction_rating: number | null;
   satisfaction_comment: string | null;
   sla_breach_notified_at: string | null; // javaria_it_0003
+  handling_site_id: string | null; // javaria_it_0005: which site's IT team handles it
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -878,6 +900,18 @@ export type Database = {
           },
         ];
       };
+      settings: {
+        Row: ItSettings;
+        Insert: Partial<ItSettings>;
+        Update: Partial<ItSettings>;
+        Relationships: [];
+      };
+      site_it_staff: {
+        Row: ItSiteItStaff;
+        Insert: Partial<ItSiteItStaff> & Pick<ItSiteItStaff, "site_id" | "person_id">;
+        Update: Partial<ItSiteItStaff>;
+        Relationships: [];
+      };
       sla_policies: {
         Row: ItSlaPolicy;
         Insert: Partial<ItSlaPolicy> &
@@ -1120,6 +1154,40 @@ export type Database = {
         Returns: { id: string; name: string; type: OrgUnitType }[];
       };
       // javaria_it_0004_ticket_asset_link.sql
+      // javaria_it_0005_site_routing.sql
+      my_ticket_scope: {
+        Args: Record<string, never>;
+        Returns: {
+          read_all: boolean;
+          hq_executive: boolean;
+          site_ids: string[];
+          managed_site_ids: string[];
+          hq_site_id: string | null;
+        }[];
+      };
+      transfer_ticket_to_hq: {
+        Args: { p_ticket_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      list_ticket_assignees: {
+        Args: { p_ticket_id: string };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          designation: string | null;
+          site_role: ItSiteRole | null;
+        }[];
+      };
+      list_site_it_staff: {
+        Args: Record<string, never>;
+        Returns: {
+          site_id: string;
+          person_id: string;
+          full_name: string;
+          designation: string | null;
+          role: ItSiteRole;
+        }[];
+      };
       search_assets_for_ticket: {
         Args: { p_search: string };
         Returns: {

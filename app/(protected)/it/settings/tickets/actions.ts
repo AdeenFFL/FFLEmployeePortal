@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { TICKET_PRIORITIES } from "@/lib/it/tickets";
-import type { ItRequestTypeAppliesTo, ItTicketPriority } from "@/types/database";
+import type { ItHandledAt, ItRequestTypeAppliesTo, ItTicketPriority } from "@/types/database";
 
 // ITSM-01 — ticket master data (plan 08 Phase 2). No migration needed: the write policies on
 // it.sla_policies / it.request_types / it.ticket_categories (javaria_it_0001) already require
@@ -107,6 +107,34 @@ export async function setRequestTypeActive(id: string, active: boolean) {
   if (error) go("error", error.message);
 
   done(active ? "Request type activated." : "Request type hidden from new requests.");
+}
+
+// Phase 6.1: HQ-handled request types / categories route to the HQ site's IT team regardless of
+// the requester's site (javaria_it_0005). Applies to new tickets and re-classified ones.
+export async function setRequestTypeHandledAt(id: string, handledAt: ItHandledAt) {
+  const { supabase } = await requirePermission("it.ticket_settings.update");
+
+  const { error } = await supabase
+    .schema("it")
+    .from("request_types")
+    .update({ handled_at: handledAt })
+    .eq("id", id);
+  if (error) go("error", error.message);
+
+  done(handledAt === "hq" ? "Now handled by HQ." : "Now handled at the requester's site.");
+}
+
+export async function setCategoryHandledAt(id: string, handledAt: ItHandledAt) {
+  const { supabase } = await requirePermission("it.ticket_settings.update");
+
+  const { error } = await supabase
+    .schema("it")
+    .from("ticket_categories")
+    .update({ handled_at: handledAt })
+    .eq("id", id);
+  if (error) go("error", error.message);
+
+  done(handledAt === "hq" ? "Now handled by HQ." : "Now handled at the requester's site.");
 }
 
 export async function createCategory(formData: FormData) {

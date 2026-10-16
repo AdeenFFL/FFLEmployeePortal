@@ -4,7 +4,9 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import {
+  canManageSite,
   checked,
+  fetchTicketScope,
   fetchAssetLabels,
   fetchCategoryMaps,
   fetchOrgUnits,
@@ -26,6 +28,7 @@ import {
   resolveTicket,
   setEscalation,
   setTicketAsset,
+  transferToHq,
   triageTicket,
   updateTaskStatus,
   updateTicketStatus,
@@ -81,8 +84,8 @@ export default async function ItTicketWorkspacePage({
     maps,
     orgUnits,
     canUpdate,
-    canAssign,
     canClose,
+    scope,
   ] = await Promise.all([
     supabase.schema("it").from("ticket_updates").select("*").eq("ticket_id", id).order("created_at"),
     supabase.schema("it").from("ticket_tasks").select("*").eq("ticket_id", id).order("created_at"),
@@ -92,14 +95,26 @@ export default async function ItTicketWorkspacePage({
       .select("id, storage_path, file_name, size_bytes")
       .eq("ticket_id", id)
       .order("created_at"),
-    supabase.schema("it").rpc("list_it_staff"),
+    // Only people this viewer may assign: HQ -> any IT staff; site manager -> the site's team.
+    supabase.schema("it").rpc("list_ticket_assignees", { p_ticket_id: id }),
     supabase.rpc("current_person_id"),
     fetchCategoryMaps(supabase),
     fetchOrgUnits(supabase),
     hasItPermission(supabase, "it.tickets.update"),
-    hasItPermission(supabase, "it.tickets.assign"),
     hasItPermission(supabase, "it.tickets.close"),
+    fetchTicketScope(supabase),
   ]);
+
+  // Triage rights follow the handling site (javaria_it_0005): its IT manager(s), or HQ.
+  const canAssign = canManageSite(scope, ticket.handling_site_id);
+  const handlingSiteName =
+    (ticket.handling_site_id && orgUnits.nameById.get(ticket.handling_site_id)) ?? "HQ / unrouted";
+  const canTransferToHq =
+    canAssign &&
+    !scope.hqExecutive &&
+    Boolean(scope.hqSiteId) &&
+    ticket.handling_site_id !== scope.hqSiteId &&
+    !["Resolved", "Closed"].includes(ticket.status);
 
   const isClosed = ticket.status === "Closed";
   const isAssignee = Boolean(personId) && ticket.assigned_to_person_id === personId;
@@ -460,11 +475,55 @@ export default async function ItTicketWorkspacePage({
                   defaultCategoryId={ticket.category_id}
                   defaultSubcategoryId={ticket.subcategory_id}
                 />
+                {scope.hqExecutive && (
+                  <div>
+                    <label htmlFor="handlingSiteId" className={labelClass}>
+                      Handled at
+                    </label>
+                    <select
+                      id="handlingSiteId"
+                      name="handlingSiteId"
+                      defaultValue={ticket.handling_site_id ?? ""}
+                      className={inputClass}
+                    >
+                      {!ticket.handling_site_id && <option value="">HQ / unrouted</option>}
+                      {orgUnits.sites.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
                 <p className="text-xs text-slate-400">
-                  Changing priority recalculates the SLA from the submission time.
+                  Changing priority recalculates the SLA from the submission time. Changing the
+                  request type or category may re-route the ticket (e.g. to HQ); moving it to
+                  another site clears the assignee.
                 </p>
                 <button type="submit" className={primaryButtonClass}>
                   Save triage
+                </button>
+              </form>
+            </Panel>
+          )}
+
+          {canTransferToHq && (
+            <Panel title="Transfer to HQ">
+              <form action={transferToHq.bind(null, ticket.id)} className="space-y-3">
+                <p className="text-sm text-slate-500">
+                  For work only HQ can do (e.g. SAP / ERP access, email accounts). The ticket
+                  leaves {handlingSiteName}&apos;s queue and goes unassigned to HQ.
+                </p>
+                <textarea
+                  name="reason"
+                  required
+                  rows={2}
+                  placeholder="Why does HQ need to handle this?"
+                  aria-label="Reason for transfer"
+                  className={inputClass}
+                />
+                <button type="submit" className={secondaryButtonClass}>
+                  Transfer to HQ
                 </button>
               </form>
             </Panel>
@@ -585,6 +644,7 @@ export default async function ItTicketWorkspacePage({
 
           <section className={`${cardClass} p-5`}>
             <dl className="space-y-4">
+              <Fact label="Handled at">{handlingSiteName}</Fact>
               <Fact label="Requester">{nameOf(ticket.requester_person_id)}</Fact>
               {ticket.requested_for_person_id && (
                 <Fact label="Requested for">{nameOf(ticket.requested_for_person_id)}</Fact>

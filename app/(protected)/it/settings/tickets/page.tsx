@@ -1,14 +1,17 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { checked } from "@/lib/it/ticket-data";
 import { PRIORITY_TONE, TICKET_PRIORITIES } from "@/lib/it/tickets";
-import type { ItTicketCategory } from "@/types/database";
+import type { ItHandledAt, ItTicketCategory } from "@/types/database";
 import {
   createCategory,
   createRequestType,
   setCategoryActive,
+  setCategoryHandledAt,
   setRequestTypeActive,
+  setRequestTypeHandledAt,
   updateCategory,
   updateRequestType,
   updateSlaPolicy,
@@ -45,6 +48,25 @@ function ActiveToggle({
   );
 }
 
+// Phase 6.1: "Handled by HQ" routes the ticket to the HQ site's IT team whatever the
+// requester's site. The pill + text label carry the state (not colour alone).
+function HandledAtToggle({
+  handledAt,
+  action,
+}: {
+  handledAt: ItHandledAt;
+  action: (formData: FormData) => Promise<void>;
+}) {
+  return (
+    <form action={action} className="flex items-center gap-2">
+      {handledAt === "hq" && <StatusPill label="Handled by HQ" tone="info" />}
+      <button type="submit" className={linkButton}>
+        {handledAt === "hq" ? "Handle at site" : "Handle at HQ"}
+      </button>
+    </form>
+  );
+}
+
 function CategoryRow({ category, indent }: { category: ItTicketCategory; indent?: boolean }) {
   return (
     <li className={`flex flex-wrap items-center gap-2 py-2 ${indent ? "pl-6" : ""}`}>
@@ -71,6 +93,14 @@ function CategoryRow({ category, indent }: { category: ItTicketCategory; indent?
           Save
         </button>
       </form>
+      <HandledAtToggle
+        handledAt={category.handled_at}
+        action={setCategoryHandledAt.bind(
+          null,
+          category.id,
+          category.handled_at === "hq" ? "site" : "hq",
+        )}
+      />
       {!category.is_active && <StatusPill label="Inactive" tone="neutral" />}
       <ActiveToggle
         active={category.is_active}
@@ -117,6 +147,11 @@ export default async function TicketSettingsPage({
       <PageHeader
         title="Ticket Settings"
         description="SLA targets, request types and categories used by IT tickets and onboarding."
+        action={
+          <Link href="/it/settings/sites" className={secondaryButtonClass}>
+            Sites &amp; IT staff
+          </Link>
+        }
       />
       <FormMessage error={error} notice={notice} />
 
@@ -214,6 +249,16 @@ export default async function TicketSettingsPage({
                     Save
                   </button>
                 </form>
+                {t.applies_to === "Ticket" && (
+                  <HandledAtToggle
+                    handledAt={t.handled_at}
+                    action={setRequestTypeHandledAt.bind(
+                      null,
+                      t.id,
+                      t.handled_at === "hq" ? "site" : "hq",
+                    )}
+                  />
+                )}
                 {!t.is_active && <StatusPill label="Inactive" tone="neutral" />}
                 <ActiveToggle
                   active={t.is_active}

@@ -31,14 +31,22 @@ function text(formData: FormData, key: string) {
 
 // BRD §5.3.5–5.3.7 — IT Executive classifies, prioritises and assigns.
 export async function triageTicket(ticketId: string, formData: FormData) {
-  const { supabase } = await requirePermission("it.tickets.assign");
+  // Since Phase 6.1 triage belongs to the handling site's IT manager(s) or an HQ Executive
+  // (it.can_manage_site in javaria_it_0005), which isn't a single permission key — so the action
+  // requires queue access and the database decides the rest (RLS + it.tickets_before_update).
+  const { supabase } = await requirePermission("it.tickets.read");
 
   const priority = text(formData, "priority") as ItTicketPriority;
   if (!TICKET_PRIORITIES.includes(priority)) fail(ticketId, "Invalid priority.");
   const requestTypeId = text(formData, "requestTypeId");
   if (!requestTypeId) fail(ticketId, "Request type is required.");
 
-  const { error } = await supabase
+  // Only HQ Executives get the "Handled at" field; others never send it.
+  const handlingSiteId = formData.has("handlingSiteId")
+    ? text(formData, "handlingSiteId") || null
+    : undefined;
+
+  const { data, error } = await supabase
     .schema("it")
     .from("tickets")
     .update({
@@ -47,11 +55,33 @@ export async function triageTicket(ticketId: string, formData: FormData) {
       request_type_id: requestTypeId,
       category_id: text(formData, "categoryId") || null,
       subcategory_id: text(formData, "subcategoryId") || null,
+      ...(handlingSiteId !== undefined ? { handling_site_id: handlingSiteId } : {}),
     })
-    .eq("id", ticketId);
+    .eq("id", ticketId)
+    .select("id");
   if (error) fail(ticketId, error.message);
+  if (!data?.length) fail(ticketId, "Only this site's IT manager or an HQ IT Executive can triage it.");
 
   done(ticketId, "Ticket updated.");
+}
+
+// Phase 6.1 — a site IT manager sends work only HQ can do (SAP / ERP access, email) to HQ.
+export async function transferToHq(ticketId: string, formData: FormData) {
+  const { supabase } = await requirePermission("it.tickets.read");
+
+  const reason = text(formData, "reason");
+  if (!reason) fail(ticketId, "Please give a reason for transferring to HQ.");
+
+  const { error } = await supabase
+    .schema("it")
+    .rpc("transfer_ticket_to_hq", { p_ticket_id: ticketId, p_reason: reason });
+  if (error) fail(ticketId, error.message);
+
+  // The ticket has left this site's scope, so the workspace may no longer be visible: go to the
+  // queue instead of back to the ticket.
+  queueItEmails();
+  revalidatePath("/it/tickets");
+  redirect(`/it/tickets?notice=${encodeURIComponent("Ticket transferred to HQ.")}`);
 }
 
 // BRD §5.3.9 — assignee moves the ticket through its working states.
@@ -98,7 +128,8 @@ export async function resolveTicket(ticketId: string, formData: FormData) {
 
 // BRD §5.3.11.
 export async function setEscalation(ticketId: string, formData: FormData) {
-  const { supabase } = await requirePermission("it.tickets.assign");
+  // Site managers can escalate too (Phase 6.1); the DB checks it.can_manage_site.
+  const { supabase } = await requirePermission("it.tickets.read");
 
   const escalate = formData.get("escalate") === "true";
   const reason = text(formData, "reason");

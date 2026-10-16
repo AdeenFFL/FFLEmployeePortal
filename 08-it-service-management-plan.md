@@ -230,6 +230,66 @@ created / assigned / resolved / SLA breach; ONB / OFB assigned, completed, crede
 (BRD §5.1.12). RLS review pass with the tester, then `tsc` / `eslint` / `npm run build` before the
 `IT/dev` → `develop` PR.
 
+### Phase 6 — Ticket routing, site isolation & ownership
+From the routing addendum (2026-10-15), adopted with the corrections from review (2026-10-16).
+
+**Decisions**
+- Tickets are handled **per site**: a site's IT team sees only its site's tickets; HQ IT
+  Executives (`it.tickets.read_all` + `it.tickets.assign`) see every site.
+- Some work is **HQ-handled** whatever the requester's site (email, SAP / ERP IDs): a
+  `handled_at = 'hq'` flag on request types and categories routes it to the HQ site.
+- Each site has **IT managers** (assign within the site, Transfer to HQ, escalate) and
+  **members** (work tickets assigned to them). Site managers can't assign HQ staff.
+- Categories get **owners per site** (6.2) for auto-assignment; ownership drives routing,
+  not visibility. Tickets get **one primary + helpers** (6.3). Closing writes a **frozen audit
+  snapshot** (6.4).
+- **Module-local `it.site_it_staff`, not `user_roles.site_id`** (decided 2026-10-16 on
+  Javaria's go-ahead): User Management can't set a site on a role, and that screen is core's.
+  Revisit if core adds scoped roles.
+- **Routing uses `persons.site_id`**, not the ticket form's Location (the employee picks that,
+  and the handling site now decides visibility). No site → HQ.
+- **One HQ setting** (`it.settings.hq_site_id`) feeds both ticket routing and onboarding's
+  `routing_team_for_site()`.
+- **Closed stays final** (no reopen after close), so the addendum's "close, reopen, close again
+  writes a second snapshot" test doesn't apply.
+
+**Corrections to the addendum (review 2026-10-16)**
+1. Rollout: the new RLS hides everything from IT staff who aren't in `site_it_staff`. Safe here
+   because only the Admin role held `it.tickets.*` (live check 2026-10-16) and it gets
+   `read_all`; the queue shows a banner to IT staff with no site.
+2. Every security-definer function that checked `it.tickets.read` directly was rescoped:
+   `list_it_staff`, the workflow trigger (site managers can triage; may only assign their site's
+   staff; only HQ moves sites), and the ticket notifications (now to the handling site's
+   managers, falling back to HQ Executives). Name / asset-label helpers still show names to any
+   IT viewer (low sensitivity) — tighten later if needed.
+
+**6.1 Sites & HQ routing** *(built; `javaria_it_0005_site_routing.sql`, not yet applied)*
+`it.settings`, `it.site_it_staff`, `handled_at` flags (seeded: Access Request, Email Issue,
+ERP Issue), `tickets.handling_site_id` + backfill, routing on insert and on re-classification,
+`it.transfer_ticket_to_hq()`, site-scoped RLS on tickets / updates / tasks (attachments and
+storage inherit via tickets), `it.tickets.read_all` (granted to every role holding
+`it.tickets.assign`). Screens: **Sites & IT Staff** (`/it/settings/sites`: HQ site, per-site
+managers / members), **Handled by HQ** toggles on Ticket Settings, queue **Site** column +
+"Handled at" filter + no-site banner, workspace **Handled at** fact, site-aware **Triage**
+(HQ can move sites), **Transfer to HQ** panel for site managers.
+**Before testing**: set up real sites under Administration → Sites (live DB has only "HR"),
+pick the HQ site, add site IT staff.
+
+**6.2 Category owners** *(next)* — `it.category_owners` (per category/subcategory × site, one
+primary), auto-assign the primary owner on routing, notify other owners; no owner → site
+managers; no manager → HQ.
+
+**6.3 Multiple assignees** — `it.ticket_assignees` (primary + helpers, primary synced to
+`assigned_to_person_id`), `it.ticket_task_assignees`, helpers notified, only the primary
+resolves; queue row actions Assign / View and an Assign dialog.
+
+**6.4 Closure audit** — `it.ticket_closure_audit` snapshot on Closed, readable with
+`it.tickets.read_all`.
+
+**Open (IT BA / senior dev)**: full list of HQ-handled work (VPN, domain accounts, licences?);
+can helpers change status or only comment; do HQ-handled requests need site-manager approval
+first; mirror closures into `public.audit_log` (§8 #6).
+
 ---
 
 ## 6. Per-PR checklist

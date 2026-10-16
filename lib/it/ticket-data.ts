@@ -75,6 +75,33 @@ export async function fetchAssetLabels(supabase: Client, ids: (string | null | u
   );
 }
 
+// The viewer's ticket scope (javaria_it_0005_site_routing.sql): HQ Executive or not, which
+// sites' IT teams they're on, which they manage. Drives what the ticket screens offer; the
+// database enforces the same rules independently.
+export type TicketScope = {
+  readAll: boolean;
+  hqExecutive: boolean;
+  siteIds: string[];
+  managedSiteIds: string[];
+  hqSiteId: string | null;
+};
+
+export async function fetchTicketScope(supabase: Client): Promise<TicketScope> {
+  const { data } = await supabase.schema("it").rpc("my_ticket_scope");
+  const row = data?.[0];
+  return {
+    readAll: Boolean(row?.read_all),
+    hqExecutive: Boolean(row?.hq_executive),
+    siteIds: row?.site_ids ?? [],
+    managedSiteIds: row?.managed_site_ids ?? [],
+    hqSiteId: row?.hq_site_id ?? null,
+  };
+}
+
+export function canManageSite(scope: TicketScope, siteId: string | null) {
+  return scope.hqExecutive || (siteId !== null && scope.managedSiteIds.includes(siteId));
+}
+
 export async function hasItPermission(supabase: Client, key: string) {
   const { data } = await supabase.rpc("has_permission", { p_permission_key: key });
   return Boolean(data);
