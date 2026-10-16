@@ -275,16 +275,31 @@ managers / members), **Handled by HQ** toggles on Ticket Settings, queue **Site*
 **Before testing**: set up real sites under Administration → Sites (live DB has only "HR"),
 pick the HQ site, add site IT staff.
 
-**6.2 Category owners** *(next)* — `it.category_owners` (per category/subcategory × site, one
-primary), auto-assign the primary owner on routing, notify other owners; no owner → site
-managers; no manager → HQ.
+**6.2 Category owners + 6.3 Multiple assignees** *(built; one file,
+`javaria_it_0006_owners_and_assignees.sql`, not yet applied)* — combined because auto-assignment
+writes the primary assignee, so both were designed together rather than rewriting the same
+functions twice.
+- `it.category_owners` (category **or** subcategory × site, one ★ primary, must be site IT
+  staff; leaving the site team drops the ownership). Editable by IT settings admins or that
+  site's IT managers. Screen: **Category Owners** (`/it/settings/owners`, read-only for others).
+- Auto-assignment on a new / re-routed, unassigned, Open ticket: subcategory owners at the
+  handling site win, else the category's; the primary owner is assigned, other owners get an
+  FYI; no owners → no assignment (site managers / HQ already notified). Auto-assignment is a
+  "system" update: it does **not** stamp first response and shows as *System* on the timeline.
+- `it.ticket_assignees` (primary mirrored from `tickets.assigned_to_person_id`, plus helpers).
+  Helpers see the ticket and internal notes, comment, add notes and tasks; **only the primary
+  changes status / resolves**; only the site manager / HQ adds or removes helpers; helpers must
+  be on the site team; moving sites clears helpers. Requester comments notify primary + helpers.
+- `it.ticket_task_assignees`: extra assignees on a task besides its lead.
+- Screens: workspace **Helpers** panel, **Routed to** fact, ★ owners first in the assignee list,
+  "Also assign to" on tasks; queue **Assign / View** row actions and "Ali (+1)". The Assign
+  action jumps to the workspace's Triage panel rather than a separate dialog.
 
-**6.3 Multiple assignees** — `it.ticket_assignees` (primary + helpers, primary synced to
-`assigned_to_person_id`), `it.ticket_task_assignees`, helpers notified, only the primary
-resolves; queue row actions Assign / View and an Assign dialog.
-
-**6.4 Closure audit** — `it.ticket_closure_audit` snapshot on Closed, readable with
-`it.tickets.read_all`.
+**6.4 Closure audit** *(built; `javaria_it_0007_closure_audit.sql`, not yet applied)* —
+`it.ticket_closure_audit`: one frozen snapshot per ticket when it's Closed (ticket row, site,
+category names, assignees, tasks + assignees, attachment / timeline counts, SLA met). Append-only,
+readable with `it.tickets.read_all`; already-closed tickets are backfilled. Workspace shows a
+**Closure record** line to HQ.
 
 **Open (IT BA / senior dev)**: full list of HQ-handled work (VPN, domain accounts, licences?);
 can helpers change status or only comment; do HQ-handled requests need site-manager approval

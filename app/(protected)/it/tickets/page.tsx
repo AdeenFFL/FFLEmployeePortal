@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import {
+  canManageSite,
   checked,
   fetchCategoryMaps,
   fetchOrgUnits,
@@ -99,10 +100,26 @@ export default async function ItTicketQueuePage({
   const { data: tickets } = checked(await query);
   const rows = tickets ?? [];
 
-  const names = await fetchPersonNames(
-    supabase,
-    rows.flatMap((t) => [t.requester_person_id, t.assigned_to_person_id]),
-  );
+  const [names, { data: helperRows }] = await Promise.all([
+    fetchPersonNames(
+      supabase,
+      rows.flatMap((t) => [t.requester_person_id, t.assigned_to_person_id]),
+    ),
+    // Phase 6.3: helper counts for "Ali (+1)".
+    rows.length
+      ? supabase
+          .schema("it")
+          .from("ticket_assignees")
+          .select("ticket_id")
+          .eq("role", "helper")
+          .in(
+            "ticket_id",
+            rows.map((t) => t.id),
+          )
+      : Promise.resolve({ data: [] as { ticket_id: string }[] }),
+  ]);
+  const helperCount = new Map<string, number>();
+  for (const h of helperRows ?? []) helperCount.set(h.ticket_id, (helperCount.get(h.ticket_id) ?? 0) + 1);
 
   const now = new Date();
   const open = rows.filter((t) => t.status !== "Resolved" && t.status !== "Closed");
@@ -262,6 +279,9 @@ export default async function ItTicketQueuePage({
                   <th className="px-4 py-3 font-medium">Status</th>
                   <th className="px-4 py-3 font-medium">Assigned to</th>
                   <th className="px-4 py-3 font-medium">SLA</th>
+                  <th className="px-4 py-3 font-medium">
+                    <span className="sr-only">Actions</span>
+                  </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -300,13 +320,36 @@ export default async function ItTicketQueuePage({
                     </td>
                     <td className="px-4 py-3 text-slate-600">
                       {t.assigned_to_person_id ? (
-                        (names.get(t.assigned_to_person_id) ?? "—")
+                        <>
+                          {names.get(t.assigned_to_person_id) ?? "—"}
+                          {(helperCount.get(t.id) ?? 0) > 0 && (
+                            <span className="ml-1 text-xs text-slate-400">
+                              (+{helperCount.get(t.id)})
+                            </span>
+                          )}
+                        </>
                       ) : (
                         <span className="text-slate-400">Unassigned</span>
                       )}
                     </td>
                     <td className="px-4 py-3">
                       <SlaBadge ticket={t} />
+                    </td>
+                    <td className="whitespace-nowrap px-4 py-3 text-right">
+                      {t.status !== "Closed" && canManageSite(scope, t.handling_site_id) && (
+                        <Link
+                          href={`/it/tickets/${t.id}#triage`}
+                          className="mr-3 text-sm font-medium text-blue-700 hover:underline"
+                        >
+                          Assign
+                        </Link>
+                      )}
+                      <Link
+                        href={`/it/tickets/${t.id}`}
+                        className="text-sm font-medium text-slate-600 hover:underline"
+                      >
+                        View
+                      </Link>
                     </td>
                   </tr>
                 ))}

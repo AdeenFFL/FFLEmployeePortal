@@ -207,18 +207,69 @@ export async function addTask(ticketId: string, formData: FormData) {
   const taskType = text(formData, "taskType");
   if (!taskType) fail(ticketId, "Task name is required.");
 
-  const { error } = await supabase
+  const leadId = text(formData, "assigneeId") || null;
+  const { data: task, error } = await supabase
     .schema("it")
     .from("ticket_tasks")
     .insert({
       ticket_id: ticketId,
       task_type: taskType,
       description: text(formData, "description") || null,
-      assigned_to_person_id: text(formData, "assigneeId") || null,
-    });
-  if (error) fail(ticketId, error.message);
+      assigned_to_person_id: leadId,
+    })
+    .select("id")
+    .single();
+  if (error || !task) fail(ticketId, error?.message ?? "Could not add the task.");
+
+  // Phase 6.3: extra assignees besides the lead (it.ticket_task_assignees).
+  const extraIds = [
+    ...new Set(formData.getAll("extraAssigneeIds").map(String).filter((id) => id && id !== leadId)),
+  ];
+  if (extraIds.length > 0) {
+    const { error: extraError } = await supabase
+      .schema("it")
+      .from("ticket_task_assignees")
+      .insert(extraIds.map((personId) => ({ task_id: task.id, person_id: personId })));
+    if (extraError) fail(ticketId, `Task added, but extra assignees failed: ${extraError.message}`);
+  }
 
   done(ticketId, "Task added.");
+}
+
+// Phase 6.3 — helpers on a ticket. RLS lets only the site's IT manager or an HQ Executive add /
+// remove them; a trigger checks they're on the site's IT team (javaria_it_0006).
+export async function addHelper(ticketId: string, formData: FormData) {
+  const { supabase } = await requirePermission("it.tickets.read");
+
+  const personId = text(formData, "helperId");
+  if (!personId) fail(ticketId, "Pick a helper.");
+
+  const { error } = await supabase
+    .schema("it")
+    .from("ticket_assignees")
+    .insert({ ticket_id: ticketId, person_id: personId, role: "helper" });
+  if (error) {
+    fail(ticketId, error.code === "23505" ? "Already on this ticket." : error.message);
+  }
+
+  done(ticketId, "Helper added.");
+}
+
+export async function removeHelper(ticketId: string, personId: string) {
+  const { supabase } = await requirePermission("it.tickets.read");
+
+  const { data, error } = await supabase
+    .schema("it")
+    .from("ticket_assignees")
+    .delete()
+    .eq("ticket_id", ticketId)
+    .eq("person_id", personId)
+    .eq("role", "helper")
+    .select("person_id");
+  if (error) fail(ticketId, error.message);
+  if (!data?.length) fail(ticketId, "Only this site's IT manager or an HQ IT Executive can remove helpers.");
+
+  done(ticketId, "Helper removed.");
 }
 
 export async function updateTaskStatus(ticketId: string, taskId: string, formData: FormData) {

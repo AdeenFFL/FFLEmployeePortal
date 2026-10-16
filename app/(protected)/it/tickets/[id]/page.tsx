@@ -29,6 +29,8 @@ import {
   setEscalation,
   setTicketAsset,
   transferToHq,
+  addHelper,
+  removeHelper,
   triageTicket,
   updateTaskStatus,
   updateTicketStatus,
@@ -49,9 +51,9 @@ import {
   Timeline,
 } from "../../_components/ticket-ui";
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
+function Panel({ title, children, id }: { title: string; children: React.ReactNode; id?: string }) {
   return (
-    <section className={`${cardClass} p-5`}>
+    <section id={id} className={`${cardClass} scroll-mt-6 p-5`}>
       <h2 className="mb-3 text-sm font-semibold text-slate-900">{title}</h2>
       {children}
     </section>
@@ -123,14 +125,49 @@ export default async function ItTicketWorkspacePage({
   // Same rule as the tickets update policy: executives, or the assignee with it.tickets.update.
   const canSetDevice = !isClosed && (canAssign || (canUpdate && isAssignee));
 
+  // Phase 6.2–6.4 data: helpers, task assignees, category owners ("Routed to"), closure record.
+  const taskIds = (tasks ?? []).map((t) => t.id);
+  const [{ data: assignees }, { data: taskAssignees }, { data: owners }, { data: closure }] =
+    await Promise.all([
+      supabase.schema("it").from("ticket_assignees").select("person_id, role").eq("ticket_id", id),
+      taskIds.length
+        ? supabase.schema("it").from("ticket_task_assignees").select("task_id, person_id").in("task_id", taskIds)
+        : Promise.resolve({ data: [] as { task_id: string; person_id: string }[] }),
+      supabase.schema("it").rpc("list_category_owners"),
+      scope.readAll && ticket.status === "Closed"
+        ? supabase
+            .schema("it")
+            .from("ticket_closure_audit")
+            .select("closed_at, closed_by, sla_met")
+            .eq("ticket_id", id)
+            .maybeSingle()
+        : Promise.resolve({ data: null }),
+    ]);
+  const helpers = (assignees ?? []).filter((a) => a.role === "helper");
+  const isHelper = Boolean(personId) && helpers.some((h) => h.person_id === personId);
+  const extrasByTask = new Map<string, string[]>();
+  for (const ta of taskAssignees ?? []) {
+    extrasByTask.set(ta.task_id, [...(extrasByTask.get(ta.task_id) ?? []), ta.person_id]);
+  }
+  // Same precedence as auto-assignment: subcategory owners at the handling site, else category's.
+  const siteOwners = (owners ?? []).filter((o) => o.site_id === ticket.handling_site_id);
+  const subOwners = siteOwners.filter((o) => o.category_id === ticket.subcategory_id);
+  const routedOwners = subOwners.length
+    ? subOwners
+    : siteOwners.filter((o) => o.category_id === ticket.category_id);
+  const routedScope = subOwners.length ? ticket.subcategory_id : ticket.category_id;
+
   const [names, urls, assetLabels, { data: assetMatches }] = await Promise.all([
     fetchPersonNames(supabase, [
       ticket.requester_person_id,
       ticket.requested_for_person_id,
       ticket.assigned_to_person_id,
       ticket.escalated_by,
+      closure?.closed_by,
       ...(updates ?? []).map((u) => u.author_person_id),
       ...(tasks ?? []).map((t) => t.assigned_to_person_id),
+      ...helpers.map((h) => h.person_id),
+      ...(taskAssignees ?? []).map((ta) => ta.person_id),
     ]),
     signedAttachmentUrls(supabase, (attachments ?? []).map((a) => a.storage_path)),
     fetchAssetLabels(supabase, [ticket.linked_asset_id]),
@@ -232,7 +269,11 @@ export default async function ItTicketWorkspacePage({
                 {(tasks ?? []).map((task) => {
                   const canEditTask =
                     !isClosed &&
-                    (canAssign || (canUpdate && task.assigned_to_person_id === personId));
+                    (canAssign ||
+                      (canUpdate &&
+                        (task.assigned_to_person_id === personId ||
+                          (extrasByTask.get(task.id) ?? []).includes(personId ?? ""))));
+                  const extras = extrasByTask.get(task.id) ?? [];
                   return (
                     <li key={task.id} className="flex flex-wrap items-center gap-3 py-3">
                       <div className="min-w-0 flex-1">
@@ -242,6 +283,7 @@ export default async function ItTicketWorkspacePage({
                         )}
                         <p className="text-xs text-slate-400">
                           {nameOf(task.assigned_to_person_id)}
+                          {extras.length > 0 && ` + ${extras.map((pid) => nameOf(pid)).join(", ")}`}
                           {task.completed_at && ` · completed ${formatDateTime(task.completed_at)}`}
                         </p>
                       </div>
@@ -301,6 +343,21 @@ export default async function ItTicketWorkspacePage({
                   aria-label="Task details"
                   className={inputClass}
                 />
+                {(staff ?? []).length > 1 && (
+                  <fieldset className="md:col-span-3">
+                    <legend className="mb-1 text-xs font-medium text-slate-500">
+                      Also assign to (optional)
+                    </legend>
+                    <div className="flex flex-wrap gap-x-4 gap-y-1">
+                      {(staff ?? []).map((s) => (
+                        <label key={s.person_id} className="flex items-center gap-1.5 text-sm text-slate-700">
+                          <input type="checkbox" name="extraAssigneeIds" value={s.person_id} />
+                          {s.full_name}
+                        </label>
+                      ))}
+                    </div>
+                  </fieldset>
+                )}
                 <div className="md:col-span-3">
                   <button type="submit" className={secondaryButtonClass}>
                     Add task
@@ -415,7 +472,7 @@ export default async function ItTicketWorkspacePage({
           )}
 
           {canAssign && !isClosed && (
-            <Panel title="Triage">
+            <Panel title="Triage" id="triage">
               <form action={triageTicket.bind(null, ticket.id)} className="space-y-3">
                 <div>
                   <label htmlFor="assigneeId" className={labelClass}>
@@ -430,6 +487,7 @@ export default async function ItTicketWorkspacePage({
                     <option value="">Unassigned</option>
                     {(staff ?? []).map((s) => (
                       <option key={s.person_id} value={s.person_id}>
+                        {s.is_category_owner ? "★ " : ""}
                         {s.full_name}
                         {s.designation ? ` — ${s.designation}` : ""}
                       </option>
@@ -504,6 +562,59 @@ export default async function ItTicketWorkspacePage({
                   Save triage
                 </button>
               </form>
+            </Panel>
+          )}
+
+          {(helpers.length > 0 || (canAssign && !isClosed)) && (
+            <Panel title="Helpers">
+              {isHelper && (
+                <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                  You&apos;re a helper: you can comment, add internal notes and tasks. The primary
+                  assignee changes the status and resolves.
+                </p>
+              )}
+              {helpers.length === 0 ? (
+                <p className="mb-3 text-sm text-slate-400">No helpers.</p>
+              ) : (
+                <ul className="mb-3 space-y-1">
+                  {helpers.map((h) => (
+                    <li key={h.person_id} className="flex items-center justify-between text-sm text-slate-800">
+                      {nameOf(h.person_id)}
+                      {canAssign && !isClosed && (
+                        <form action={removeHelper.bind(null, ticket.id, h.person_id)}>
+                          <button type="submit" className="text-xs text-slate-500 hover:text-red-600">
+                            Remove
+                          </button>
+                        </form>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+              {canAssign && !isClosed && (
+                <form action={addHelper.bind(null, ticket.id)} className="flex gap-2">
+                  <select name="helperId" defaultValue="" required aria-label="Add helper" className={inputClass}>
+                    <option value="" disabled>
+                      Add a helper…
+                    </option>
+                    {(staff ?? [])
+                      .filter(
+                        (s) =>
+                          s.person_id !== ticket.assigned_to_person_id &&
+                          !helpers.some((h) => h.person_id === s.person_id),
+                      )
+                      .map((s) => (
+                        <option key={s.person_id} value={s.person_id}>
+                          {s.is_category_owner ? "★ " : ""}
+                          {s.full_name}
+                        </option>
+                      ))}
+                  </select>
+                  <button type="submit" className={secondaryButtonClass}>
+                    Add
+                  </button>
+                </form>
+              )}
             </Panel>
           )}
 
@@ -645,6 +756,20 @@ export default async function ItTicketWorkspacePage({
           <section className={`${cardClass} p-5`}>
             <dl className="space-y-4">
               <Fact label="Handled at">{handlingSiteName}</Fact>
+              <Fact label="Routed to">
+                {routedScope && routedOwners.length > 0
+                  ? `${maps.categoryNameById.get(routedScope) ?? "Category"} owners: ${routedOwners
+                      .map((o) => `${o.is_primary ? "★ " : ""}${o.full_name}`)
+                      .join(", ")}`
+                  : "No category owner here — site manager assigns"}
+              </Fact>
+              {closure && (
+                <Fact label="Closure record">
+                  Captured {formatDateTime(closure.closed_at)}
+                  {closure.closed_by && ` by ${nameOf(closure.closed_by)}`} · SLA{" "}
+                  {closure.sla_met === null ? "n/a" : closure.sla_met ? "met" : "missed"}
+                </Fact>
+              )}
               <Fact label="Requester">{nameOf(ticket.requester_person_id)}</Fact>
               {ticket.requested_for_person_id && (
                 <Fact label="Requested for">{nameOf(ticket.requested_for_person_id)}</Fact>

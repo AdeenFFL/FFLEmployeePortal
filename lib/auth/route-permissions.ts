@@ -26,6 +26,9 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/my-assets": "module:it",
   "/it/settings/tickets": "it.ticket_settings.update",
   "/it/settings/sites": "it.ticket_settings.update",
+  // Category owners: settings admins edit any site, site IT managers their own; other IT staff
+  // see it read-only — so the route only needs queue access (javaria_it_0006).
+  "/it/settings/owners": "it.tickets.read",
   // SCR-06: the IT Dashboard is for IT team members who handle tickets, not every employee with
   // module:it — reconciled per Javaria's own note anticipating this conflict (she built the real
   // dashboard; it.tickets.read replaces the earlier module:it placeholder gate).

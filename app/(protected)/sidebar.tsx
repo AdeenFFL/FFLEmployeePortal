@@ -152,6 +152,7 @@ export function Sidebar({
           label: "Sites & IT Staff",
           permission: "it.ticket_settings.update",
         },
+        { href: "/it/settings/owners", label: "Category Owners", permission: "it.tickets.read" },
         // Inventory track (Talha)
         { href: "/it/inventory", label: "Asset Register", permission: "it.assets.read" },
         {

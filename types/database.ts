@@ -283,6 +283,44 @@ export type ItSiteItStaff = {
   created_by: string | null;
 };
 
+// Phase 6.2 / 6.3 — javaria_it_0006_owners_and_assignees.sql
+export type ItCategoryOwner = {
+  category_id: string;
+  site_id: string;
+  person_id: string;
+  is_primary: boolean;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type ItAssigneeRole = "primary" | "helper";
+
+export type ItTicketAssignee = {
+  ticket_id: string;
+  person_id: string;
+  role: ItAssigneeRole;
+  assigned_by: string | null;
+  assigned_at: string;
+};
+
+export type ItTicketTaskAssignee = {
+  task_id: string;
+  person_id: string;
+  assigned_at: string;
+};
+
+// Phase 6.4 — javaria_it_0007_closure_audit.sql
+export type ItTicketClosureAudit = {
+  id: string;
+  ticket_id: string;
+  ticket_number: string;
+  handling_site_id: string | null;
+  closed_by: string | null;
+  closed_at: string;
+  sla_met: boolean | null;
+  snapshot: Record<string, unknown>;
+};
+
 // IT module (M2) — inventory settings (supabase/it-migrations/talha/talha_it_0002_inventory_settings.sql).
 export type AssetClassification = "Fixed" | "Consumable";
 export type AssetValueTypeName = "New" | "Old";
@@ -912,6 +950,31 @@ export type Database = {
         Update: Partial<ItSiteItStaff>;
         Relationships: [];
       };
+      category_owners: {
+        Row: ItCategoryOwner;
+        Insert: Partial<ItCategoryOwner> &
+          Pick<ItCategoryOwner, "category_id" | "site_id" | "person_id">;
+        Update: Partial<ItCategoryOwner>;
+        Relationships: [];
+      };
+      ticket_assignees: {
+        Row: ItTicketAssignee;
+        Insert: Partial<ItTicketAssignee> & Pick<ItTicketAssignee, "ticket_id" | "person_id">;
+        Update: Partial<ItTicketAssignee>;
+        Relationships: [];
+      };
+      ticket_task_assignees: {
+        Row: ItTicketTaskAssignee;
+        Insert: Partial<ItTicketTaskAssignee> & Pick<ItTicketTaskAssignee, "task_id" | "person_id">;
+        Update: Partial<ItTicketTaskAssignee>;
+        Relationships: [];
+      };
+      ticket_closure_audit: {
+        Row: ItTicketClosureAudit;
+        Insert: Partial<ItTicketClosureAudit>;
+        Update: Partial<ItTicketClosureAudit>;
+        Relationships: [];
+      };
       sla_policies: {
         Row: ItSlaPolicy;
         Insert: Partial<ItSlaPolicy> &
@@ -1176,6 +1239,17 @@ export type Database = {
           full_name: string;
           designation: string | null;
           site_role: ItSiteRole | null;
+          is_category_owner: boolean; // javaria_it_0006
+        }[];
+      };
+      list_category_owners: {
+        Args: Record<string, never>;
+        Returns: {
+          category_id: string;
+          site_id: string;
+          person_id: string;
+          full_name: string;
+          is_primary: boolean;
         }[];
       };
       list_site_it_staff: {
