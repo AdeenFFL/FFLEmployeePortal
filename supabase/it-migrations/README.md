@@ -108,3 +108,4 @@ explaining it's a confirmed no-op.
 | `javaria/javaria_it_0004_ticket_asset_link.sql` | 2026-10-14 | Javaria | Ticket ↔ asset: soft-delete guard, device search and label helpers. Depends on `talha_it_0004` (owns the `tickets_linked_asset_id_fkey` FK). Not yet in the main sequence |
 | `talha/talha_it_0007_asset_tag_manual.sql` | 2026-10-14 | Talha | Decision 5: asset tags entered manually (drops the default, adds not-blank check and case-insensitive unique index). Not yet in the main sequence |
 | `talha/talha_it_0008_people_lookup.sql` | 2026-10-15 | Talha | Phase 3: people lookup for inventory staff (`it.search_people`, `it.asset_person_names`); Javaria's `person_names()` untouched. Not yet in the main sequence |
+| `talha/talha_it_0009_inventory_role_grants.sql` | 2026-10-19 | Talha | Inventory permissions for HOD IT, IT Admin, IT Executive (HQ), IT Site Manager, IT Team Member; roles were created by hand, grants now recorded; Admin and IT untouched |
