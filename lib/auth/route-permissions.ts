@@ -24,6 +24,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/inventory": "it.assets.read",
   // Inventory track: every employee sees the assets they hold (RLS limits rows to their own).
   "/it/my-assets": "module:it",
+  "/it/admin/roles": "it.manage_role_permissions",
   "/it/settings/tickets": "it.ticket_settings.update",
   // SCR-06: the IT Dashboard is for IT team members who handle tickets, not every employee with
   // module:it — reconciled per Javaria's own note anticipating this conflict (she built the real

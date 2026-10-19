@@ -155,6 +155,11 @@ export function Sidebar({
           label: "Inventory Settings",
           permission: "it.inventory_settings.update",
         },
+        {
+          href: "/it/admin/roles",
+          label: "IT Role Permissions",
+          permission: "it.manage_role_permissions",
+        },
       ],
     },
     {
