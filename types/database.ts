@@ -950,6 +950,13 @@ export type Database = {
         Update: Partial<ItSiteItStaff>;
         Relationships: [];
       };
+      // javaria_it_0008_it_roles.sql — roles tagged as IT department roles.
+      it_roles: {
+        Row: { role_id: string; created_at: string; created_by: string | null };
+        Insert: { role_id: string; created_by?: string | null };
+        Update: Partial<{ role_id: string; created_by: string | null }>;
+        Relationships: [];
+      };
       category_owners: {
         Row: ItCategoryOwner;
         Insert: Partial<ItCategoryOwner> &
@@ -1241,6 +1248,19 @@ export type Database = {
           site_role: ItSiteRole | null;
           is_category_owner: boolean; // javaria_it_0006
         }[];
+      };
+      // javaria_it_0008_it_roles.sql
+      set_role_it_permission: {
+        Args: { p_role_id: string; p_permission_id: string; p_granted: boolean };
+        Returns: undefined;
+      };
+      create_it_role: {
+        Args: { p_name: string; p_description: string | null };
+        Returns: string;
+      };
+      set_it_role_tag: {
+        Args: { p_role_id: string; p_is_it: boolean };
+        Returns: undefined;
       };
       list_category_owners: {
         Args: Record<string, never>;

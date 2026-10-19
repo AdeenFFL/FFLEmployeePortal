@@ -301,6 +301,17 @@ category names, assignees, tasks + assignees, attachment / timeline counts, SLA 
 readable with `it.tickets.read_all`; already-closed tickets are backfilled. Workspace shows a
 **Closure record** line to HQ.
 
+**IT Roles & Permissions** *(built; `javaria_it_0008_it_roles.sql`, not yet applied)* — the
+IT module's own access screen at `/it/admin/roles` (gated by `it.manage_role_permissions`, the
+shared screen from Talha's plan §2.1). Shows and changes **only `module = 'it'` permissions**,
+via `it.set_role_it_permission()` (security definer — `public.role_permissions` is writable only
+by full admins, so this lets an IT admin manage IT access without `core.full_access`; refuses
+non-IT permissions, won't revoke the last holder of `it.manage_role_permissions`, writes
+`public.audit_log`). `it.it_roles` tags IT department roles (listed first; other roles shown
+separately because Employee / HR still need some IT permissions). Seeded roles: **IT Admin**
+(all IT permissions), **IT Executive (HQ)**, **HOD IT**, **IT Site Manager**, **IT Team
+Member**. Putting people into roles stays on User Management (core).
+
 **Open (IT BA / senior dev)**: full list of HQ-handled work (VPN, domain accounts, licences?);
 can helpers change status or only comment; do HQ-handled requests need site-manager approval
 first; mirror closures into `public.audit_log` (§8 #6).

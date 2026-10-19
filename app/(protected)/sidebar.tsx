@@ -153,6 +153,11 @@ export function Sidebar({
           permission: "it.ticket_settings.update",
         },
         { href: "/it/settings/owners", label: "Category Owners", permission: "it.tickets.read" },
+        {
+          href: "/it/admin/roles",
+          label: "IT Roles & Permissions",
+          permission: "it.manage_role_permissions",
+        },
         // Inventory track (Talha)
         { href: "/it/inventory", label: "Asset Register", permission: "it.assets.read" },
         {
