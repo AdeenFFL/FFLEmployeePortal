@@ -223,7 +223,7 @@ the additional screens the BRD's process sections imply.
 | INV-07 | `/it/inventory/stock` | IT | Consumable stock levels per site; Stock In / Stock Out form; movement history |
 | INV-08 | `/it/inventory/reports` | IT mgmt | Inventory status, utilisation, warranty expiry, maintenance cost; CSV export |
 | SCR-06 (part) | `/it/dashboard` | IT | Inventory KPI cards + asset-status breakdown (component inside Javeria's page) |
-| — | `/it/admin/roles` | IT admin | Shared with Javeria (§2.1) |
+| — | `/it/admin/roles` | IT admin | Shared with Javeria (§2.1). **Built 2026-10-19**: edits existing roles only, shows IT permissions grouped by prefix, refuses non-`it.` keys and the last holder of `it.manage_role_permissions`, and shows a red message when the database does not allow the change (only a full Admin can write `role_permissions` until the senior dev changes that rule) |
 
 UI follows the HR pages: server components that query with `.schema("it")`, Server Actions with
 `requirePermission()` / `requireActiveUser()`, `PageHeader`, `Modal`, `StatusPill`, and
