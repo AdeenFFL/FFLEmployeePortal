@@ -56,9 +56,11 @@ begin
     raise exception 'You need IT Role Permissions (it.manage_role_permissions) to change IT access';
   end if;
 
+  -- Only "it.*" keys. module:it (opening the IT module at all) stays an Admin decision on
+  -- Administration → Roles (develop's 0021; Talha's design for this screen), so it's excluded.
   select * into v_perm from permissions where id = p_permission_id;
-  if not found or v_perm.module <> 'it' then
-    raise exception 'Only IT permissions can be changed here';
+  if not found or v_perm.module <> 'it' or v_perm.key not like 'it.%' then
+    raise exception 'Only IT permissions (it.*) can be changed here';
   end if;
 
   select name into v_role_name from roles where id = p_role_id;
@@ -176,26 +178,27 @@ select id from roles
 where name in ('IT Admin', 'IT Executive (HQ)', 'HOD IT', 'IT Site Manager', 'IT Team Member')
 on conflict (role_id) do nothing;
 
--- Permission bundles. IT Admin gets every IT permission (both tracks); the others get the
--- service-management / onboarding set for their job. Talha's inventory permissions are left
+-- Permission bundles (it.* only — module:it is granted by an Admin on Administration → Roles;
+-- the live roles already hold it). IT Admin gets every it.* permission (both tracks); the others
+-- get the service-management / onboarding set for their job. Talha's inventory permissions are left
 -- for the inventory track to bundle (only IT Admin gets them here).
 insert into role_permissions (role_id, permission_id, granted_by)
 select r.id, p.id, null::uuid
 from roles r
 join permissions p on (
-     (r.name = 'IT Admin' and p.module = 'it')
+     (r.name = 'IT Admin' and p.module = 'it' and p.key like 'it.%')
   or (r.name = 'IT Executive (HQ)' and p.key in (
-        'module:it', 'it.tickets.read', 'it.tickets.update', 'it.tickets.assign',
+        'it.tickets.read', 'it.tickets.update', 'it.tickets.assign',
         'it.tickets.close', 'it.tickets.read_all',
         'it.onboarding.read', 'it.onboarding.update', 'it.onboarding.assign'))
   or (r.name = 'HOD IT' and p.key in (
-        'module:it', 'it.tickets.read', 'it.tickets.read_all', 'it.tickets.close',
+        'it.tickets.read', 'it.tickets.read_all', 'it.tickets.close',
         'it.onboarding.read', 'it.onboarding.approve'))
   or (r.name = 'IT Site Manager' and p.key in (
-        'module:it', 'it.tickets.read', 'it.tickets.update',
+        'it.tickets.read', 'it.tickets.update',
         'it.onboarding.read', 'it.onboarding.update'))
   or (r.name = 'IT Team Member' and p.key in (
-        'module:it', 'it.tickets.read', 'it.tickets.update',
+        'it.tickets.read', 'it.tickets.update',
         'it.onboarding.read', 'it.onboarding.update'))
 )
 where r.name in ('IT Admin', 'IT Executive (HQ)', 'HOD IT', 'IT Site Manager', 'IT Team Member')

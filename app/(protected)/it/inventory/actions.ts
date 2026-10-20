@@ -209,6 +209,19 @@ function detailUrl(assetId: string, kind: "notice" | "error", message: string) {
   return `/it/inventory/${assetId}?${kind}=${encodeURIComponent(message)}`;
 }
 
+// The page an assign / return form came from. <AssetAssignForm> / <AssetReturnForm> post a
+// `return_to` path so they can be embedded on other IT pages (e.g. Javaria's on/offboarding).
+// Only plain paths under /it/ are accepted — never another site — else the asset detail page.
+function returnPath(formData: FormData, assetId: string) {
+  const path = text(formData, "return_to");
+  const safe = /^\/it\/[A-Za-z0-9\-_/]*$/.test(path) && !path.includes("//");
+  return safe ? path : `/it/inventory/${assetId}`;
+}
+
+function resultUrl(formData: FormData, assetId: string, kind: "notice" | "error", message: string) {
+  return `${returnPath(formData, assetId)}?${kind}=${encodeURIComponent(message)}`;
+}
+
 // Manual status changes only (Retired / Disposed / Lost / back to Unassigned). "In Use" and
 // "In Repair" belong to the assignment (Phase 3) and maintenance (Phase 4) flows, so an asset
 // in either can't be moved by hand — that would leave an open assignment or repair behind.
@@ -319,7 +332,7 @@ export async function returnAsset(assetId: string, formData: FormData) {
   const returnedCondition = optionalText(formData, "returned_condition");
   const remarks = optionalText(formData, "remarks");
   if (!RETURN_STATUSES.includes(newStatus)) {
-    redirect(detailUrl(assetId, "error", "Choose what happens to the asset after the return."));
+    redirect(resultUrl(formData, assetId, "error", "Choose what happens to the asset after the return."));
   }
 
   const [{ data: asset }, { data: assignment }] = await Promise.all([
@@ -338,10 +351,10 @@ export async function returnAsset(assetId: string, formData: FormData) {
       .is("return_date", null)
       .maybeSingle(),
   ]);
-  if (!asset) redirect(detailUrl(assetId, "error", "This asset no longer exists."));
-  if (!assignment) redirect(detailUrl(assetId, "error", "This asset isn't currently assigned."));
+  if (!asset) redirect(resultUrl(formData, assetId, "error", "This asset no longer exists."));
+  if (!assignment) redirect(resultUrl(formData, assetId, "error", "This asset isn't currently assigned."));
   if (returnDate && returnDate < assignment.assigned_date) {
-    redirect(detailUrl(assetId, "error", "The return date can't be before the date it was assigned."));
+    redirect(resultUrl(formData, assetId, "error", "The return date can't be before the date it was assigned."));
   }
 
   const { error } = await supabase.schema("it").rpc("return_asset", {
@@ -351,7 +364,7 @@ export async function returnAsset(assetId: string, formData: FormData) {
     p_new_status: newStatus,
     ...(returnDate ? { p_return_date: returnDate } : {}),
   });
-  if (error) redirect(detailUrl(assetId, "error", error.message));
+  if (error) redirect(resultUrl(formData, assetId, "error", error.message));
 
   await logAuditEvent({
     supabase,
@@ -367,5 +380,204 @@ export async function returnAsset(assetId: string, formData: FormData) {
   revalidatePath("/it/inventory");
   revalidatePath(`/it/inventory/${assetId}`);
   revalidatePath("/it/my-assets");
-  redirect(detailUrl(assetId, "notice", `Return recorded. ${asset.asset_tag} is now ${newStatus}.`));
+  revalidatePath(returnPath(formData, assetId));
+  redirect(resultUrl(formData, assetId, "notice", `Return recorded. ${asset.asset_tag} is now ${newStatus}.`));
+}
+
+// Employee picker on the Assign panel. it.search_people (talha_it_0008) returns active employees
+// only, returns nothing for fewer than 2 letters, and refuses callers without it.assets.assign.
+export type PersonOption = {
+  person_id: string;
+  full_name: string;
+  designation: string | null;
+  employee_code: string | null;
+};
+
+export async function searchPeople(query: string): Promise<PersonOption[]> {
+  const { supabase } = await requirePermission("it.assets.assign");
+  const q = query.trim();
+  if (q.length < 2) return [];
+
+  const { data, error } = await supabase
+    .schema("it")
+    .rpc("search_people", { p_query: q, p_limit: 20 });
+  if (error) throw new Error(error.message);
+  return data ?? [];
+}
+
+// The latest date a form (assign, send for repair, close repair) may carry. The server runs on UTC,
+// which can be hours behind local time, so "today" for the user may already be tomorrow for the
+// server — allow one day of slack and only refuse dates beyond that.
+function latestAllowedDate() {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
+// INV-04 — give an Unassigned asset to an employee. Goes through it.assign_asset(), which locks
+// the asset, refuses anything not Unassigned, writes the assignment row and sets the asset
+// In Use in one transaction. Also meant for Javaria's onboarding "Asset Allocation" task.
+export async function assignAsset(assetId: string, formData: FormData) {
+  const { supabase, personId, actorLabel } = await requirePermission("it.assets.assign");
+
+  const holderId = text(formData, "person_id");
+  const assignedDate = optionalText(formData, "assigned_date");
+  const condition = optionalText(formData, "condition");
+  const remarks = optionalText(formData, "remarks");
+  if (!holderId) redirect(resultUrl(formData, assetId, "error", "Choose the employee to assign this asset to."));
+  if (assignedDate && assignedDate > latestAllowedDate()) {
+    redirect(resultUrl(formData, assetId, "error", "The assigned date can't be in the future."));
+  }
+
+  const [{ data: asset }, { data: names }] = await Promise.all([
+    supabase
+      .schema("it")
+      .from("assets")
+      .select("asset_tag")
+      .eq("id", assetId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    supabase.schema("it").rpc("asset_person_names", { p_person_ids: [holderId] }),
+  ]);
+  if (!asset) redirect(resultUrl(formData, assetId, "error", "This asset no longer exists."));
+  const holderName = names?.[0]?.full_name ?? "the selected employee";
+
+  const { error } = await supabase.schema("it").rpc("assign_asset", {
+    p_asset_id: assetId,
+    p_person_id: holderId,
+    p_condition: condition,
+    p_remarks: remarks,
+    ...(assignedDate ? { p_assigned_date: assignedDate } : {}),
+  });
+  if (error) redirect(resultUrl(formData, assetId, "error", error.message));
+
+  await logAuditEvent({
+    supabase,
+    actorId: personId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details: `Assigned asset ${asset.asset_tag} to ${holderName}`,
+  });
+
+  revalidatePath("/it/inventory");
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/my-assets");
+  revalidatePath(returnPath(formData, assetId));
+  redirect(resultUrl(formData, assetId, "notice", `Assigned to ${holderName}.`));
+}
+
+// INV-06 / Phase 4 — send an asset for repair. it.open_maintenance() (talha_it_0005) refuses
+// Retired / Disposed / Lost and already-In-Repair assets, and sets the asset In Repair. Blank
+// optional fields are left OUT of the call so the database defaults apply (never sent as "").
+export async function openMaintenance(assetId: string, formData: FormData) {
+  const { supabase, personId, actorLabel } = await requirePermission("it.maintenance.update");
+
+  const issueType = text(formData, "issue_type");
+  const description = text(formData, "description");
+  const serviceDate = text(formData, "service_date");
+  if (!issueType) redirect(detailUrl(assetId, "error", "Enter the issue type."));
+  if (serviceDate && serviceDate > latestAllowedDate()) {
+    redirect(detailUrl(assetId, "error", "The service date can't be in the future."));
+  }
+
+  const { data: asset } = await supabase
+    .schema("it")
+    .from("assets")
+    .select("asset_tag")
+    .eq("id", assetId)
+    .is("deleted_at", null)
+    .maybeSingle();
+  if (!asset) redirect(detailUrl(assetId, "error", "This asset no longer exists."));
+
+  const { error } = await supabase.schema("it").rpc("open_maintenance", {
+    p_asset_id: assetId,
+    p_issue_type: issueType,
+    ...(description ? { p_description: description } : {}),
+    ...(serviceDate ? { p_service_date: serviceDate } : {}),
+  });
+  if (error) redirect(detailUrl(assetId, "error", error.message));
+
+  await logAuditEvent({
+    supabase,
+    actorId: personId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details: `Sent asset ${asset.asset_tag} for repair: ${issueType}`,
+  });
+
+  revalidatePath("/it/inventory");
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/my-assets");
+  redirect(detailUrl(assetId, "notice", `${asset.asset_tag} sent for repair.`));
+}
+
+// Phase 4 — repair finished. it.close_maintenance() completes the record and puts the asset back
+// to In Use (someone still holds it) or Unassigned. An empty returned date must be OMITTED, not
+// sent as null: null would mark the record Completed with no date, which its check refuses.
+export async function closeMaintenance(assetId: string, maintenanceId: string, formData: FormData) {
+  const { supabase, personId, actorLabel } = await requirePermission("it.maintenance.update");
+
+  const resolution = text(formData, "resolution");
+  const costText = text(formData, "cost");
+  const returnedDate = text(formData, "returned_date");
+  const remarks = text(formData, "remarks");
+  if (!resolution) redirect(detailUrl(assetId, "error", "Describe how the repair was resolved."));
+
+  const cost = costText ? Number(costText) : null;
+  if (cost !== null && (!Number.isFinite(cost) || cost < 0)) {
+    redirect(detailUrl(assetId, "error", "Cost must be a number of 0 or more."));
+  }
+  if (returnedDate && returnedDate > latestAllowedDate()) {
+    redirect(detailUrl(assetId, "error", "The returned date can't be in the future."));
+  }
+
+  const [{ data: asset }, { data: record }] = await Promise.all([
+    supabase
+      .schema("it")
+      .from("assets")
+      .select("asset_tag")
+      .eq("id", assetId)
+      .is("deleted_at", null)
+      .maybeSingle(),
+    supabase
+      .schema("it")
+      .from("asset_maintenance")
+      .select("service_date, status")
+      .eq("id", maintenanceId)
+      .eq("asset_id", assetId)
+      .maybeSingle(),
+  ]);
+  if (!asset) redirect(detailUrl(assetId, "error", "This asset no longer exists."));
+  if (!record) redirect(detailUrl(assetId, "error", "Repair record not found."));
+  if (record.status !== "Open") redirect(detailUrl(assetId, "error", "This repair is already closed."));
+  if (returnedDate && returnedDate < record.service_date) {
+    redirect(detailUrl(assetId, "error", "The returned date can't be before the date it was sent."));
+  }
+
+  const { error } = await supabase.schema("it").rpc("close_maintenance", {
+    p_maintenance_id: maintenanceId,
+    p_resolution: resolution,
+    ...(cost !== null ? { p_cost: cost } : {}),
+    ...(returnedDate ? { p_returned_date: returnedDate } : {}),
+    ...(remarks ? { p_remarks: remarks } : {}),
+  });
+  if (error) redirect(detailUrl(assetId, "error", error.message));
+
+  await logAuditEvent({
+    supabase,
+    actorId: personId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details:
+      `Closed repair on asset ${asset.asset_tag}: ${resolution}` +
+      (cost !== null ? ` (cost ${cost})` : ""),
+  });
+
+  revalidatePath("/it/inventory");
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/my-assets");
+  redirect(detailUrl(assetId, "notice", `Repair closed on ${asset.asset_tag}.`));
 }

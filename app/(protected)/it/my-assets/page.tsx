@@ -38,6 +38,7 @@ export default async function MyAssetsPage({
               <tr>
                 <th className="px-4 py-3">Tag</th>
                 <th className="px-4 py-3">Asset</th>
+                <th className="px-4 py-3">Model</th>
                 <th className="px-4 py-3">Type</th>
                 <th className="px-4 py-3">Serial number</th>
                 <th className="px-4 py-3">Assigned</th>
@@ -54,6 +55,10 @@ export default async function MyAssetsPage({
                   <td className="px-4 py-3 text-slate-900">
                     {a.assets?.asset_name ?? "—"}
                     {a.remarks && <p className="mt-1 text-xs text-slate-500">{a.remarks}</p>}
+                  </td>
+                  <td className="px-4 py-3 text-slate-700">
+                    {[a.assets?.manufacturer, a.assets?.model_number].filter(Boolean).join(" · ") ||
+                      "—"}
                   </td>
                   <td className="px-4 py-3 text-slate-700">{a.assets?.asset_types?.name ?? "—"}</td>
                   <td className="px-4 py-3 font-mono text-xs text-slate-700">

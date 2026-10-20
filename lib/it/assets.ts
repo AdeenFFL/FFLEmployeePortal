@@ -17,7 +17,7 @@ export async function listOpenAssignments(supabase: Client, personId: string) {
     .schema("it")
     .from("asset_assignments")
     .select(
-      "id, asset_id, assigned_date, assigned_condition, remarks, acknowledged_at, assets(asset_tag, asset_name, serial_number, asset_types(name))",
+      "id, asset_id, assigned_date, assigned_condition, remarks, acknowledged_at, assets(asset_tag, asset_name, serial_number, manufacturer, model_number, asset_types(name))",
     )
     .eq("person_id", personId)
     .is("return_date", null)

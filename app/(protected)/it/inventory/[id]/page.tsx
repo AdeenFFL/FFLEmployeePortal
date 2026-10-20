@@ -15,12 +15,14 @@ import {
   secondaryButtonClass,
   StatusBadge,
 } from "../../_components/ticket-ui";
-import { changeAssetStatus, deleteAsset, returnAsset } from "../actions";
+import { AssetAssignForm } from "../_components/asset-assign-form";
+import { AssetReturnForm } from "../_components/asset-return-form";
+import { changeAssetStatus, closeMaintenance, deleteAsset, openMaintenance } from "../actions";
 import {
   ASSET_STATUS_TONES,
+  formatCost,
   formatDate,
   MANUAL_STATUSES,
-  RETURN_STATUSES,
   SYSTEM_MANAGED_STATUSES,
 } from "../asset-status";
 import { DeleteAssetButton } from "./delete-asset-button";
@@ -34,8 +36,9 @@ function Panel({ title, children }: { title: string; children: React.ReactNode }
   );
 }
 
-// INV-03 — one asset. Overview + linked tickets for now; the assignment, maintenance, movements,
-// valuation and origin sections arrive with Phases 3–7 (07-it-inventory-plan.md §4).
+// INV-03 — one asset. Overview, assignment history (+ assign / return panels), maintenance
+// (+ send for repair / close repair panels) and linked tickets; the movements, valuation and
+// origin sections arrive with Phases 5–7 (07-it-inventory-plan.md §4).
 export default async function AssetDetailPage({
   params,
   searchParams,
@@ -63,6 +66,8 @@ export default async function AssetDetailPage({
     canDelete,
     canReadTickets,
     canAssign,
+    canMaintain,
+    { data: maintenanceRows, error: maintenanceError },
   ] = await Promise.all([
     supabase.from("companies").select("name").eq("id", asset.company_id).maybeSingle(),
     fetchOrgUnits(supabase),
@@ -71,20 +76,55 @@ export default async function AssetDetailPage({
     hasItPermission(supabase, "it.assets.delete"),
     hasItPermission(supabase, "it.tickets.read"),
     hasItPermission(supabase, "it.assets.assign"),
+    hasItPermission(supabase, "it.maintenance.update"),
+    // Repair history (talha_it_0005), newest first. Read-only here: changes go through
+    // it.open_maintenance / it.close_maintenance.
+    supabase
+      .schema("it")
+      .from("asset_maintenance")
+      .select("id, issue_type, description, service_date, returned_date, status, resolution, cost, remarks")
+      .eq("asset_id", id)
+      .order("service_date", { ascending: false })
+      .order("created_at", { ascending: false }),
   ]);
+  const repairs = maintenanceRows ?? [];
+  const openRepair = repairs.find((r) => r.status === "Open") ?? null;
 
-  // The open assignment, for the Return panel. The holder's name arrives with Part 2 of Phase 3
-  // (it needs a people lookup inventory staff can use).
-  const { data: openAssignment } =
-    canAssign && asset.status === "In Use"
-      ? await supabase
-          .schema("it")
-          .from("asset_assignments")
-          .select("id, assigned_date, assigned_condition")
-          .eq("asset_id", asset.id)
-          .is("return_date", null)
-          .maybeSingle()
-      : { data: null };
+  // Assignment history, newest first (rows are never overwritten — a return only fills in the
+  // return columns). The open row, if any, feeds the Return panel.
+  const { data: assignmentRows, error: historyError } = await supabase
+    .schema("it")
+    .from("asset_assignments")
+    .select(
+      "id, person_id, assigned_by_person_id, returned_to_person_id, assigned_date, return_date, assigned_condition, returned_condition, acknowledged_at, remarks",
+    )
+    .eq("asset_id", asset.id)
+    .order("assigned_date", { ascending: false })
+    .order("created_at", { ascending: false });
+  const history = assignmentRows ?? [];
+  const openAssignment = history.find((a) => a.return_date === null) ?? null;
+
+  // Names via it.asset_person_names (talha_it_0008): any it.assets.read holder, and it has no
+  // active filter, so people who have since left still show by name.
+  const { data: historyPeople } = history.length
+    ? await supabase.schema("it").rpc("asset_person_names", {
+        p_person_ids: [
+          ...new Set(
+            history
+              .flatMap((a) => [a.person_id, a.assigned_by_person_id, a.returned_to_person_id])
+              .filter((pid): pid is string => Boolean(pid)),
+          ),
+        ],
+      })
+    : { data: null };
+  const nameOf = (pid: string | null) =>
+    (pid && historyPeople?.find((p) => p.person_id === pid)?.full_name) || "—";
+
+  const showAssign = canAssign && asset.status === "Unassigned";
+  const showReturn = canAssign && asset.status === "In Use" && openAssignment !== null;
+  // it.open_maintenance refuses Retired / Disposed / Lost and already-In-Repair assets.
+  const showSendForRepair = canMaintain && (asset.status === "Unassigned" || asset.status === "In Use");
+  const showCloseRepair = canMaintain && asset.status === "In Repair";
 
   // Only shown to the IT queue: without it.tickets.read, RLS would return just the viewer's own
   // tickets, which would read as "this asset has no other tickets".
@@ -162,6 +202,116 @@ export default async function AssetDetailPage({
             )}
           </Panel>
 
+          <Panel title="Assignment history">
+            {historyError ? (
+              <p className="text-sm text-red-600">
+                Couldn&apos;t load the assignment history: {historyError.message}
+              </p>
+            ) : history.length === 0 ? (
+              <p className="text-sm text-slate-400">This asset has never been assigned.</p>
+            ) : (
+              <div className="-mx-5 overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-5 py-2">Holder</th>
+                      <th className="px-3 py-2">Assigned</th>
+                      <th className="px-3 py-2">Returned</th>
+                      <th className="px-3 py-2">Condition</th>
+                      <th className="px-3 py-2">Acknowledged</th>
+                      <th className="px-5 py-2">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 align-top">
+                    {history.map((a) => (
+                      <tr key={a.id}>
+                        <td className="px-5 py-2 font-medium text-slate-900">{nameOf(a.person_id)}</td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {formatDate(a.assigned_date)}
+                          <span className="block text-xs text-slate-500">
+                            by {nameOf(a.assigned_by_person_id)}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {a.return_date ? (
+                            <>
+                              {formatDate(a.return_date)}
+                              <span className="block text-xs text-slate-500">
+                                to {nameOf(a.returned_to_person_id)}
+                              </span>
+                            </>
+                          ) : (
+                            <StatusPill label="Current" tone="positive" />
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-xs text-slate-700">
+                          <span className="block">Out: {a.assigned_condition ?? "—"}</span>
+                          {a.return_date && (
+                            <span className="block">Back: {a.returned_condition ?? "—"}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {a.acknowledged_at ? formatDateTime(a.acknowledged_at) : "—"}
+                        </td>
+                        <td className="px-5 py-2 text-slate-700">{a.remarks ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
+          <Panel title="Maintenance">
+            {maintenanceError ? (
+              <p className="text-sm text-red-600">
+                Couldn&apos;t load the repair history: {maintenanceError.message}
+              </p>
+            ) : repairs.length === 0 ? (
+              <p className="text-sm text-slate-400">No repairs recorded.</p>
+            ) : (
+              <div className="-mx-5 overflow-x-auto">
+                <table className="min-w-full divide-y divide-slate-200 text-sm">
+                  <thead className="bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                    <tr>
+                      <th className="px-5 py-2">Issue</th>
+                      <th className="px-3 py-2">Sent</th>
+                      <th className="px-3 py-2">Returned</th>
+                      <th className="px-3 py-2">Resolution</th>
+                      <th className="px-3 py-2">Cost</th>
+                      <th className="px-5 py-2">Remarks</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 align-top">
+                    {repairs.map((r) => (
+                      <tr key={r.id}>
+                        <td className="px-5 py-2 text-slate-900">
+                          <span className="font-medium">{r.issue_type}</span>
+                          {r.description && (
+                            <span className="block text-xs text-slate-500">{r.description}</span>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">{formatDate(r.service_date)}</td>
+                        <td className="px-3 py-2 text-slate-700">
+                          {r.status === "Open" ? (
+                            <StatusPill label="Open" tone="warning" />
+                          ) : (
+                            formatDate(r.returned_date)
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-slate-700">{r.resolution ?? "—"}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-slate-700">
+                          {r.status === "Open" ? "—" : formatCost(r.cost)}
+                        </td>
+                        <td className="px-5 py-2 text-slate-700">{r.remarks ?? "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Panel>
+
           {canReadTickets && (
             <Panel title="Linked tickets">
               {(tickets ?? []).length === 0 ? (
@@ -184,52 +334,114 @@ export default async function AssetDetailPage({
         </div>
 
         <div className="space-y-6">
-          {openAssignment && (
+          {showAssign && (
+            <Panel title="Assign asset">
+              <AssetAssignForm assetId={asset.id} defaultCondition={asset.condition} />
+            </Panel>
+          )}
+
+          {showReturn && openAssignment && (
             <Panel title="Return asset">
-              <p className="mb-3 text-sm text-slate-500">
-                Assigned since {formatDate(openAssignment.assigned_date)}
-                {openAssignment.assigned_condition
-                  ? ` (condition at handover: ${openAssignment.assigned_condition})`
-                  : ""}
-                .
-              </p>
-              <form action={returnAsset.bind(null, asset.id)} className="space-y-3">
+              <AssetReturnForm
+                assetId={asset.id}
+                assignedDate={openAssignment.assigned_date}
+                assignedCondition={openAssignment.assigned_condition}
+                holderName={nameOf(openAssignment.person_id)}
+              />
+            </Panel>
+          )}
+
+          {showSendForRepair && (
+            <Panel title="Send for repair">
+              {asset.status === "In Use" && openAssignment && (
+                <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  This asset is held by {nameOf(openAssignment.person_id)}. It stays assigned to them
+                  while in repair and returns to In Use when you close the repair.
+                </p>
+              )}
+              <form action={openMaintenance.bind(null, asset.id)} className="space-y-3">
+                <div>
+                  <label className={labelClass}>Issue type *</label>
+                  <input
+                    name="issue_type"
+                    required
+                    placeholder="e.g. Screen, Battery, Keyboard"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Description</label>
+                  <textarea name="description" rows={2} placeholder="Optional" className={inputClass} />
+                </div>
                 <div>
                   {/* Left empty = today, decided by the database (no server-timezone guess). */}
-                  <label className={labelClass}>Return date (leave empty for today)</label>
-                  <input
-                    type="date"
-                    name="return_date"
-                    min={openAssignment.assigned_date}
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Condition on return</label>
-                  <input
-                    name="returned_condition"
-                    placeholder="e.g. Good, screen scratched"
-                    className={inputClass}
-                  />
-                </div>
-                <div>
-                  <label className={labelClass}>Remarks</label>
-                  <input name="remarks" placeholder="Optional" className={inputClass} />
-                </div>
-                <div>
-                  <label className={labelClass}>After the return, the asset is</label>
-                  <select name="new_status" defaultValue="Unassigned" className={inputClass}>
-                    {RETURN_STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
+                  <label className={labelClass}>Service date (leave empty for today)</label>
+                  <input type="date" name="service_date" className={inputClass} />
                 </div>
                 <button type="submit" className={primaryButtonClass}>
-                  Record return
+                  Send for repair
                 </button>
               </form>
+            </Panel>
+          )}
+
+          {showCloseRepair && (
+            <Panel title="Close repair">
+              {openRepair ? (
+                <>
+                  <p className="mb-3 text-sm text-slate-500">
+                    In repair since {formatDate(openRepair.service_date)}:{" "}
+                    <span className="font-medium text-slate-900">{openRepair.issue_type}</span>.
+                  </p>
+                  <form
+                    action={closeMaintenance.bind(null, asset.id, openRepair.id)}
+                    className="space-y-3"
+                  >
+                    <div>
+                      <label className={labelClass}>Resolution *</label>
+                      <textarea
+                        name="resolution"
+                        required
+                        rows={2}
+                        placeholder="e.g. Battery replaced"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Cost (PKR)</label>
+                      <input
+                        type="number"
+                        name="cost"
+                        min="0"
+                        step="0.01"
+                        placeholder="Optional"
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Returned date (leave empty for today)</label>
+                      <input
+                        type="date"
+                        name="returned_date"
+                        min={openRepair.service_date}
+                        className={inputClass}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Remarks</label>
+                      <input name="remarks" placeholder="Optional" className={inputClass} />
+                    </div>
+                    <button type="submit" className={primaryButtonClass}>
+                      Close repair
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <p className="text-sm text-slate-500">
+                  This asset is In Repair but has no open repair record, so it can&apos;t be closed
+                  here. Ask an administrator to correct the record in the database.
+                </p>
+              )}
             </Panel>
           )}
 

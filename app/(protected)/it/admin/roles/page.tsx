@@ -18,18 +18,17 @@ import {
 // permissions (module = 'it'); everything else about roles (who holds them, non-IT permissions)
 // stays on Administration. Gated by it.manage_role_permissions (route + every write).
 
-// Group IT permissions by what they control. Unknown future keys fall into "Other IT".
-const SECTIONS: { label: string; match: (key: string) => boolean }[] = [
-  { label: "IT Tickets", match: (k) => k.startsWith("it.tickets.") || k.startsWith("it.ticket_settings.") },
-  { label: "Onboarding / Offboarding", match: (k) => k.startsWith("it.onboarding.") },
-  {
-    label: "Inventory & Assets (Talha's track)",
-    match: (k) =>
-      ["it.assets.", "it.maintenance.", "it.stock.", "it.valuation.", "it.inventory_settings."].some((p) =>
-        k.startsWith(p),
-      ),
-  },
-  { label: "IT Administration", match: (k) => k === "it.manage_role_permissions" },
+// Group IT permissions by what they control (sections merged from Talha's version of this
+// screen, 2026-10-20). Unknown future keys fall into "Other IT".
+const SECTIONS: { label: string; prefixes: string[] }[] = [
+  { label: "Tickets", prefixes: ["it.tickets.", "it.ticket_settings."] },
+  { label: "Onboarding / Offboarding", prefixes: ["it.onboarding."] },
+  { label: "Assets", prefixes: ["it.assets."] },
+  { label: "Repairs", prefixes: ["it.maintenance."] },
+  { label: "Stock", prefixes: ["it.stock."] },
+  { label: "Valuation", prefixes: ["it.valuation."] },
+  { label: "Inventory settings", prefixes: ["it.inventory_settings."] },
+  { label: "Administration", prefixes: ["it.manage_role_permissions"] },
 ];
 
 export default async function ItRolesPage({
@@ -43,10 +42,13 @@ export default async function ItRolesPage({
   const [{ data: roles }, { data: itRoleRows }, { data: permissions }] = await Promise.all([
     supabase.from("roles").select("id, name, description").order("name").then(checked),
     supabase.schema("it").from("it_roles").select("role_id").then(checked),
+    // Only "it.*" keys: module:it (whether a role can open IT at all) is an Admin decision made
+    // on Administration → Roles (develop's 0021, Talha's design) — not changeable here.
     supabase
       .from("permissions")
       .select("*")
       .eq("module", "it")
+      .like("key", "it.%")
       .order("key")
       .then(checked),
   ]);
@@ -58,13 +60,12 @@ export default async function ItRolesPage({
     (roles ?? []).find((r) => r.id === params.role) ?? itRoles[0] ?? (roles ?? [])[0] ?? null;
 
   const itPermissions = (permissions ?? []) as Permission[];
-  const moduleAccess = itPermissions.filter((p) => p.key === "module:it");
   const sections: [string, Permission[]][] = [];
   for (const section of SECTIONS) {
-    const inSection = itPermissions.filter((p) => p.key !== "module:it" && section.match(p.key));
+    const inSection = itPermissions.filter((p) => section.prefixes.some((prefix) => p.key.startsWith(prefix)));
     if (inSection.length) sections.push([section.label, inSection]);
   }
-  const placed = new Set(sections.flatMap(([, ps]) => ps.map((p) => p.id)).concat(moduleAccess.map((p) => p.id)));
+  const placed = new Set(sections.flatMap(([, ps]) => ps.map((p) => p.id)));
   const leftover = itPermissions.filter((p) => !placed.has(p.id));
   if (leftover.length) sections.push(["Other IT", leftover]);
 
@@ -132,7 +133,8 @@ export default async function ItRolesPage({
               Other roles
             </h2>
             <p className="px-3 pb-2 text-xs text-slate-400">
-              e.g. Employee needs “IT”, HR needs “Raise Onboarding/Offboarding”.
+              e.g. HR needs “Raise Onboarding/Offboarding”. Opening the IT module at all
+              (“IT”) is switched on under Administration → Roles.
             </p>
             <ul className="space-y-0.5">{otherRoles.map(roleLink)}</ul>
           </section>
@@ -178,7 +180,7 @@ export default async function ItRolesPage({
               <RolePermissionsEditor
                 key={selected.id}
                 roleId={selected.id}
-                moduleAccessPermissions={moduleAccess}
+                moduleAccessPermissions={[]}
                 permissionsBySection={sections}
                 initialGrantedIds={(grants ?? []).map((g) => g.permission_id)}
                 grantMetaBySection={grantMetaBySection}

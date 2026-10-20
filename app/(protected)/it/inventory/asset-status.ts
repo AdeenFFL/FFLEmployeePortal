@@ -36,6 +36,12 @@ export const ASSET_STATUS_TONES: Record<
   Lost: "negative",
 };
 
+// Repair costs (it.asset_maintenance.cost). Used by the asset detail page and the Repair Log.
+export function formatCost(value: number | null) {
+  if (value === null) return "—";
+  return `PKR ${Number(value).toLocaleString("en-PK", { maximumFractionDigits: 2 })}`;
+}
+
 export function formatDate(value: string | null) {
   if (!value) return "—";
   return new Date(value).toLocaleDateString("en-GB", {
