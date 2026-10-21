@@ -1,8 +1,16 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { checked } from "@/lib/it/ticket-data";
 import { updateProcurementSettings } from "./actions";
-import { cardClass, FormMessage, inputClass, labelClass, primaryButtonClass } from "../../_components/ticket-ui";
+import {
+  cardClass,
+  FormMessage,
+  inputClass,
+  labelClass,
+  primaryButtonClass,
+  secondaryButtonClass,
+} from "../../_components/ticket-ui";
 
 // Procurement settings (09 addition P4). Values are stored now and used by later phases:
 // finance SLA + reminders (Phase 6 payments), invoice tolerance (Phase 5 invoices), consumable
@@ -23,6 +31,11 @@ export default async function ProcurementSettingsPage({
       <PageHeader
         title="Procurement Settings"
         description="Rules the demand, invoice and payment steps follow."
+        action={
+          <Link href="/it/procurement/settings/approvers" className={secondaryButtonClass}>
+            Department Approvers
+          </Link>
+        }
       />
       <FormMessage error={params.error} notice={params.notice} />
 

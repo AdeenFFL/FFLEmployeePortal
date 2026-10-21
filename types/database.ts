@@ -418,6 +418,28 @@ export type ItDemandUpdate = {
   created_at: string;
 };
 
+// Procurement Phase 3 — javaria_it_0011_demand_approvals.sql
+export type ItDemandDecision = "Approved" | "Partially Approved" | "Rejected";
+
+export type ItDepartmentApprover = {
+  department_id: string;
+  person_id: string;
+  can_approve_demands: boolean;
+  can_approve_invoices: boolean;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type ItDemandApproval = {
+  id: string;
+  demand_id: string;
+  approver_person_id: string;
+  decision: ItDemandDecision;
+  approved_quantity: number;
+  comments: string | null;
+  decided_at: string;
+};
+
 // Phase 6.4 — javaria_it_0007_closure_audit.sql
 export type ItTicketClosureAudit = {
   id: string;
@@ -1132,6 +1154,20 @@ export type Database = {
         Update: Partial<ItDemandUpdate>;
         Relationships: [];
       };
+      // javaria_it_0011_demand_approvals.sql
+      department_approvers: {
+        Row: ItDepartmentApprover;
+        Insert: Partial<ItDepartmentApprover> & Pick<ItDepartmentApprover, "department_id" | "person_id">;
+        Update: Partial<ItDepartmentApprover>;
+        Relationships: [];
+      };
+      demand_approvals: {
+        Row: ItDemandApproval;
+        // Written only by it.decide_demand(); no direct grants.
+        Insert: Partial<ItDemandApproval>;
+        Update: Partial<ItDemandApproval>;
+        Relationships: [];
+      };
       // javaria_it_0008_it_roles.sql — roles tagged as IT department roles.
       it_roles: {
         Row: { role_id: string; created_at: string; created_by: string | null };
@@ -1453,6 +1489,49 @@ export type Database = {
       can_see_site_demands: {
         Args: { p_site_id: string };
         Returns: boolean;
+      };
+      // javaria_it_0011_demand_approvals.sql
+      is_demand_approver: {
+        Args: { p_department_id: string };
+        Returns: boolean;
+      };
+      my_approver_departments: {
+        Args: Record<string, never>;
+        Returns: string[];
+      };
+      list_department_approvers: {
+        Args: Record<string, never>;
+        Returns: {
+          department_id: string;
+          person_id: string;
+          full_name: string;
+          designation: string | null;
+          can_approve_demands: boolean;
+          can_approve_invoices: boolean;
+          has_permission: boolean;
+        }[];
+      };
+      search_approver_candidates: {
+        Args: { p_search: string };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+        }[];
+      };
+      submit_demand_for_approval: {
+        Args: { p_demand_id: string };
+        Returns: undefined;
+      };
+      decide_demand: {
+        Args: {
+          p_demand_id: string;
+          p_decision: ItDemandDecision;
+          p_approved_quantity: number | null;
+          p_comments: string | null;
+        };
+        Returns: undefined;
       };
       // javaria_it_0004_ticket_asset_link.sql
       // javaria_it_0005_site_routing.sql

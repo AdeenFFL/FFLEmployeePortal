@@ -19,8 +19,10 @@ import {
   cancelDemand,
   categorizeDemand,
   closeDemand,
+  decideDemand,
   editDemand,
   markStockUpdated,
+  submitForApproval,
 } from "../actions";
 import {
   cardClass,
@@ -90,8 +92,19 @@ export default async function DemandPage({
   );
   if (!demand) notFound();
 
-  const [{ data: personId }, { data: canProcess }, { data: staffView }, updatesRes, orgUnits, productsRes, settingsRes, vendorRes] =
-    await Promise.all([
+  const [
+    { data: personId },
+    { data: canProcess },
+    { data: staffView },
+    updatesRes,
+    orgUnits,
+    productsRes,
+    settingsRes,
+    vendorRes,
+    { data: isApprover },
+    approvalsRes,
+    approversRes,
+  ] = await Promise.all([
       supabase.rpc("current_person_id"),
       supabase.schema("it").rpc("can_process_demand", { p_site_id: demand.site_id }),
       supabase.schema("it").rpc("can_see_site_demands", { p_site_id: demand.site_id }),
@@ -111,7 +124,20 @@ export default async function DemandPage({
       demand.vendor_id
         ? supabase.schema("it").from("vendors").select("vendor_name").eq("id", demand.vendor_id).maybeSingle()
         : Promise.resolve({ data: null }),
+      supabase.schema("it").rpc("is_demand_approver", { p_department_id: demand.department_id }),
+      supabase
+        .schema("it")
+        .from("demand_approvals")
+        .select("*")
+        .eq("demand_id", id)
+        .order("decided_at"),
+      supabase.schema("it").rpc("list_department_approvers"),
     ]);
+  const approvals = approvalsRes.data ?? [];
+  const departmentApprovers = (approversRes.data ?? []).filter(
+    (a) => a.department_id === demand.department_id && a.can_approve_demands && a.has_permission,
+  );
+  const latestDecision = approvals.at(-1);
 
   const updates = updatesRes.data ?? [];
   const products = productsRes.data ?? [];
@@ -124,6 +150,7 @@ export default async function DemandPage({
     demand.categorized_by,
     demand.stock_updated_by,
     demand.cancelled_by,
+    ...approvals.map((a) => a.approver_person_id),
     ...updates.map((u) => u.author_person_id),
   ].filter((v): v is string => Boolean(v));
   const { data: people } = await supabase
@@ -138,9 +165,12 @@ export default async function DemandPage({
   const canStock =
     Boolean(canProcess) && demand.status === "Categorized" && demand.demand_category === "Consumable" && consumablePath;
   const canClose = Boolean(canProcess) && demand.status === "Stock Updated";
+  const canSubmit = Boolean(canProcess) && demand.status === "Categorized" && !canStock;
+  const canDecide = Boolean(isApprover) && !isOwner && demand.status === "Pending Approval";
   const canCancel =
     (isOwner && demand.status === "Open") ||
-    (Boolean(canProcess) && (demand.status === "Open" || demand.status === "Categorized"));
+    (Boolean(canProcess) &&
+      (demand.status === "Open" || demand.status === "Categorized" || demand.status === "Pending Approval"));
 
   return (
     <div className="py-6">
@@ -276,6 +306,40 @@ export default async function DemandPage({
             )}
           </section>
 
+          {approvals.length > 0 && (
+            <section className={`${cardClass} p-6`}>
+              <h2 className="mb-4 text-base font-semibold text-slate-900">Approval</h2>
+              <ul className="space-y-3">
+                {approvals.map((a) => (
+                  <li
+                    key={a.id}
+                    className={`rounded-lg border px-4 py-3 text-sm ${
+                      a.decision === "Rejected"
+                        ? "border-red-200 bg-red-50"
+                        : a.decision === "Partially Approved"
+                          ? "border-amber-200 bg-amber-50"
+                          : "border-emerald-200 bg-emerald-50"
+                    }`}
+                  >
+                    <p className="font-medium text-slate-900">
+                      {a.decision}
+                      {a.decision !== "Rejected" && ` · ${a.approved_quantity} of ${demand.quantity}`}
+                    </p>
+                    <p className="text-xs text-slate-500">
+                      {names.get(a.approver_person_id) ?? "Approver"} · {formatDateTime(a.decided_at)}
+                    </p>
+                    {a.comments && <p className="mt-1 whitespace-pre-wrap text-slate-700">{a.comments}</p>}
+                  </li>
+                ))}
+              </ul>
+              {latestDecision && latestDecision.decision !== "Rejected" && demand.status !== "Pending Approval" && (
+                <p className="mt-3 text-xs text-slate-500">
+                  Next: procurement assigns a vendor (coming in the next procurement phase).
+                </p>
+              )}
+            </section>
+          )}
+
           <section className={`${cardClass} p-6`}>
             <h2 className="mb-4 text-base font-semibold text-slate-900">Timeline</h2>
             <Timeline updates={updates} names={names} />
@@ -365,10 +429,80 @@ export default async function DemandPage({
             </section>
           )}
 
-          {Boolean(canProcess) && demand.status === "Categorized" && !canStock && (
+          {canSubmit && (
+            <section className={`${cardClass} p-6`}>
+              <h2 className="mb-1 text-base font-semibold text-slate-900">Send for approval</h2>
+              {departmentApprovers.length > 0 ? (
+                <>
+                  <p className="mb-4 text-xs text-slate-500">
+                    Goes to the {orgUnits.nameById.get(demand.department_id) ?? "department"} head:{" "}
+                    {departmentApprovers.map((a) => a.full_name).join(", ")}.
+                  </p>
+                  <form action={submitForApproval.bind(null, demand.id)}>
+                    <button type="submit" className={primaryButtonClass}>
+                      Send for approval
+                    </button>
+                  </form>
+                </>
+              ) : (
+                <p className="text-sm text-amber-700">
+                  The {orgUnits.nameById.get(demand.department_id) ?? "selected"} department has no
+                  demand approver yet. An IT admin adds one under Procurement Settings → Department
+                  Approvers.
+                </p>
+              )}
+            </section>
+          )}
+
+          {demand.status === "Pending Approval" && !canDecide && (
             <section className={`${cardClass} p-6 text-sm text-slate-600`}>
-              <h2 className="mb-1 text-base font-semibold text-slate-900">Next: approval</h2>
-              Sending to the department head for approval comes with the next procurement phase.
+              <h2 className="mb-1 text-base font-semibold text-slate-900">Awaiting approval</h2>
+              {departmentApprovers.length > 0
+                ? `With ${departmentApprovers.map((a) => a.full_name).join(", ")}.`
+                : "With the department head."}
+              {isApprover && isOwner && (
+                <p className="mt-2 text-xs text-slate-500">
+                  You raised this demand, so another approver of the department has to decide.
+                </p>
+              )}
+            </section>
+          )}
+
+          {canDecide && (
+            <section className={`${cardClass} border-amber-300 p-6`}>
+              <h2 className="mb-1 text-base font-semibold text-slate-900">Your decision</h2>
+              <p className="mb-4 text-xs text-slate-500">
+                Requested {demand.quantity} {product?.unit ?? ""} · est. {formatMoney(total)}. The time
+                and your name are recorded with the decision.
+              </p>
+              <form action={decideDemand.bind(null, demand.id)} className="space-y-3">
+                <fieldset className="space-y-2">
+                  <legend className="sr-only">Decision</legend>
+                  {(["Approved", "Partially Approved", "Rejected"] as const).map((d) => (
+                    <label key={d} className="flex items-center gap-2 text-sm text-slate-800">
+                      <input type="radio" name="decision" value={d} required defaultChecked={d === "Approved"} />
+                      {d === "Approved" ? `Approve all ${demand.quantity}` : d === "Partially Approved" ? "Approve part" : "Reject"}
+                    </label>
+                  ))}
+                </fieldset>
+                <label className="block">
+                  <span className={labelClass}>Quantity approved (for “Approve part”)</span>
+                  <input
+                    type="number"
+                    name="approvedQuantity"
+                    min={1}
+                    max={Math.max(1, demand.quantity - 1)}
+                    className={inputClass}
+                  />
+                </label>
+                <label className="block">
+                  <span className={labelClass}>Comments (required to reject or approve part)</span>
+                  <textarea name="comments" rows={3} className={inputClass} />
+                </label>
+                <button type="submit" className={primaryButtonClass}>
+                  Record decision
+                </button>
+              </form>
             </section>
           )}
 

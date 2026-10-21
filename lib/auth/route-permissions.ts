@@ -43,6 +43,9 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // the viewer's own demands unless they hold it.demands.read / read_all.
   "/it/procurement/demands/new": "it.demands.create",
   "/it/procurement/demands": "module:it",
+  // Department-head approval inbox (javaria_it_0011). /settings/approvers falls under
+  // /it/procurement/settings above.
+  "/it/procurement/approvals": "it.demands.approve",
   // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
   // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
   // the first match in insertion order).

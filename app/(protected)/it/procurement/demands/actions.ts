@@ -6,7 +6,9 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { requireActiveUser } from "@/lib/auth/require-user";
 import { queueItEmails } from "@/lib/it/notifications";
 import { DEMAND_CATEGORIES } from "@/lib/it/procurement";
-import type { ItDemand, ItDemandCategory } from "@/types/database";
+import type { ItDemand, ItDemandCategory, ItDemandDecision } from "@/types/database";
+
+const DECISIONS: ItDemandDecision[] = ["Approved", "Partially Approved", "Rejected"];
 
 // PRC-03/04/05 (09-it-procurement-plan.md Phase 2). The database decides what's allowed:
 // RLS on it.demands + it.demands_before_update() (javaria_it_0010_demands.sql). These actions
@@ -150,6 +152,47 @@ export async function closeDemand(demandId: string) {
   if (error) fail(path, error.message);
 
   done(path, "Demand closed.");
+}
+
+// BRD §5.5.4 — Categorized → Pending Approval; the database notifies the department's approvers.
+export async function submitForApproval(demandId: string) {
+  const path = `${LIST}/${demandId}`;
+  const { supabase } = await requirePermission("it.demands.update");
+
+  const { error } = await supabase.schema("it").rpc("submit_demand_for_approval", { p_demand_id: demandId });
+  if (error) fail(path, error.message);
+
+  revalidatePath("/it/procurement/approvals");
+  done(path, "Sent to the department head for approval.");
+}
+
+// BRD §5.5.5 — the approver's decision. Timestamp and approver are captured by the database.
+export async function decideDemand(demandId: string, formData: FormData) {
+  const path = `${LIST}/${demandId}`;
+  const { supabase } = await requirePermission("it.demands.approve");
+
+  const decision = text(formData, "decision") as ItDemandDecision;
+  if (!DECISIONS.includes(decision)) fail(path, "Please choose a decision.");
+  const comments = text(formData, "comments") || null;
+  let approvedQuantity: number | null = null;
+  if (decision === "Partially Approved") {
+    approvedQuantity = Number(text(formData, "approvedQuantity"));
+    if (!Number.isInteger(approvedQuantity)) fail(path, "Enter the quantity you approve.");
+  }
+  if (decision !== "Approved" && !comments) {
+    fail(path, decision === "Rejected" ? "Please give a reason for rejecting." : "Please explain the partial approval.");
+  }
+
+  const { error } = await supabase.schema("it").rpc("decide_demand", {
+    p_demand_id: demandId,
+    p_decision: decision,
+    p_approved_quantity: approvedQuantity,
+    p_comments: comments,
+  });
+  if (error) fail(path, error.message);
+
+  revalidatePath("/it/procurement/approvals");
+  done(path, `Decision recorded: ${decision.toLowerCase()}.`);
 }
 
 export async function addDemandComment(demandId: string, formData: FormData) {

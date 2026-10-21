@@ -32,8 +32,8 @@ ERD onto portal conventions) applies here too and isn't repeated.
 
 ## 0. Status — 2026-10-21
 
-**Phases 1–2 built** (code + `javaria_it_0009`, `javaria_it_0010`, not yet applied to the live
-DB). Phases 3–8 not started. **Talha is waiting on this track**:
+**Phases 1–3 built** (code + `javaria_it_0009`–`0011`, not yet applied to the live DB).
+Phases 4–8 not started. **Talha is waiting on this track**:
 
 | What Talha needs | For | His phase |
 |---|---|---|
@@ -232,12 +232,28 @@ As built:
   IT Site Manager create + read + update; IT Team Member create + read.
 - [ ] Apply `javaria_it_0010` to the live DB.
 
-### Phase 3 — Department-head approval
+### Phase 3 — Department-head approval — ✅ built 2026-10-21
 **Migration** `javaria_it_0011_demand_approvals.sql`: `it.demand_approvals`,
 `it.department_approvers` (P3), routing on submit (→ `Pending Approval`, notify the department's
 approvers), decision function (Approved / Partially Approved with quantity / Rejected, comments,
 timestamp captured automatically — BRD §5.5.5), Site IT notified on reject / partial (§5.5.6).
 **Screens**: PRC-06, approval step on PRC-05, approvers on PRC-08.
+
+As built:
+- Approver = `it.demands.approve` **and** a `can_approve_demands` row for the demand's department;
+  any one approver of the department decides. Nobody approves their own demand.
+- `it.submit_demand_for_approval()` (site procurement, `Categorized` only, any category — a
+  consumable can go for purchase too) refuses when the department has no working approver.
+- `it.decide_demand()`: Approved → `approved_quantity = quantity`; Partially Approved needs
+  1…quantity−1 and a comment; Rejected needs a comment (`approved_quantity = 0`). Rejected is
+  final. `it.demand_approvals` is append-only (no direct grants).
+- Approvers see their departments' demands from `Pending Approval` on, plus non-internal timeline
+  and comments; `it.can_read_procurement_masters()` includes `it.demands.approve`.
+- Site procurement may also cancel while `Pending Approval`.
+- Screens: `/it/procurement/approvals` (inbox + recent decisions), decision / submit panels on the
+  demand page, `/it/procurement/settings/approvers`. `can_approve_invoices` is stored for Phase 5.
+- `it.demands.approve` granted to Admin / IT Admin only; department heads get it via their role.
+- [ ] Apply `javaria_it_0011` to the live DB.
 
 ### Phase 4 — Vendor assignment, receiving and documents *(unblocks Talha Phase 7)*
 **Migration** `javaria_it_0012_receiving_documents.sql`: vendor assignment from the master
