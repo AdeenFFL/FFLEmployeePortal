@@ -35,6 +35,10 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // dashboard; it.tickets.read replaces the earlier module:it placeholder gate).
   "/it/dashboard": "it.tickets.read",
   "/it/reports": "it.tickets.read",
+  // Procurement masters (javaria_it_0009, 09-it-procurement-plan.md Phase 1).
+  "/it/procurement/vendors": "it.vendors.update",
+  "/it/procurement/products": "it.products.update",
+  "/it/procurement/settings": "it.procurement_settings.update",
   // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
   // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
   // the first match in insertion order).

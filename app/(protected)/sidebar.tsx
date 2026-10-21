@@ -170,6 +170,21 @@ export function Sidebar({
       ],
     },
     {
+      // Procurement track (Javaria) — 09-it-procurement-plan.md
+      type: "group",
+      label: "IT Procurement",
+      icon: BuildingIcon,
+      children: [
+        { href: "/it/procurement/vendors", label: "Vendors", permission: "it.vendors.update" },
+        { href: "/it/procurement/products", label: "Products", permission: "it.products.update" },
+        {
+          href: "/it/procurement/settings",
+          label: "Procurement Settings",
+          permission: "it.procurement_settings.update",
+        },
+      ],
+    },
+    {
       type: "group",
       label: "Administration",
       icon: KeyIcon,

@@ -32,7 +32,8 @@ ERD onto portal conventions) applies here too and isn't repeated.
 
 ## 0. Status — 2026-10-21
 
-Nothing built yet. **Talha is waiting on this track**:
+**Phase 1 built** (code + `javaria_it_0009`, not yet applied to the live DB). Phases 2–8 not
+started. **Talha is waiting on this track**:
 
 | What Talha needs | For | His phase |
 |---|---|---|
@@ -193,11 +194,15 @@ Actions, and a test checklist for the tester. Ordered by what unblocks Talha fir
       statuses, tolerance, site scoping).
 - [ ] Agree the §2 contracts with Talha; tell him the order: products + vendors first.
 
-### Phase 1 — Vendor & product masters *(unblocks Talha Phases 5 and 7)*
+### Phase 1 — Vendor & product masters *(unblocks Talha Phases 5 and 7)* — ✅ built 2026-10-21
 **Migration** `javaria_it_0009_procurement_masters.sql`: `it.vendors`, `it.products` (with
-`asset_type_id → it.asset_types`), RLS (read: `module:it`; write: `it.vendors.update` /
-`it.products.update`), permission rows with labels, and `it.procurement_settings`.
-**Screens**: PRC-01, PRC-02; "Procurement" section in the IT sidebar.
+`asset_type_id → it.asset_types`), RLS (read: `it.can_read_procurement_masters()` — procurement
+keys or `it.assets.read`, so plain employees don't see vendor contacts; write: `it.vendors.update` /
+`it.products.update`), permission rows with labels, `it.procurement_settings`, audit-log triggers.
+No deletes — deactivate. Names unique ignoring case.
+**Screens**: PRC-01 `/it/procurement/vendors`, PRC-02 `/it/procurement/products`, and
+`/it/procurement/settings`; "IT Procurement" group in the sidebar.
+- [ ] Apply `javaria_it_0009` to the live DB, then tell Talha (his FKs + Phase 5).
 **Done when**: vendors and products can be maintained; Talha can add his `stock_movements` and
 `vendor_id` FKs.
 

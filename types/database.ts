@@ -309,6 +309,49 @@ export type ItTicketTaskAssignee = {
   assigned_at: string;
 };
 
+// Procurement Phase 1 — javaria_it_0009_procurement_masters.sql
+export type ItVendor = {
+  id: string;
+  vendor_name: string;
+  contact_person: string | null;
+  contact_no: string | null;
+  email: string | null;
+  address: string | null;
+  tax_number: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItProduct = {
+  id: string;
+  product_name: string;
+  category: string | null;
+  unit: string;
+  purchase_price: number | null;
+  current_price: number | null;
+  description: string | null;
+  asset_type_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItProcurementSettings = {
+  id: boolean;
+  finance_sla_days: number;
+  reminder_interval_days: number;
+  invoice_tolerance_pct: number;
+  consumable_path_enabled: boolean;
+  updated_at: string;
+  updated_by: string | null;
+};
+
 // Phase 6.4 — javaria_it_0007_closure_audit.sql
 export type ItTicketClosureAudit = {
   id: string;
@@ -987,6 +1030,25 @@ export type Database = {
         Row: ItSiteItStaff;
         Insert: Partial<ItSiteItStaff> & Pick<ItSiteItStaff, "site_id" | "person_id">;
         Update: Partial<ItSiteItStaff>;
+        Relationships: [];
+      };
+      // javaria_it_0009_procurement_masters.sql
+      vendors: {
+        Row: ItVendor;
+        Insert: Partial<ItVendor> & Pick<ItVendor, "vendor_name">;
+        Update: Partial<ItVendor>;
+        Relationships: [];
+      };
+      products: {
+        Row: ItProduct;
+        Insert: Partial<ItProduct> & Pick<ItProduct, "product_name">;
+        Update: Partial<ItProduct>;
+        Relationships: [];
+      };
+      procurement_settings: {
+        Row: ItProcurementSettings;
+        Insert: Partial<ItProcurementSettings>;
+        Update: Partial<ItProcurementSettings>;
         Relationships: [];
       };
       // javaria_it_0008_it_roles.sql — roles tagged as IT department roles.
