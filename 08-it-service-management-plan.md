@@ -338,7 +338,7 @@ names `javaria_it_<NNNN>_<description>.sql`.
 
 | # | Question | Status |
 |---|---|---|
-| 1 | Who owns Procurement (ERD section D: vendors, products, demands, receiving, invoices, payments)? | **Open — conflict.** Javaria: not this track. Talha's `07` §2 / §8 #1 says Javaria. Talha + senior dev to settle and update `07`; his Phases 4–5 depend on `it.vendors` / `it.products` existing |
+| 1 | Who owns Procurement (ERD section D: vendors, products, demands, receiving, invoices, payments)? | **Taken on by Javaria (2026-10-21)** — planned separately in `09-it-procurement-plan.md`, which mirrors Talha's `07` §2.1 contracts (vendors + products first, to unblock his Phases 5 and 7) |
 | 2 | IT staff access: `it.staff_roles` or `it.*` permissions? | **Permissions** (both plans). Drop of `staff_roles` still open, Talha §8 #4a, senior dev |
 | 3 | `module:it` grants | **Decided by senior dev** (`develop` 0021): registered, granted to no role. Talha's foundation also inserts `module:it` and grants it to Employee/Admin, which contradicts that; Talha to drop that part |
 | 4 | SLA targets per priority (response / resolution hours) | Open: placeholders Critical 1/4, High 2/8, Medium 4/24, Low 8/72 (wall-clock); IT BA |
