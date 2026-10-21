@@ -28,6 +28,17 @@ const SECTIONS: { label: string; prefixes: string[] }[] = [
   { label: "Stock", prefixes: ["it.stock."] },
   { label: "Valuation", prefixes: ["it.valuation."] },
   { label: "Inventory settings", prefixes: ["it.inventory_settings."] },
+  {
+    label: "Procurement",
+    prefixes: [
+      "it.demands.",
+      "it.vendors.",
+      "it.products.",
+      "it.invoices.",
+      "it.payments.",
+      "it.procurement_settings.",
+    ],
+  },
   { label: "Administration", prefixes: ["it.manage_role_permissions"] },
 ];
 

@@ -39,6 +39,10 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/procurement/vendors": "it.vendors.update",
   "/it/procurement/products": "it.products.update",
   "/it/procurement/settings": "it.procurement_settings.update",
+  // Demands (javaria_it_0010). The queue and demand pages stay at module:it: RLS limits rows to
+  // the viewer's own demands unless they hold it.demands.read / read_all.
+  "/it/procurement/demands/new": "it.demands.create",
+  "/it/procurement/demands": "module:it",
   // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
   // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
   // the first match in insertion order).

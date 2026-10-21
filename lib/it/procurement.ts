@@ -1,5 +1,73 @@
 // Shared by the procurement screens (09-it-procurement-plan.md). No server-only imports.
 
+import type { ItDemandCategory, ItDemandStatus } from "@/types/database";
+
+type Tone = "positive" | "neutral" | "warning" | "negative" | "info";
+
+export const DEMAND_STATUSES: ItDemandStatus[] = [
+  "Open",
+  "Categorized",
+  "Pending Approval",
+  "Approved",
+  "Partially Approved",
+  "Rejected",
+  "Assigned to Vendor",
+  "Partially Received",
+  "Received",
+  "Invoicing",
+  "Stock Updated",
+  "Closed",
+  "Cancelled",
+];
+
+export const DEMAND_STATUS_TONE: Record<ItDemandStatus, Tone> = {
+  Open: "info",
+  Categorized: "info",
+  "Pending Approval": "warning",
+  Approved: "positive",
+  "Partially Approved": "warning",
+  Rejected: "negative",
+  "Assigned to Vendor": "info",
+  "Partially Received": "warning",
+  Received: "positive",
+  Invoicing: "info",
+  "Stock Updated": "positive",
+  Closed: "neutral",
+  Cancelled: "neutral",
+};
+
+// Still being worked on — the default queue view.
+export const ACTIVE_DEMAND_STATUSES: ItDemandStatus[] = DEMAND_STATUSES.filter(
+  (s) => s !== "Closed" && s !== "Cancelled" && s !== "Rejected",
+);
+
+export const DEMAND_CATEGORIES: { value: ItDemandCategory; label: string; hint: string }[] = [
+  { value: "Consumable", label: "Consumable", hint: "Issued from stock — no approval or vendor" },
+  { value: "Open", label: "General purchase", hint: "New item to buy (BRD category \"Open\")" },
+  { value: "Repair", label: "Repair", hint: "Parts or service to repair equipment" },
+  { value: "Maintenance", label: "Maintenance", hint: "Planned maintenance purchase" },
+  { value: "Fix", label: "Fix", hint: "One-off fix" },
+];
+
+export function demandCategoryLabel(value: ItDemandCategory | null) {
+  if (!value) return "Not categorised";
+  return DEMAND_CATEGORIES.find((c) => c.value === value)?.label ?? value;
+}
+
+// The main path a demand travels, for the step tracker on the demand page. The consumable path
+// replaces the middle with "Stock Updated".
+export const DEMAND_MAIN_PATH: ItDemandStatus[] = [
+  "Open",
+  "Categorized",
+  "Pending Approval",
+  "Approved",
+  "Assigned to Vendor",
+  "Received",
+  "Invoicing",
+  "Closed",
+];
+export const DEMAND_CONSUMABLE_PATH: ItDemandStatus[] = ["Open", "Categorized", "Stock Updated", "Closed"];
+
 // Amounts are stored as numeric(12,2) in PKR; shown with thousands separators, 2 decimals.
 export function formatMoney(value: number | string | null | undefined) {
   if (value === null || value === undefined || value === "") return "—";

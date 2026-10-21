@@ -175,6 +175,8 @@ export function Sidebar({
       label: "IT Procurement",
       icon: BuildingIcon,
       children: [
+        { href: "/it/procurement/demands", label: "Demands", permission: "it.demands.read" },
+        { href: "/it/procurement/demands/new", label: "Raise Demand", permission: "it.demands.create" },
         { href: "/it/procurement/vendors", label: "Vendors", permission: "it.vendors.update" },
         { href: "/it/procurement/products", label: "Products", permission: "it.products.update" },
         {

@@ -32,8 +32,8 @@ ERD onto portal conventions) applies here too and isn't repeated.
 
 ## 0. Status — 2026-10-21
 
-**Phase 1 built** (code + `javaria_it_0009`, not yet applied to the live DB). Phases 2–8 not
-started. **Talha is waiting on this track**:
+**Phases 1–2 built** (code + `javaria_it_0009`, `javaria_it_0010`, not yet applied to the live
+DB). Phases 3–8 not started. **Talha is waiting on this track**:
 
 | What Talha needs | For | His phase |
 |---|---|---|
@@ -206,13 +206,31 @@ No deletes — deactivate. Names unique ignoring case.
 **Done when**: vendors and products can be maintained; Talha can add his `stock_movements` and
 `vendor_id` FKs.
 
-### Phase 2 — Demands, categorisation and the consumable path
+### Phase 2 — Demands, categorisation and the consumable path — ✅ built 2026-10-21
 **Migration** `javaria_it_0010_demands.sql`: `it.demands` (`DMD-` numbers via `it.next_number`),
 `it.demand_updates` (timeline), status trigger, site-scoped RLS (`it.site_it_staff` like tickets),
 `it.demands.*` permissions, notifications (new demand → site's procurement staff).
 Consumable category: no approval / vendor; calls Talha's `recordStockMovement()` when available
 (§2), otherwise held at "stock entry pending".
 **Screens**: PRC-03, PRC-04, PRC-05 (details + timeline).
+
+As built:
+- Transitions allowed from screens: `Open → Categorized` (site procurement, `it.demands.update`),
+  `Categorized → Stock Updated → Closed` (Consumable + consumable path on; stock note required —
+  interim until `recordStockMovement()`), `Open | Categorized → Cancelled` (requester while Open,
+  staff while Open / Categorized; reason required). Every later status only via Phase 3–6
+  functions (session flag `it.demand_system`).
+- Requester or site procurement can edit product / quantity / department / justification while
+  Open; price re-snapshotted when the product changes. Moving a demand to another site needs
+  `it.demands.read_all`.
+- Raise for: own site, a site whose IT team you're on, or any site with `read_all`.
+- New demand → the site's IT staff holding `it.demands.update`; if none, all-sites procurement
+  (`update` + `read_all`). Status change → requester. Comments → the other side; internal notes
+  hidden from the requester.
+- Names via `it.demand_person_names()`; `it.notifications.demand_id` added.
+- Default bundles: Admin / IT Admin / IT Executive (HQ) all four keys; HOD IT read + read_all;
+  IT Site Manager create + read + update; IT Team Member create + read.
+- [ ] Apply `javaria_it_0010` to the live DB.
 
 ### Phase 3 — Department-head approval
 **Migration** `javaria_it_0011_demand_approvals.sql`: `it.demand_approvals`,

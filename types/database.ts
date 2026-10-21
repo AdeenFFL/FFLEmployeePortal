@@ -352,6 +352,72 @@ export type ItProcurementSettings = {
   updated_by: string | null;
 };
 
+// Procurement Phase 2 — javaria_it_0010_demands.sql
+export type ItDemandStatus =
+  | "Open"
+  | "Categorized"
+  | "Pending Approval"
+  | "Approved"
+  | "Partially Approved"
+  | "Rejected"
+  | "Assigned to Vendor"
+  | "Partially Received"
+  | "Received"
+  | "Invoicing"
+  | "Stock Updated"
+  | "Closed"
+  | "Cancelled";
+
+export type ItDemandCategory = "Consumable" | "Open" | "Repair" | "Maintenance" | "Fix";
+
+export type ItDemand = {
+  id: string;
+  demand_number: string;
+  product_id: string;
+  requested_by_person_id: string;
+  department_id: string;
+  site_id: string;
+  company_id: string | null;
+  quantity: number;
+  justification: string;
+  estimated_unit_price: number | null;
+  status: ItDemandStatus;
+  demand_category: ItDemandCategory | null;
+  categorized_at: string | null;
+  categorized_by: string | null;
+  vendor_id: string | null;
+  approved_quantity: number | null;
+  stock_note: string | null;
+  stock_updated_at: string | null;
+  stock_updated_by: string | null;
+  closed_at: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+  cancellation_reason: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItDemandUpdate = {
+  id: string;
+  demand_id: string;
+  author_person_id: string | null;
+  update_type:
+    | "comment"
+    | "work_note"
+    | "created"
+    | "edit"
+    | "category_change"
+    | "status_change"
+    | "system";
+  body: string;
+  is_internal: boolean;
+  created_at: string;
+};
+
 // Phase 6.4 — javaria_it_0007_closure_audit.sql
 export type ItTicketClosureAudit = {
   id: string;
@@ -606,6 +672,7 @@ export type ItNotification = {
   link: string | null;
   ticket_id: string | null;
   request_id: string | null;
+  demand_id: string | null;
   read_at: string | null;
   email_status: ItNotificationEmailStatus;
   email_error: string | null;
@@ -1051,6 +1118,20 @@ export type Database = {
         Update: Partial<ItProcurementSettings>;
         Relationships: [];
       };
+      // javaria_it_0010_demands.sql
+      demands: {
+        Row: ItDemand;
+        Insert: Partial<ItDemand> &
+          Pick<ItDemand, "product_id" | "department_id" | "quantity" | "justification">;
+        Update: Partial<ItDemand>;
+        Relationships: [];
+      };
+      demand_updates: {
+        Row: ItDemandUpdate;
+        Insert: Partial<ItDemandUpdate> & Pick<ItDemandUpdate, "demand_id" | "body">;
+        Update: Partial<ItDemandUpdate>;
+        Relationships: [];
+      };
       // javaria_it_0008_it_roles.sql — roles tagged as IT department roles.
       it_roles: {
         Row: { role_id: string; created_at: string; created_by: string | null };
@@ -1359,6 +1440,19 @@ export type Database = {
       list_org_units: {
         Args: Record<string, never>;
         Returns: { id: string; name: string; type: OrgUnitType }[];
+      };
+      // javaria_it_0010_demands.sql
+      demand_person_names: {
+        Args: { p_person_ids: string[] };
+        Returns: { person_id: string; full_name: string }[];
+      };
+      can_process_demand: {
+        Args: { p_site_id: string };
+        Returns: boolean;
+      };
+      can_see_site_demands: {
+        Args: { p_site_id: string };
+        Returns: boolean;
       };
       // javaria_it_0004_ticket_asset_link.sql
       // javaria_it_0005_site_routing.sql
