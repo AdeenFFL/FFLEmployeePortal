@@ -1,14 +1,30 @@
 "use server";
 
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { requireActiveUser } from "@/lib/auth/require-user";
 import { queueItEmails } from "@/lib/it/notifications";
-import { DEMAND_CATEGORIES } from "@/lib/it/procurement";
-import type { ItDemand, ItDemandCategory, ItDemandDecision } from "@/types/database";
+import {
+  DEMAND_CATEGORIES,
+  DOCUMENT_BUCKET,
+  DOCUMENT_MIME_TYPES,
+  MAX_DOCUMENT_BYTES,
+  MAX_DOCUMENTS_PER_UPLOAD,
+  MAX_TOTAL_DOCUMENT_BYTES,
+  RECEIVING_CONDITIONS,
+} from "@/lib/it/procurement";
+import type {
+  ItDemand,
+  ItDemandCategory,
+  ItDemandDecision,
+  ItDocumentType,
+  ItReceivingCondition,
+} from "@/types/database";
 
 const DECISIONS: ItDemandDecision[] = ["Approved", "Partially Approved", "Rejected"];
+const DOCUMENT_TYPES: ItDocumentType[] = ["Gate Pass", "Delivery Challan", "Quotation", "Photo", "Other"];
 
 // PRC-03/04/05 (09-it-procurement-plan.md Phase 2). The database decides what's allowed:
 // RLS on it.demands + it.demands_before_update() (javaria_it_0010_demands.sql). These actions
@@ -193,6 +209,159 @@ export async function decideDemand(demandId: string, formData: FormData) {
 
   revalidatePath("/it/procurement/approvals");
   done(path, `Decision recorded: ${decision.toLowerCase()}.`);
+}
+
+// ---------------------------------------------------------------------------
+// Phase 4 — vendor, receiving, documents (javaria_it_0012). The functions check the rules.
+// ---------------------------------------------------------------------------
+
+function safeFileName(name: string) {
+  return name.replace(/[^a-zA-Z0-9._-]+/g, "_").slice(-100) || "file";
+}
+
+// Validates and returns the non-empty files of one or more inputs; fails the request otherwise.
+function collectFiles(formData: FormData, keys: string[], path: string) {
+  const files = keys.flatMap((key) =>
+    formData
+      .getAll(key)
+      .filter((f): f is File => f instanceof File && f.size > 0)
+      .map((file) => ({ key, file })),
+  );
+  if (files.length > MAX_DOCUMENTS_PER_UPLOAD) fail(path, `Attach at most ${MAX_DOCUMENTS_PER_UPLOAD} files at a time.`);
+  if (files.some(({ file }) => file.size > MAX_DOCUMENT_BYTES)) fail(path, "Each file must be 5 MB or smaller.");
+  if (files.reduce((sum, { file }) => sum + file.size, 0) > MAX_TOTAL_DOCUMENT_BYTES) {
+    fail(path, "Files must be 8 MB or smaller in total.");
+  }
+  if (files.some(({ file }) => file.type && !DOCUMENT_MIME_TYPES.includes(file.type))) {
+    fail(path, "Only photos (JPG, PNG, WEBP, HEIC) or PDF files can be attached.");
+  }
+  return files;
+}
+
+type Supabase = Awaited<ReturnType<typeof requirePermission>>["supabase"];
+
+// Upload to the bucket, then register the row. Returns how many failed (the record itself is
+// already saved, so a failed upload is reported, not fatal).
+async function uploadDocuments(
+  supabase: Supabase,
+  demandId: string,
+  receivingId: string | null,
+  files: { file: File; docType: ItDocumentType }[],
+) {
+  let failed = 0;
+  for (const { file, docType } of files) {
+    const storagePath = `${demandId}/${randomUUID()}-${safeFileName(file.name)}`;
+    const { error: uploadError } = await supabase.storage
+      .from(DOCUMENT_BUCKET)
+      .upload(storagePath, file, { contentType: file.type || undefined });
+    if (uploadError) {
+      failed++;
+      continue;
+    }
+    const { error } = await supabase.schema("it").rpc("add_procurement_document", {
+      p_demand_id: demandId,
+      p_receiving_id: receivingId,
+      p_doc_type: docType,
+      p_storage_path: storagePath,
+      p_file_name: file.name,
+      p_content_type: file.type || null,
+      p_size_bytes: file.size,
+    });
+    if (error) failed++;
+  }
+  return failed;
+}
+
+// BRD §5.5.7 / §5.6.8 — order from a vendor, or switch vendor.
+export async function assignVendor(demandId: string, formData: FormData) {
+  const path = `${LIST}/${demandId}`;
+  const { supabase } = await requirePermission("it.demands.update");
+
+  const vendorId = text(formData, "vendorId");
+  if (!vendorId) fail(path, "Please choose a vendor.");
+
+  const { error } = await supabase.schema("it").rpc("assign_demand_vendor", {
+    p_demand_id: demandId,
+    p_vendor_id: vendorId,
+    p_expected_date: text(formData, "expectedDate") || null,
+    p_note: text(formData, "note") || null,
+  });
+  if (error) fail(path, error.message);
+
+  done(path, "Vendor saved.");
+}
+
+// BRD §5.5.8–5.5.9 — record a delivery. Challan / gate pass numbers and pictures are optional.
+export async function recordReceiving(demandId: string, formData: FormData) {
+  const path = `${LIST}/${demandId}`;
+  const { supabase } = await requirePermission("it.demands.update");
+
+  const quantity = Number(text(formData, "quantity"));
+  if (!Number.isInteger(quantity) || quantity < 0) fail(path, "Enter the quantity received (0 if nothing arrived).");
+  const receivedDate = text(formData, "receivedDate");
+  if (!receivedDate) fail(path, "Enter the date the goods arrived.");
+  const condition = text(formData, "condition") as ItReceivingCondition;
+  if (!RECEIVING_CONDITIONS.includes(condition)) fail(path, "Choose the condition of the goods.");
+  const files = collectFiles(formData, ["gatePassFiles", "challanFiles"], path);
+
+  const { data: receivingId, error } = await supabase.schema("it").rpc("record_receiving", {
+    p_demand_id: demandId,
+    p_received_date: receivedDate,
+    p_quantity: quantity,
+    p_condition: condition,
+    p_challan_no: text(formData, "challanNo") || null,
+    p_gate_pass_no: text(formData, "gatePassNo") || null,
+    p_remarks: text(formData, "remarks") || null,
+  });
+  if (error || !receivingId) fail(path, error?.message ?? "Could not record the delivery.");
+
+  const failed = await uploadDocuments(
+    supabase,
+    demandId,
+    receivingId,
+    files.map(({ key, file }) => ({ file, docType: key === "gatePassFiles" ? "Gate Pass" : "Delivery Challan" })),
+  );
+  done(
+    path,
+    failed > 0
+      ? `Delivery recorded, but ${failed} file(s) could not be uploaded — try again on the delivery.`
+      : "Delivery recorded.",
+  );
+}
+
+// Add the challan / gate pass number later.
+export async function updateReceivingRefs(demandId: string, receivingId: string, formData: FormData) {
+  const path = `${LIST}/${demandId}`;
+  const { supabase } = await requirePermission("it.demands.update");
+
+  const { error } = await supabase.schema("it").rpc("update_receiving_refs", {
+    p_receiving_id: receivingId,
+    p_challan_no: text(formData, "challanNo") || null,
+    p_gate_pass_no: text(formData, "gatePassNo") || null,
+  });
+  if (error) fail(path, error.message);
+
+  done(path, "Delivery updated.");
+}
+
+// Attach pictures / PDFs to the demand (receivingId null) or to one delivery.
+export async function uploadDemandDocuments(demandId: string, receivingId: string | null, formData: FormData) {
+  const path = `${LIST}/${demandId}`;
+  const { supabase } = await requirePermission("it.demands.update");
+
+  const docType = text(formData, "docType") as ItDocumentType;
+  if (!DOCUMENT_TYPES.includes(docType)) fail(path, "Choose what the file is.");
+  const files = collectFiles(formData, ["files"], path);
+  if (files.length === 0) fail(path, "Choose a file to upload.");
+
+  const failed = await uploadDocuments(
+    supabase,
+    demandId,
+    receivingId,
+    files.map(({ file }) => ({ file, docType })),
+  );
+  if (failed === files.length) fail(path, "The file(s) could not be uploaded.");
+  done(path, failed > 0 ? `${files.length - failed} uploaded, ${failed} failed.` : "Uploaded.");
 }
 
 export async function addDemandComment(demandId: string, formData: FormData) {

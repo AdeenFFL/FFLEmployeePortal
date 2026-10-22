@@ -394,6 +394,12 @@ export type ItDemand = {
   cancelled_at: string | null;
   cancelled_by: string | null;
   cancellation_reason: string | null;
+  // javaria_it_0012_receiving_documents.sql
+  expected_delivery_date: string | null;
+  vendor_assigned_at: string | null;
+  vendor_assigned_by: string | null;
+  follow_up_on: string | null;
+  received_quantity: number;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -438,6 +444,55 @@ export type ItDemandApproval = {
   approved_quantity: number;
   comments: string | null;
   decided_at: string;
+};
+
+// Procurement Phase 4 — javaria_it_0012_receiving_documents.sql
+export type ItReceivingCondition = "Good" | "Partially Damaged" | "Damaged";
+
+export type ItReceivingRecord = {
+  id: string;
+  receiving_number: string;
+  demand_id: string;
+  vendor_id: string | null;
+  received_by_person_id: string | null;
+  received_date: string;
+  received_quantity: number;
+  condition: ItReceivingCondition;
+  status: "Full" | "Partial" | "Not Received";
+  delivery_challan_no: string | null;
+  gate_pass_no: string | null;
+  remarks: string | null;
+  site_id: string | null;
+  company_id: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItDocumentType =
+  | "Delivery Challan"
+  | "Gate Pass"
+  | "Quotation"
+  | "Invoice"
+  | "Approval"
+  | "Payment Proof"
+  | "Photo"
+  | "Other";
+
+export type ItDocument = {
+  id: string;
+  entity_type: "demand" | "receiving" | "invoice" | "payment" | "asset";
+  entity_id: string;
+  demand_id: string | null;
+  doc_type: ItDocumentType;
+  storage_path: string;
+  file_name: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  uploaded_by: string | null;
+  uploaded_at: string;
 };
 
 // Phase 6.4 — javaria_it_0007_closure_audit.sql
@@ -1168,6 +1223,19 @@ export type Database = {
         Update: Partial<ItDemandApproval>;
         Relationships: [];
       };
+      // javaria_it_0012_receiving_documents.sql — written only through functions.
+      receiving_records: {
+        Row: ItReceivingRecord;
+        Insert: Partial<ItReceivingRecord>;
+        Update: Partial<ItReceivingRecord>;
+        Relationships: [];
+      };
+      documents: {
+        Row: ItDocument;
+        Insert: Partial<ItDocument>;
+        Update: Partial<ItDocument>;
+        Relationships: [];
+      };
       // javaria_it_0008_it_roles.sql — roles tagged as IT department roles.
       it_roles: {
         Row: { role_id: string; created_at: string; created_by: string | null };
@@ -1519,6 +1587,48 @@ export type Database = {
           employee_code: string | null;
           designation: string | null;
         }[];
+      };
+      // javaria_it_0012_receiving_documents.sql
+      receiving_has_gate_proof: {
+        Args: { p_receiving_id: string };
+        Returns: boolean;
+      };
+      assign_demand_vendor: {
+        Args: {
+          p_demand_id: string;
+          p_vendor_id: string;
+          p_expected_date: string | null;
+          p_note: string | null;
+        };
+        Returns: undefined;
+      };
+      record_receiving: {
+        Args: {
+          p_demand_id: string;
+          p_received_date: string;
+          p_quantity: number;
+          p_condition: ItReceivingCondition;
+          p_challan_no: string | null;
+          p_gate_pass_no: string | null;
+          p_remarks: string | null;
+        };
+        Returns: string;
+      };
+      update_receiving_refs: {
+        Args: { p_receiving_id: string; p_challan_no: string | null; p_gate_pass_no: string | null };
+        Returns: undefined;
+      };
+      add_procurement_document: {
+        Args: {
+          p_demand_id: string;
+          p_receiving_id: string | null;
+          p_doc_type: ItDocumentType;
+          p_storage_path: string;
+          p_file_name: string;
+          p_content_type: string | null;
+          p_size_bytes: number;
+        };
+        Returns: string;
       };
       submit_demand_for_approval: {
         Args: { p_demand_id: string };

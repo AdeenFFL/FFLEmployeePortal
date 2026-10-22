@@ -85,5 +85,19 @@ export function parseMoney(raw: FormDataEntryValue | null): number | null | unde
   return Math.round(n * 100) / 100;
 }
 
+// Phase 4 documents (javaria_it_0012): private bucket, 5 MB per file (bucket limit), images or PDF.
+export const DOCUMENT_BUCKET = "it-documents";
+export const MAX_DOCUMENT_BYTES = 5 * 1024 * 1024;
+export const MAX_DOCUMENTS_PER_UPLOAD = 3;
+export const MAX_TOTAL_DOCUMENT_BYTES = 8 * 1024 * 1024; // under next.config's 9 MB body limit
+export const DOCUMENT_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"];
+export const DOCUMENT_ACCEPT = ".jpg,.jpeg,.png,.webp,.heic,.pdf,image/*,application/pdf";
+export const RECEIVING_CONDITIONS = ["Good", "Partially Damaged", "Damaged"] as const;
+
+// Today in Pakistan time as YYYY-MM-DD (date inputs' default / max).
+export function todayIso() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(new Date());
+}
+
 // Common units offered as suggestions; any text is accepted.
 export const PRODUCT_UNITS = ["Each", "Box", "Pack", "Set", "Pair", "Roll", "Ream", "Meter", "Litre", "Kg", "License", "Month", "Year"];

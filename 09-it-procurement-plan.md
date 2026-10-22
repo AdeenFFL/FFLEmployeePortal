@@ -32,8 +32,8 @@ ERD onto portal conventions) applies here too and isn't repeated.
 
 ## 0. Status — 2026-10-21
 
-**Phases 1–3 built** (code + `javaria_it_0009`–`0011`, not yet applied to the live DB).
-Phases 4–8 not started. **Talha is waiting on this track**:
+**Phases 1–4 built** (code + `javaria_it_0009`–`0012`, not yet applied to the live DB).
+Phases 5–8 not started. **Talha is waiting on this track**:
 
 | What Talha needs | For | His phase |
 |---|---|---|
@@ -264,6 +264,29 @@ Fixed-asset products → Talha's `registerAssetsFromReceipt()` (or the interim i
 **Then**: tell Talha `it.receiving_records` is live so he can add `assets.receiving_id`.
 **Screens**: vendor, receiving and documents steps on PRC-05.
 
+✅ Built 2026-10-22. As built:
+- `it.assign_demand_vendor()`: active vendor + optional expected date → `Assigned to Vendor`;
+  can change vendor (with a reason) until fully received. Columns added on `it.demands`:
+  `expected_delivery_date`, `vendor_assigned_at/by`, `follow_up_on`, `received_quantity`.
+- `it.record_receiving()`: one `it.receiving_records` row per delivery (`GRN-` numbers), quantity
+  (0 = vendor no-show, remarks required), condition, optional challan / gate pass numbers,
+  remarks. Totals vs approved quantity → `Partially Received` / `Received`; over-receipt refused.
+- **Gate pass decision (2026-10-22, Javaria):** gate pass and challan numbers and pictures are all
+  optional at receiving and can be added later (`it.update_receiving_refs()`, uploads). A delivery
+  with neither number nor picture shows **Gate pass pending** on the demand and in the queue.
+  **Phase 5 rule:** an invoice can't go to Finance until every delivery on it has a gate pass
+  number OR picture — `it.receiving_has_gate_proof()`. Resolves §8 #3 for now (procurement types
+  the number from the paper slip; a guard permission can come later).
+- `it.documents` + private bucket `it-documents` (5 MB, JPG / PNG / WEBP / HEIC / PDF), files at
+  `{demand_id}/…`; registered through `it.add_procurement_document()` (site procurement only);
+  readable by anyone who can see the demand. Types used now: Gate Pass, Delivery Challan,
+  Quotation, Photo, Other. Camera capture on phones.
+- Follow-ups: `follow_up_on` = expected date, or receiving date + reminder interval after a short
+  delivery; `it.notify_receiving_followups()` — schedule with pg_cron
+  (`select cron.schedule('it-receiving-followups', '0 9 * * *', $$select it.notify_receiving_followups()$$);`).
+- Fixed-asset products: serials in remarks, register by hand (interim, §2).
+- [ ] Apply `javaria_it_0012`; schedule the follow-up sweep; tell Talha `it.receiving_records` is live.
+
 ### Phase 5 — Invoices
 **Migration** `javaria_it_0013_invoices.sql`: `it.invoices` (+ approval columns), auto-
 verification against receiving (§1.4 → `Verified` / `Flagged`), routing to the department head
@@ -315,7 +338,7 @@ names `javaria_it_<NNNN>_<description>.sql`; plus:
 |---|---|---|---|
 | 1 | Who is "the Department Head" for a demand / invoice? | Mapping table `it.department_approvers` (P3), maintained on PRC-08; a person can head several departments | IT BA, senior dev |
 | 2 | Who are the Finance users? | A role holding `it.payments.update` + `it.demands.read_all` | IT BA |
-| 3 | Do guards / Admin record the gate pass in the portal? | Yes, with a narrow `it.gate_pass.update` if they must not see amounts | IT BA |
+| 3 | Do guards / Admin record the gate pass in the portal? | **Decided for now (2026-10-22):** gate pass number / picture optional, entered by procurement, required (number OR picture) before Finance. Guard access (`it.gate_pass.update`) later if wanted | IT BA |
 | 4 | Accept additions P1–P5 (documents, timeline, department approvers, settings, site scoping)? | Yes | Senior dev |
 | 5 | Invoice-vs-receiving tolerance (amount) | 0 for quantity; ±1% or a fixed amount for rounding | IT BA / Finance |
 | 6 | Does a partially-received demand allow one invoice per delivery, or one at the end? | One invoice per receiving record (ERD: `invoices.receiving_id`) | IT BA / Finance |

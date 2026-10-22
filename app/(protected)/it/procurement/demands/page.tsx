@@ -96,6 +96,33 @@ export default async function DemandsPage({
     : { data: [] };
   const nameById = new Map((people ?? []).map((p) => [p.person_id, p.full_name]));
 
+  // Deliveries with neither a gate pass number nor a gate pass picture (javaria_it_0012).
+  const demandIds = rows.map((r) => r.id);
+  const { data: noNumber } = demandIds.length
+    ? await supabase
+        .schema("it")
+        .from("receiving_records")
+        .select("id, demand_id")
+        .in("demand_id", demandIds)
+        .is("gate_pass_no", null)
+        .gt("received_quantity", 0)
+    : { data: [] };
+  const { data: gatePics } = (noNumber ?? []).length
+    ? await supabase
+        .schema("it")
+        .from("documents")
+        .select("entity_id")
+        .eq("doc_type", "Gate Pass")
+        .in(
+          "entity_id",
+          (noNumber ?? []).map((r) => r.id),
+        )
+    : { data: [] };
+  const withPicture = new Set((gatePics ?? []).map((d) => d.entity_id));
+  const gatePassPending = new Set(
+    (noNumber ?? []).filter((r) => !withPicture.has(r.id)).map((r) => r.demand_id),
+  );
+
   const kpis = [
     { label: "To categorise / route", value: openRes.count ?? 0 },
     { label: "Awaiting approval", value: approvalRes.count ?? 0 },
@@ -240,7 +267,10 @@ export default async function DemandsPage({
                       <td className="px-6 py-3 text-slate-600">{orgUnits.nameById.get(d.site_id) ?? "—"}</td>
                       <td className="whitespace-nowrap px-6 py-3 text-slate-600">{formatDate(d.created_at)}</td>
                       <td className="px-6 py-3">
-                        <StatusPill label={d.status} tone={DEMAND_STATUS_TONE[d.status]} />
+                        <div className="flex flex-wrap gap-1">
+                          <StatusPill label={d.status} tone={DEMAND_STATUS_TONE[d.status]} />
+                          {gatePassPending.has(d.id) && <StatusPill label="Gate pass pending" tone="warning" />}
+                        </div>
                       </td>
                     </tr>
                   );

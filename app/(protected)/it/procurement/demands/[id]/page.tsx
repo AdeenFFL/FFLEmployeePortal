@@ -11,8 +11,10 @@ import {
   DEMAND_MAIN_PATH,
   DEMAND_STATUS_TONE,
   demandCategoryLabel,
+  DOCUMENT_BUCKET,
   formatMoney,
 } from "@/lib/it/procurement";
+import { DeliverySection, ReceivingPanel, VendorPanel } from "./delivery-panels";
 import type { ItDemand } from "@/types/database";
 import {
   addDemandComment,
@@ -133,6 +135,26 @@ export default async function DemandPage({
         .order("decided_at"),
       supabase.schema("it").rpc("list_department_approvers"),
     ]);
+
+  // Phase 4 — deliveries, documents, vendor choices.
+  const [receivingsRes, documentsRes, vendorsRes] = await Promise.all([
+    supabase.schema("it").from("receiving_records").select("*").eq("demand_id", id).order("received_date"),
+    supabase.schema("it").from("documents").select("*").eq("demand_id", id).order("uploaded_at"),
+    canProcess
+      ? supabase.schema("it").from("vendors").select("id, vendor_name").eq("is_active", true).order("vendor_name")
+      : Promise.resolve({ data: [] as { id: string; vendor_name: string }[] }),
+  ]);
+  const receivings = receivingsRes.data ?? [];
+  const documents = documentsRes.data ?? [];
+  const docPaths = documents.map((d) => d.storage_path);
+  const { data: signed } = docPaths.length
+    ? await supabase.storage.from(DOCUMENT_BUCKET).createSignedUrls(docPaths, 600)
+    : { data: [] };
+  const docUrls = new Map<string, string>();
+  for (const s of signed ?? []) {
+    if (s.path && s.signedUrl) docUrls.set(s.path, s.signedUrl);
+  }
+
   const approvals = approvalsRes.data ?? [];
   const departmentApprovers = (approversRes.data ?? []).filter(
     (a) => a.department_id === demand.department_id && a.can_approve_demands && a.has_permission,
@@ -150,6 +172,8 @@ export default async function DemandPage({
     demand.categorized_by,
     demand.stock_updated_by,
     demand.cancelled_by,
+    demand.vendor_assigned_by,
+    ...receivings.map((r) => r.received_by_person_id),
     ...approvals.map((a) => a.approver_person_id),
     ...updates.map((u) => u.author_person_id),
   ].filter((v): v is string => Boolean(v));
@@ -165,7 +189,15 @@ export default async function DemandPage({
   const canStock =
     Boolean(canProcess) && demand.status === "Categorized" && demand.demand_category === "Consumable" && consumablePath;
   const canClose = Boolean(canProcess) && demand.status === "Stock Updated";
-  const canSubmit = Boolean(canProcess) && demand.status === "Categorized" && !canStock;
+  // A consumable can also go for purchase (e.g. out of stock), so both panels can show.
+  const canSubmit = Boolean(canProcess) && demand.status === "Categorized";
+  const canAssignVendor =
+    Boolean(canProcess) &&
+    ["Approved", "Partially Approved", "Assigned to Vendor", "Partially Received"].includes(demand.status);
+  const canReceive =
+    Boolean(canProcess) && (demand.status === "Assigned to Vendor" || demand.status === "Partially Received");
+  const showDelivery =
+    Boolean(demand.vendor_id) || receivings.length > 0 || documents.length > 0 || canAssignVendor;
   const canDecide = Boolean(isApprover) && !isOwner && demand.status === "Pending Approval";
   const canCancel =
     (isOwner && demand.status === "Open") ||
@@ -224,7 +256,6 @@ export default async function DemandPage({
                   {demand.categorized_by && ` by ${names.get(demand.categorized_by) ?? "procurement"}`}
                 </Fact>
               )}
-              {vendorRes.data && <Fact label="Vendor">{vendorRes.data.vendor_name}</Fact>}
             </dl>
             <div className="mt-4">
               <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Justification</p>
@@ -332,12 +363,25 @@ export default async function DemandPage({
                   </li>
                 ))}
               </ul>
-              {latestDecision && latestDecision.decision !== "Rejected" && demand.status !== "Pending Approval" && (
-                <p className="mt-3 text-xs text-slate-500">
-                  Next: procurement assigns a vendor (coming in the next procurement phase).
-                </p>
-              )}
+              {latestDecision &&
+                latestDecision.decision !== "Rejected" &&
+                (demand.status === "Approved" || demand.status === "Partially Approved") && (
+                  <p className="mt-3 text-xs text-slate-500">Next: procurement assigns a vendor.</p>
+                )}
             </section>
+          )}
+
+          {showDelivery && (
+            <DeliverySection
+              demand={demand}
+              unit={product?.unit ?? ""}
+              vendorName={vendorRes.data?.vendor_name ?? null}
+              names={names}
+              receivings={receivings}
+              documents={documents}
+              urls={docUrls}
+              canProcess={Boolean(canProcess)}
+            />
           )}
 
           <section className={`${cardClass} p-6`}>
@@ -504,6 +548,12 @@ export default async function DemandPage({
                 </button>
               </form>
             </section>
+          )}
+
+          {canAssignVendor && <VendorPanel demand={demand} vendors={vendorsRes.data ?? []} />}
+
+          {canReceive && (
+            <ReceivingPanel demand={demand} unit={product?.unit ?? ""} isFixedAsset={Boolean(product?.asset_type_id)} />
           )}
 
           {canClose && (
