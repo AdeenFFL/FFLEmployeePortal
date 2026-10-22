@@ -6,3 +6,9 @@ export const SUPPORT_EMAIL = "hr.helpdesk@faujifoods.com";
 // screen, and the sidebar header, so renaming the product again means changing it in one place.
 export const APP_NAME = "Employee Campsite";
 export const APP_TAGLINE = "Fauji Food Vertical Employee Portal";
+
+// Used to suggest a company email/username on the onboarding "Email Account" checklist task
+// (lib/it/onboarding.ts's suggestEmailAccount) — a suggestion only, IT confirms/edits it before
+// actually creating the mailbox in Microsoft 365. Single company domain for now; if a second
+// ever applies, this becomes a per-company lookup instead of one constant.
+export const COMPANY_EMAIL_DOMAIN = "faujifoods.com";
