@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { useFormStatus } from "react-dom";
 import {
   CONTACT_METHODS,
@@ -13,7 +13,93 @@ import {
   inputClass,
   labelClass,
   primaryButtonClass,
+  secondaryButtonClass,
 } from "../../_components/ticket-ui";
+import { searchMyAssets } from "../actions";
+
+type AssetMatch = {
+  asset_id: string;
+  asset_tag: string;
+  asset_name: string;
+  serial_number: string;
+  status: string;
+};
+
+// A combobox over the requester's OWN assigned assets (IT module revision, Phase 2). Keeps
+// assetSystemName as a free-text fallback for "my asset isn't in the register" — selecting a
+// match here sets the hidden linkedAssetId field the asset name alone can't provide.
+function AssetPicker() {
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState<AssetMatch[]>([]);
+  const [selected, setSelected] = useState<AssetMatch | null>(null);
+  const [isPending, startTransition] = useTransition();
+
+  function search() {
+    startTransition(async () => {
+      const matches = await searchMyAssets(query);
+      setResults(matches);
+    });
+  }
+
+  if (selected) {
+    return (
+      <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm">
+        <span>
+          <span className="font-medium text-slate-800">{selected.asset_tag}</span> {selected.asset_name}
+        </span>
+        <button
+          type="button"
+          onClick={() => setSelected(null)}
+          className="text-xs text-slate-500 hover:text-red-600"
+        >
+          Change
+        </button>
+        <input type="hidden" name="linkedAssetId" value={selected.asset_id} />
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2">
+        <input
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          placeholder="Search your assigned assets by tag, serial or name"
+          className={inputClass}
+        />
+        <button type="button" onClick={search} disabled={isPending} className={secondaryButtonClass}>
+          {isPending ? "Searching…" : "Search"}
+        </button>
+      </div>
+      {results.length > 0 && (
+        <ul className="mt-2 divide-y divide-slate-100 rounded-lg border border-slate-200">
+          {results.map((a) => (
+            <li key={a.asset_id}>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelected(a);
+                  setResults([]);
+                }}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-sm hover:bg-slate-50"
+              >
+                <span className="font-medium text-slate-800">{a.asset_tag}</span>
+                <span className="min-w-0 flex-1 truncate text-slate-600">{a.asset_name}</span>
+                <span className="text-xs text-slate-400">SN {a.serial_number}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      {query.trim() && !isPending && results.length === 0 && (
+        <p className="mt-1 text-xs text-slate-400">
+          No match among your assigned assets — not registered yet? Describe it below instead.
+        </p>
+      )}
+    </div>
+  );
+}
 
 type Option = { id: string; name: string };
 type Category = Option & { parent_id: string | null };
@@ -195,6 +281,12 @@ export function TicketForm({
               </option>
             ))}
           </select>
+        </div>
+        <div className="sm:col-span-2">
+          <label className={labelClass}>
+            Linked asset <span className="font-normal text-slate-400">(if this is about a registered device)</span>
+          </label>
+          <AssetPicker />
         </div>
         <div>
           <label htmlFor="assetSystemName" className={labelClass}>

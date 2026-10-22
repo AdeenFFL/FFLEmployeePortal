@@ -3,7 +3,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
+import { Modal } from "@/components/modal";
+import { fetchAssetPersonNames, fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
 import { formatDateTime } from "@/lib/it/tickets";
 import {
   cardClass,
@@ -44,10 +45,19 @@ export default async function AssetDetailPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ notice?: string; error?: string }>;
+  searchParams: Promise<{
+    notice?: string;
+    error?: string;
+    assign?: string;
+    return?: string;
+    repair?: string;
+    status?: string;
+  }>;
 }) {
-  const [{ id }, { notice, error }] = await Promise.all([params, searchParams]);
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  const { notice, error } = sp;
   const supabase = await createClient();
+  const basePath = `/it/inventory/${id}`;
 
   const { data: asset } = await supabase
     .schema("it")
@@ -104,21 +114,11 @@ export default async function AssetDetailPage({
   const history = assignmentRows ?? [];
   const openAssignment = history.find((a) => a.return_date === null) ?? null;
 
-  // Names via it.asset_person_names (talha_it_0008): any it.assets.read holder, and it has no
-  // active filter, so people who have since left still show by name.
-  const { data: historyPeople } = history.length
-    ? await supabase.schema("it").rpc("asset_person_names", {
-        p_person_ids: [
-          ...new Set(
-            history
-              .flatMap((a) => [a.person_id, a.assigned_by_person_id, a.returned_to_person_id])
-              .filter((pid): pid is string => Boolean(pid)),
-          ),
-        ],
-      })
-    : { data: null };
-  const nameOf = (pid: string | null) =>
-    (pid && historyPeople?.find((p) => p.person_id === pid)?.full_name) || "—";
+  const historyNames = await fetchAssetPersonNames(
+    supabase,
+    history.flatMap((a) => [a.person_id, a.assigned_by_person_id, a.returned_to_person_id]),
+  );
+  const nameOf = (pid: string | null) => (pid && historyNames.get(pid)) || "—";
 
   const showAssign = canAssign && asset.status === "Unassigned";
   const showReturn = canAssign && asset.status === "In Use" && openAssignment !== null;
@@ -336,29 +336,80 @@ export default async function AssetDetailPage({
         <div className="space-y-6">
           {showAssign && (
             <Panel title="Assign asset">
-              <AssetAssignForm assetId={asset.id} defaultCondition={asset.condition} />
+              <p className="mb-3 text-sm text-slate-500">This asset is unassigned.</p>
+              <Link href={`${basePath}?assign=1`} className={primaryButtonClass}>
+                Assign to an employee
+              </Link>
             </Panel>
+          )}
+          {showAssign && sp.assign === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Assign asset">
+              <AssetAssignForm assetId={asset.id} defaultCondition={asset.condition} />
+            </Modal>
           )}
 
           {showReturn && openAssignment && (
             <Panel title="Return asset">
+              <p className="mb-3 text-sm text-slate-500">
+                Currently held by {nameOf(openAssignment.person_id)}.
+              </p>
+              <Link href={`${basePath}?return=1`} className={primaryButtonClass}>
+                Record return
+              </Link>
+            </Panel>
+          )}
+          {showReturn && openAssignment && sp.return === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Return asset">
               <AssetReturnForm
                 assetId={asset.id}
                 assignedDate={openAssignment.assigned_date}
                 assignedCondition={openAssignment.assigned_condition}
                 holderName={nameOf(openAssignment.person_id)}
               />
-            </Panel>
+            </Modal>
           )}
 
-          {showSendForRepair && (
-            <Panel title="Send for repair">
-              {asset.status === "In Use" && openAssignment && (
-                <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                  This asset is held by {nameOf(openAssignment.person_id)}. It stays assigned to them
-                  while in repair and returns to In Use when you close the repair.
-                </p>
+          {(showSendForRepair || showCloseRepair) && (
+            <Panel title="Maintenance">
+              {showSendForRepair ? (
+                <>
+                  {asset.status === "In Use" && openAssignment && (
+                    <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                      This asset is held by {nameOf(openAssignment.person_id)}. It stays assigned to
+                      them while in repair and returns to In Use when you close the repair.
+                    </p>
+                  )}
+                  <Link href={`${basePath}?repair=1`} className={primaryButtonClass}>
+                    Send for repair
+                  </Link>
+                </>
+              ) : (
+                <>
+                  <p className="mb-3 text-sm text-slate-500">
+                    In repair since {openRepair ? formatDate(openRepair.service_date) : "—"}
+                    {openRepair && (
+                      <>
+                        : <span className="font-medium text-slate-900">{openRepair.issue_type}</span>
+                      </>
+                    )}
+                    .
+                  </p>
+                  {openRepair ? (
+                    <Link href={`${basePath}?repair=1`} className={primaryButtonClass}>
+                      Close repair
+                    </Link>
+                  ) : (
+                    <p className="text-sm text-slate-500">
+                      This asset is In Repair but has no open repair record, so it can&apos;t be
+                      closed here. Ask an administrator to correct the record in the database.
+                    </p>
+                  )}
+                </>
               )}
+            </Panel>
+          )}
+          {showSendForRepair && sp.repair === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Send for repair">
               <form action={openMaintenance.bind(null, asset.id)} className="space-y-3">
                 <div>
                   <label className={labelClass}>Issue type *</label>
@@ -382,67 +433,54 @@ export default async function AssetDetailPage({
                   Send for repair
                 </button>
               </form>
-            </Panel>
+            </Modal>
           )}
-
-          {showCloseRepair && (
-            <Panel title="Close repair">
-              {openRepair ? (
-                <>
-                  <p className="mb-3 text-sm text-slate-500">
-                    In repair since {formatDate(openRepair.service_date)}:{" "}
-                    <span className="font-medium text-slate-900">{openRepair.issue_type}</span>.
-                  </p>
-                  <form
-                    action={closeMaintenance.bind(null, asset.id, openRepair.id)}
-                    className="space-y-3"
-                  >
-                    <div>
-                      <label className={labelClass}>Resolution *</label>
-                      <textarea
-                        name="resolution"
-                        required
-                        rows={2}
-                        placeholder="e.g. Battery replaced"
-                        className={inputClass}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Cost (PKR)</label>
-                      <input
-                        type="number"
-                        name="cost"
-                        min="0"
-                        step="0.01"
-                        placeholder="Optional"
-                        className={inputClass}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Returned date (leave empty for today)</label>
-                      <input
-                        type="date"
-                        name="returned_date"
-                        min={openRepair.service_date}
-                        className={inputClass}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Remarks</label>
-                      <input name="remarks" placeholder="Optional" className={inputClass} />
-                    </div>
-                    <button type="submit" className={primaryButtonClass}>
-                      Close repair
-                    </button>
-                  </form>
-                </>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  This asset is In Repair but has no open repair record, so it can&apos;t be closed
-                  here. Ask an administrator to correct the record in the database.
-                </p>
-              )}
-            </Panel>
+          {showCloseRepair && openRepair && sp.repair === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Close repair">
+              <p className="mb-3 text-sm text-slate-500">
+                In repair since {formatDate(openRepair.service_date)}:{" "}
+                <span className="font-medium text-slate-900">{openRepair.issue_type}</span>.
+              </p>
+              <form action={closeMaintenance.bind(null, asset.id, openRepair.id)} className="space-y-3">
+                <div>
+                  <label className={labelClass}>Resolution *</label>
+                  <textarea
+                    name="resolution"
+                    required
+                    rows={2}
+                    placeholder="e.g. Battery replaced"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Cost (PKR)</label>
+                  <input
+                    type="number"
+                    name="cost"
+                    min="0"
+                    step="0.01"
+                    placeholder="Optional"
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Returned date (leave empty for today)</label>
+                  <input
+                    type="date"
+                    name="returned_date"
+                    min={openRepair.service_date}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Remarks</label>
+                  <input name="remarks" placeholder="Optional" className={inputClass} />
+                </div>
+                <button type="submit" className={primaryButtonClass}>
+                  Close repair
+                </button>
+              </form>
+            </Modal>
           )}
 
           {canUpdate && (
@@ -454,30 +492,37 @@ export default async function AssetDetailPage({
                     : "This asset is in repair. Close the repair record to change its status."}
                 </p>
               ) : (
-                <form action={changeAssetStatus.bind(null, asset.id)} className="space-y-3">
-                  <div>
-                    <label className={labelClass}>New status</label>
-                    <select name="status" required defaultValue="" className={inputClass}>
-                      <option value="" disabled>
-                        Select a status
-                      </option>
-                      {statusChoices.map((s) => (
-                        <option key={s} value={s}>
-                          {s}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={labelClass}>Reason</label>
-                    <input name="reason" placeholder="Optional" className={inputClass} />
-                  </div>
-                  <button type="submit" className={primaryButtonClass}>
-                    Update status
-                  </button>
-                </form>
+                <Link href={`${basePath}?status=1`} className={secondaryButtonClass}>
+                  Change status
+                </Link>
               )}
             </Panel>
+          )}
+          {canUpdate && !isSystemManaged && sp.status === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Change status">
+              <form action={changeAssetStatus.bind(null, asset.id)} className="space-y-3">
+                <div>
+                  <label className={labelClass}>New status</label>
+                  <select name="status" required defaultValue="" className={inputClass}>
+                    <option value="" disabled>
+                      Select a status
+                    </option>
+                    {statusChoices.map((s) => (
+                      <option key={s} value={s}>
+                        {s}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Reason</label>
+                  <input name="reason" placeholder="Optional" className={inputClass} />
+                </div>
+                <button type="submit" className={primaryButtonClass}>
+                  Update status
+                </button>
+              </form>
+            </Modal>
           )}
 
           <Panel title="Record">

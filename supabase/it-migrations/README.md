@@ -91,6 +91,46 @@ explaining it's a confirmed no-op.
   files; likely an early experiment before the convention settled. Candidate for a small cleanup
   migration later.
 
+## Reconciled into the main sequence — 2026-10-22 (batch 2)
+
+All 11 remaining staged files below (talha 0004–0009, javaria 0004–0008) were verified
+**directly against the live database** the same way as the first batch — several of javaria's
+own "Applied to live DB: NO" headers had drifted from reality; all 11 were confirmed fully live
+via `information_schema`/`pg_proc` before anything was replicated. Nothing in them was re-run.
+
+Numbering had to interleave the two authors' files by actual dependency, not by author: Javaria's
+`0004_ticket_asset_link.sql` depends on the FK that Talha's `0004_asset_assignments.sql` owns, so
+Talha's file comes first in the main sequence even though both are each author's own "0004". The
+new ticket/onboarding IT-module-revision work done the same day (search-my-assets-for-ticket,
+onboarding asset allocation) was renumbered up to 0041–0042 so it sorts *after* this batch — it
+reads from tables (`it.asset_assignments`) this batch creates, so a fresh environment must run
+these first.
+
+| Staged file | Replicated as |
+|---|---|
+| `talha/talha_it_0004_asset_assignments.sql` | `supabase/migrations/0030_it_asset_assignments.sql` |
+| `javaria/javaria_it_0004_ticket_asset_link.sql` | `supabase/migrations/0031_it_ticket_asset_link.sql` |
+| `talha/talha_it_0005_asset_maintenance.sql` | `supabase/migrations/0032_it_asset_maintenance.sql` |
+| `talha/talha_it_0006_asset_values.sql` | `supabase/migrations/0033_it_asset_values.sql` |
+| `talha/talha_it_0007_asset_tag_manual.sql` | `supabase/migrations/0034_it_asset_tag_manual.sql` |
+| `talha/talha_it_0008_people_lookup.sql` | `supabase/migrations/0035_it_people_lookup.sql` |
+| `talha/talha_it_0009_inventory_role_grants.sql` | `supabase/migrations/0036_it_inventory_role_grants.sql` |
+| `javaria/javaria_it_0005_site_routing.sql` | `supabase/migrations/0037_it_site_routing.sql` |
+| `javaria/javaria_it_0006_owners_and_assignees.sql` | `supabase/migrations/0038_it_owners_and_assignees.sql` |
+| `javaria/javaria_it_0007_closure_audit.sql` | `supabase/migrations/0039_it_closure_audit.sql` |
+| `javaria/javaria_it_0008_it_roles.sql` | `supabase/migrations/0040_it_roles.sql` |
+
+Same dual-copy policy as batch 1: the staged originals stay in `talha/`/`javaria/` as the
+historical record of each author's own branch; the `supabase/migrations/` file is the
+authoritative one `supabase db push` actually runs on a fresh environment. Bodies are verified
+byte-for-byte identical to their staged source (diffed programmatically after generation); only
+the header comment block (Author/Branch/Depends on/Applied-to-live-DB) was replaced with a short
+replicated-from note, same as batch 1.
+
+**No new conflicts found.** Every INSERT in this batch is conflict-safe (`on conflict ... do
+nothing` or an explicit `not exists`/`where` guard), so re-running the full sequence on a fresh
+environment is safe.
+
 ## Applied log
 
 | File | Applied on | By | Notes |

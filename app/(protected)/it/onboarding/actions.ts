@@ -34,6 +34,7 @@ function refresh(requestId?: string) {
   queueItEmails(); // notification rows were written by DB triggers; deliver their emails
   revalidatePath("/it/onboarding");
   revalidatePath("/it/my-onboarding");
+  revalidatePath("/it/my-offboarding");
   if (requestId) revalidatePath(`/it/onboarding/${requestId}`);
 }
 
@@ -190,6 +191,77 @@ export async function updateChecklistItem(requestId: string, itemId: string, for
   go(path, "notice", `Task saved as ${status}.`);
 }
 
+// Powers the asset-search combobox on the Asset Allocation task form. Data-returning, not a
+// form action; gated the same as it.assign_asset() itself since that's what a selection feeds.
+export async function searchUnassignedAssets(query: string) {
+  const { supabase } = await requirePermission("it.assets.assign");
+  if (!query.trim()) return [];
+  const { data } = await supabase
+    .schema("it")
+    .rpc("search_unassigned_assets", { p_search: query });
+  return data ?? [];
+}
+
+// Wires the "Asset Allocation" checklist task to the real asset register (IT module revision,
+// Phase 3) instead of a free-text asset_tag note. Requires it.assets.assign — the same
+// permission it.assign_asset() itself hard-checks — so this can only ever succeed for someone
+// who could also assign the asset directly from the Asset Register; the checklist_items update
+// that follows still goes through its own RLS (it.onboarding.assign / it.onboarding.update),
+// same as updateChecklistItem above. In practice every role holding it.onboarding.assign today
+// also holds it.assets.assign (IT Admin, IT Executive (HQ)).
+export async function assignAssetForOnboardingTask(
+  requestId: string,
+  itemId: string,
+  formData: FormData,
+) {
+  const path = `/it/onboarding/${requestId}`;
+  const { supabase } = await requirePermission("it.assets.assign");
+
+  const assetId = text(formData, "asset_id");
+  if (!assetId) go(path, "error", "Choose an asset to assign.");
+
+  const [{ data: item }, { data: request }] = await Promise.all([
+    supabase
+      .schema("it")
+      .from("checklist_items")
+      .select("task_type")
+      .eq("id", itemId)
+      .eq("request_id", requestId)
+      .maybeSingle(),
+    supabase
+      .schema("it")
+      .from("onboarding_offboarding")
+      .select("person_id")
+      .eq("id", requestId)
+      .maybeSingle(),
+  ]);
+  if (!item || item.task_type !== "asset_allocation") go(path, "error", "Task not found.");
+  if (!request?.person_id) {
+    go(path, "error", "This request isn't linked to a portal account yet — link it first.");
+  }
+
+  const { data: assignmentId, error: assignError } = await supabase.schema("it").rpc("assign_asset", {
+    p_asset_id: assetId,
+    p_person_id: request.person_id,
+    p_condition: optional(formData, "condition"),
+    p_remarks: optional(formData, "remarks"),
+  });
+  if (assignError) go(path, "error", assignError.message);
+
+  const { data: updated, error: updateError } = await supabase
+    .schema("it")
+    .from("checklist_items")
+    .update({ status: "Completed", assignment_id: assignmentId })
+    .eq("id", itemId)
+    .eq("request_id", requestId)
+    .select("id");
+  if (updateError) go(path, "error", updateError.message);
+  if (!updated?.length) go(path, "error", "Asset assigned, but the task couldn't be marked complete.");
+
+  refresh(requestId);
+  go(path, "notice", "Asset assigned and task marked complete.");
+}
+
 export async function addChecklistItem(requestId: string, formData: FormData) {
   const path = `/it/onboarding/${requestId}`;
   const { supabase } = await requirePermission("it.onboarding.assign");
@@ -296,7 +368,13 @@ export async function signOffboarding(requestId: string, role: "executive" | "ho
 }
 
 export async function addLifecycleUpdate(requestId: string, formData: FormData) {
-  const back = text(formData, "returnTo") === "my" ? "/it/my-onboarding" : `/it/onboarding/${requestId}`;
+  const returnTo = text(formData, "returnTo");
+  const back =
+    returnTo === "my"
+      ? "/it/my-onboarding"
+      : returnTo === "my-offboarding"
+        ? "/it/my-offboarding"
+        : `/it/onboarding/${requestId}`;
   const { supabase, personId } = await requireActiveUser();
 
   const body = text(formData, "body");
