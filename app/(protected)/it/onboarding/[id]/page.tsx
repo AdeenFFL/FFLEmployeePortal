@@ -3,6 +3,8 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
+import { Modal } from "@/components/modal";
+import { AssetAllocationForm } from "../_components/asset-allocation-form";
 import { checked, fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
 import {
   CHECKLIST_STATUSES,
@@ -61,10 +63,18 @@ export default async function LifecycleRequestPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ notice?: string; error?: string; q?: string }>;
+  searchParams: Promise<{
+    notice?: string;
+    error?: string;
+    q?: string;
+    updateTask?: string;
+    cancel?: string;
+  }>;
 }) {
-  const [{ id }, { notice, error, q }] = await Promise.all([params, searchParams]);
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  const { notice, error, q } = sp;
   const supabase = await createClient();
+  const basePath = `/it/onboarding/${id}`;
 
   const { data: request } = checked(
     await supabase
@@ -85,6 +95,7 @@ export default async function LifecycleRequestPage({
     canAssign,
     canApprove,
     canUpdate,
+    canAssignAssets,
   ] = await Promise.all([
     supabase
       .schema("it")
@@ -105,6 +116,7 @@ export default async function LifecycleRequestPage({
     hasItPermission(supabase, "it.onboarding.assign"),
     hasItPermission(supabase, "it.onboarding.approve"),
     hasItPermission(supabase, "it.onboarding.update"),
+    hasItPermission(supabase, "it.assets.assign"),
   ]);
 
   const checklist = items ?? [];
@@ -116,7 +128,11 @@ export default async function LifecycleRequestPage({
     !isFinished &&
     (canAssign || (portalTask && portalTask.assigned_to_person_id === personId));
 
-  const [names, { data: candidates }] = await Promise.all([
+  const assignmentIds = checklist
+    .map((i) => i.assignment_id)
+    .filter((aid): aid is string => Boolean(aid));
+
+  const [names, { data: candidates }, { data: assignedAssets }] = await Promise.all([
     fetchPersonNames(supabase, [
       request.person_id,
       request.requested_by,
@@ -129,7 +145,17 @@ export default async function LifecycleRequestPage({
     canLink && q
       ? supabase.schema("it").rpc("search_employees", { p_search: q })
       : Promise.resolve({ data: null }),
+    assignmentIds.length
+      ? supabase
+          .schema("it")
+          .from("asset_assignments")
+          .select("id, assets(asset_tag, asset_name)")
+          .in("id", assignmentIds)
+      : Promise.resolve({ data: null }),
   ]);
+  const assetByAssignmentId = new Map(
+    (assignedAssets ?? []).map((a) => [a.id, a.assets as unknown as { asset_tag: string; asset_name: string } | null]),
+  );
 
   const nameOf = (pid: string | null) => (pid ? (names.get(pid) ?? "—") : "—");
   const done = checklist.filter((i) => i.status === "Completed" || i.status === "Not Applicable");
@@ -255,6 +281,14 @@ export default async function LifecycleRequestPage({
                       <StatusPill label={item.status} tone={CHECKLIST_STATUS_TONE[item.status]} />
                     </div>
 
+                    {item.task_type === "asset_allocation" && item.assignment_id && (
+                      <p className="mt-2 text-xs text-emerald-700">
+                        {assetByAssignmentId.get(item.assignment_id)
+                          ? `Assigned: ${assetByAssignmentId.get(item.assignment_id)!.asset_tag} — ${assetByAssignmentId.get(item.assignment_id)!.asset_name}`
+                          : "Asset assigned"}
+                      </p>
+                    )}
+
                     {(recorded.length > 0 || item.notes) && (
                       <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                         {recorded.map((f) => (
@@ -347,70 +381,107 @@ export default async function LifecycleRequestPage({
                       </form>
                     )}
 
-                    {canWork && (
-                      <details className="mt-3">
-                        <summary className="cursor-pointer text-sm font-medium text-blue-700">
-                          Update task
-                        </summary>
-                        <form
-                          action={updateChecklistItem.bind(null, request.id, item.id)}
-                          className="mt-3 space-y-3"
+                    {item.task_type === "asset_allocation" ? (
+                      canAssignAssets &&
+                      !isFinished &&
+                      request.person_id &&
+                      item.status !== "Completed" && (
+                        <Link
+                          href={`${basePath}?updateTask=${item.id}`}
+                          className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
                         >
-                          {fields.map((f) => (
-                            <label key={f.key} className="block">
-                              <span className={labelClass}>{f.label}</span>
-                              {f.multiline ? (
-                                <textarea
-                                  name={`detail_${f.key}`}
-                                  rows={2}
-                                  defaultValue={item.details?.[f.key] ?? ""}
-                                  placeholder={f.placeholder}
-                                  className={inputClass}
-                                />
-                              ) : (
-                                <input
-                                  name={`detail_${f.key}`}
-                                  defaultValue={item.details?.[f.key] ?? ""}
-                                  placeholder={f.placeholder}
-                                  className={inputClass}
-                                />
-                              )}
-                            </label>
-                          ))}
-                          <label className="block">
-                            <span className={labelClass}>Notes</span>
-                            <textarea
-                              name="notes"
-                              rows={2}
-                              defaultValue={item.notes ?? ""}
-                              placeholder="Required if marking Not Applicable"
-                              className={inputClass}
-                            />
-                          </label>
-                          <div className="flex gap-2">
-                            <select
-                              name="status"
-                              defaultValue={item.status}
-                              aria-label="Task status"
-                              className={inputClass}
-                            >
-                              {CHECKLIST_STATUSES.map((s) => (
-                                <option key={s} value={s}>
-                                  {s}
-                                </option>
-                              ))}
-                            </select>
-                            <button type="submit" className={primaryButtonClass}>
-                              Save
-                            </button>
-                          </div>
-                        </form>
-                      </details>
+                          Assign an asset
+                        </Link>
+                      )
+                    ) : (
+                      canWork && (
+                        <Link
+                          href={`${basePath}?updateTask=${item.id}`}
+                          className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
+                        >
+                          Update task
+                        </Link>
+                      )
                     )}
                   </li>
                 );
               })}
             </ul>
+
+            {checklist.map((item) => {
+              if (sp.updateTask !== item.id) return null;
+
+              if (item.task_type === "asset_allocation") {
+                if (!canAssignAssets || isFinished || !request.person_id) return null;
+                return (
+                  <Modal key={Date.now()} closeHref={basePath} title={`Assign asset: ${item.task_name}`}>
+                    <AssetAllocationForm requestId={request.id} itemId={item.id} />
+                  </Modal>
+                );
+              }
+
+              const isMine = Boolean(personId) && item.assigned_to_person_id === personId;
+              const canWork = !isFinished && (canAssign || (canUpdate && isMine));
+              const fields = TASK_DETAIL_FIELDS[item.task_type];
+              if (!canWork) return null;
+              return (
+                <Modal key={Date.now()} closeHref={basePath} title={`Update: ${item.task_name}`}>
+                  <form
+                    action={updateChecklistItem.bind(null, request.id, item.id)}
+                    className="space-y-3"
+                  >
+                    {fields.map((f) => (
+                      <label key={f.key} className="block">
+                        <span className={labelClass}>{f.label}</span>
+                        {f.multiline ? (
+                          <textarea
+                            name={`detail_${f.key}`}
+                            rows={2}
+                            defaultValue={item.details?.[f.key] ?? ""}
+                            placeholder={f.placeholder}
+                            className={inputClass}
+                          />
+                        ) : (
+                          <input
+                            name={`detail_${f.key}`}
+                            defaultValue={item.details?.[f.key] ?? ""}
+                            placeholder={f.placeholder}
+                            className={inputClass}
+                          />
+                        )}
+                      </label>
+                    ))}
+                    <label className="block">
+                      <span className={labelClass}>Notes</span>
+                      <textarea
+                        name="notes"
+                        rows={2}
+                        defaultValue={item.notes ?? ""}
+                        placeholder="Required if marking Not Applicable"
+                        className={inputClass}
+                      />
+                    </label>
+                    <div className="flex gap-2">
+                      <select
+                        name="status"
+                        defaultValue={item.status}
+                        aria-label="Task status"
+                        className={inputClass}
+                      >
+                        {CHECKLIST_STATUSES.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                      <button type="submit" className={primaryButtonClass}>
+                        Save
+                      </button>
+                    </div>
+                  </form>
+                </Modal>
+              );
+            })}
 
             {canAssign && !isFinished && (
               <form
@@ -610,24 +681,36 @@ export default async function LifecycleRequestPage({
 
           {canAssign && ["Open", "Under Review", "In Progress"].includes(request.status) && (
             <Panel title="Cancel request">
-              <form action={cancelRequest.bind(null, request.id)} className="space-y-3">
-                <textarea
-                  name="reason"
-                  required
-                  rows={2}
-                  placeholder="Why is this request being cancelled?"
-                  aria-label="Cancellation reason"
-                  className={inputClass}
-                />
-                <button
-                  type="submit"
-                  className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-                >
-                  Cancel request
-                </button>
-              </form>
+              <Link
+                href={`${basePath}?cancel=1`}
+                className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+              >
+                Cancel request
+              </Link>
             </Panel>
           )}
+          {canAssign &&
+            ["Open", "Under Review", "In Progress"].includes(request.status) &&
+            sp.cancel === "1" && (
+              <Modal key={Date.now()} closeHref={basePath} title="Cancel request">
+                <form action={cancelRequest.bind(null, request.id)} className="space-y-3">
+                  <textarea
+                    name="reason"
+                    required
+                    rows={2}
+                    placeholder="Why is this request being cancelled?"
+                    aria-label="Cancellation reason"
+                    className={inputClass}
+                  />
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                  >
+                    Cancel request
+                  </button>
+                </form>
+              </Modal>
+            )}
 
           {request.status === "Cancelled" && request.cancelled_reason && (
             <Panel title="Cancelled">

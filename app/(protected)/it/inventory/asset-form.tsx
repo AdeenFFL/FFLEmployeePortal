@@ -4,12 +4,9 @@ import { useActionState } from "react";
 import Link from "next/link";
 import type { Asset } from "@/types/database";
 import type { AssetFormState } from "./actions";
+import { inputClass, labelClass } from "../_components/ticket-ui";
 
 type Option = { id: string; name: string };
-
-const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500";
-const labelClass = "mb-1 block text-xs font-medium text-slate-700";
 
 // Shared by Add and Edit — the caller passes the Server Action, so this component never decides
 // what saving means. `asset` pre-fills the fields when editing.

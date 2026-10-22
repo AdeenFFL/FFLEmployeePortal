@@ -338,7 +338,7 @@ export default async function ItTicketQueuePage({
                     <td className="whitespace-nowrap px-4 py-3 text-right">
                       {t.status !== "Closed" && canManageSite(scope, t.handling_site_id) && (
                         <Link
-                          href={`/it/tickets/${t.id}#triage`}
+                          href={`/it/tickets/${t.id}?triage=1`}
                           className="mr-3 text-sm font-medium text-blue-700 hover:underline"
                         >
                           Assign

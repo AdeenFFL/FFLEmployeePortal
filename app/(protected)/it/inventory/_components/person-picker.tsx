@@ -2,9 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { searchPeople, type PersonOption } from "../actions";
-
-const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500";
+import { inputClass } from "../../_components/ticket-ui";
 
 function describe(p: PersonOption) {
   const extra = [p.designation, p.employee_code].filter(Boolean).join(" · ");

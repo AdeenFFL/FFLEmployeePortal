@@ -36,6 +36,7 @@ import {
   updateTicketStatus,
 } from "../actions";
 import { CategorySelect } from "../../_components/category-select";
+import { Modal } from "@/components/modal";
 import {
   AttachmentList,
   cardClass,
@@ -67,10 +68,23 @@ export default async function ItTicketWorkspacePage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ notice?: string; error?: string; assetQ?: string }>;
+  searchParams: Promise<{
+    notice?: string;
+    error?: string;
+    assetQ?: string;
+    device?: string;
+    triage?: string;
+    helpers?: string;
+    transfer?: string;
+    work?: string;
+    escalate?: string;
+    close?: string;
+  }>;
 }) {
-  const [{ id }, { notice, error, assetQ }] = await Promise.all([params, searchParams]);
+  const [{ id }, sp] = await Promise.all([params, searchParams]);
+  const { notice, error, assetQ } = sp;
   const supabase = await createClient();
+  const basePath = `/it/tickets/${id}`;
 
   const { data: ticket } = checked(
     await supabase.schema("it").from("tickets").select("*").eq("id", id).maybeSingle(),
@@ -428,51 +442,67 @@ export default async function ItTicketWorkspacePage({
                 </p>
               )}
               {canSetDevice && (
-                <>
-                  <form method="get" className="flex gap-2">
-                    <input
-                      name="assetQ"
-                      defaultValue={assetQ ?? ""}
-                      placeholder="Tag, serial, name or model"
-                      aria-label="Search assets"
-                      className={inputClass}
-                    />
-                    <button type="submit" className={secondaryButtonClass}>
-                      Search
-                    </button>
-                  </form>
-                  {assetQ?.trim() && (
-                    <form action={setTicketAsset.bind(null, ticket.id)} className="mt-3 space-y-2">
-                      {(assetMatches ?? []).length === 0 ? (
-                        <p className="text-xs text-slate-400">No asset matches “{assetQ}”.</p>
-                      ) : (
-                        <>
-                          {(assetMatches ?? []).map((a) => (
-                            <label key={a.asset_id} className="flex items-start gap-2 text-sm">
-                              <input type="radio" name="assetId" value={a.asset_id} required className="mt-1" />
-                              <span>
-                                <span className="font-medium text-slate-800">{a.asset_tag}</span>{" "}
-                                {a.asset_name}
-                                <span className="block text-xs text-slate-400">
-                                  SN {a.serial_number} · {a.status}
-                                </span>
-                              </span>
-                            </label>
-                          ))}
-                          <button type="submit" className={primaryButtonClass}>
-                            Link device
-                          </button>
-                        </>
-                      )}
-                    </form>
-                  )}
-                </>
+                <Link href={`${basePath}?device=1`} className={secondaryButtonClass}>
+                  {ticket.linked_asset_id ? "Change device" : "Link a device"}
+                </Link>
               )}
             </Panel>
+          )}
+          {canSetDevice && sp.device === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Link a device">
+              <form method="get" className="flex gap-2">
+                <input type="hidden" name="device" value="1" />
+                <input
+                  name="assetQ"
+                  defaultValue={assetQ ?? ""}
+                  placeholder="Tag, serial, name or model"
+                  aria-label="Search assets"
+                  className={inputClass}
+                />
+                <button type="submit" className={secondaryButtonClass}>
+                  Search
+                </button>
+              </form>
+              {assetQ?.trim() && (
+                <form action={setTicketAsset.bind(null, ticket.id)} className="mt-3 space-y-2">
+                  {(assetMatches ?? []).length === 0 ? (
+                    <p className="text-xs text-slate-400">No asset matches “{assetQ}”.</p>
+                  ) : (
+                    <>
+                      {(assetMatches ?? []).map((a) => (
+                        <label key={a.asset_id} className="flex items-start gap-2 text-sm">
+                          <input type="radio" name="assetId" value={a.asset_id} required className="mt-1" />
+                          <span>
+                            <span className="font-medium text-slate-800">{a.asset_tag}</span>{" "}
+                            {a.asset_name}
+                            <span className="block text-xs text-slate-400">
+                              SN {a.serial_number} · {a.status}
+                            </span>
+                          </span>
+                        </label>
+                      ))}
+                      <button type="submit" className={primaryButtonClass}>
+                        Link device
+                      </button>
+                    </>
+                  )}
+                </form>
+              )}
+            </Modal>
           )}
 
           {canAssign && !isClosed && (
             <Panel title="Triage" id="triage">
+              <p className="mb-3 text-sm text-slate-500">
+                Assigned to {ticket.assigned_to_person_id ? nameOf(ticket.assigned_to_person_id) : "nobody yet"}.
+              </p>
+              <Link href={`${basePath}?triage=1`} className={primaryButtonClass}>
+                Triage
+              </Link>
+            </Panel>
+          )}
+          {canAssign && !isClosed && sp.triage === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Triage">
               <form action={triageTicket.bind(null, ticket.id)} className="space-y-3">
                 <div>
                   <label htmlFor="assigneeId" className={labelClass}>
@@ -562,7 +592,7 @@ export default async function ItTicketWorkspacePage({
                   Save triage
                 </button>
               </form>
-            </Panel>
+            </Modal>
           )}
 
           {(helpers.length > 0 || (canAssign && !isClosed)) && (
@@ -592,38 +622,54 @@ export default async function ItTicketWorkspacePage({
                 </ul>
               )}
               {canAssign && !isClosed && (
-                <form action={addHelper.bind(null, ticket.id)} className="flex gap-2">
-                  <select name="helperId" defaultValue="" required aria-label="Add helper" className={inputClass}>
-                    <option value="" disabled>
-                      Add a helper…
-                    </option>
-                    {(staff ?? [])
-                      .filter(
-                        (s) =>
-                          s.person_id !== ticket.assigned_to_person_id &&
-                          !helpers.some((h) => h.person_id === s.person_id),
-                      )
-                      .map((s) => (
-                        <option key={s.person_id} value={s.person_id}>
-                          {s.is_category_owner ? "★ " : ""}
-                          {s.full_name}
-                        </option>
-                      ))}
-                  </select>
-                  <button type="submit" className={secondaryButtonClass}>
-                    Add
-                  </button>
-                </form>
+                <Link href={`${basePath}?helpers=1`} className={secondaryButtonClass}>
+                  Add a helper
+                </Link>
               )}
             </Panel>
+          )}
+          {canAssign && !isClosed && sp.helpers === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Add a helper">
+              <form action={addHelper.bind(null, ticket.id)} className="flex gap-2">
+                <select name="helperId" defaultValue="" required aria-label="Add helper" className={inputClass}>
+                  <option value="" disabled>
+                    Add a helper…
+                  </option>
+                  {(staff ?? [])
+                    .filter(
+                      (s) =>
+                        s.person_id !== ticket.assigned_to_person_id &&
+                        !helpers.some((h) => h.person_id === s.person_id),
+                    )
+                    .map((s) => (
+                      <option key={s.person_id} value={s.person_id}>
+                        {s.is_category_owner ? "★ " : ""}
+                        {s.full_name}
+                      </option>
+                    ))}
+                </select>
+                <button type="submit" className={secondaryButtonClass}>
+                  Add
+                </button>
+              </form>
+            </Modal>
           )}
 
           {canTransferToHq && (
             <Panel title="Transfer to HQ">
+              <p className="mb-3 text-sm text-slate-500">
+                For work only HQ can do (e.g. SAP / ERP access, email accounts).
+              </p>
+              <Link href={`${basePath}?transfer=1`} className={secondaryButtonClass}>
+                Transfer to HQ
+              </Link>
+            </Panel>
+          )}
+          {canTransferToHq && sp.transfer === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Transfer to HQ">
               <form action={transferToHq.bind(null, ticket.id)} className="space-y-3">
                 <p className="text-sm text-slate-500">
-                  For work only HQ can do (e.g. SAP / ERP access, email accounts). The ticket
-                  leaves {handlingSiteName}&apos;s queue and goes unassigned to HQ.
+                  The ticket leaves {handlingSiteName}&apos;s queue and goes unassigned to HQ.
                 </p>
                 <textarea
                   name="reason"
@@ -637,11 +683,19 @@ export default async function ItTicketWorkspacePage({
                   Transfer to HQ
                 </button>
               </form>
-            </Panel>
+            </Modal>
           )}
 
           {canWork && ticket.status !== "Resolved" && (
             <Panel title="Work the ticket">
+              <p className="mb-3 text-sm text-slate-500">Current status: {ticket.status}.</p>
+              <Link href={`${basePath}?work=1`} className={primaryButtonClass}>
+                Update / resolve
+              </Link>
+            </Panel>
+          )}
+          {canWork && ticket.status !== "Resolved" && sp.work === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Work the ticket">
               <form action={updateTicketStatus.bind(null, ticket.id)} className="mb-5 flex gap-2">
                 <select
                   name="status"
@@ -691,7 +745,7 @@ export default async function ItTicketWorkspacePage({
                   Mark resolved
                 </button>
               </form>
-            </Panel>
+            </Modal>
           )}
 
           {canAssign && !isClosed && (
@@ -704,25 +758,35 @@ export default async function ItTicketWorkspacePage({
                   </button>
                 </form>
               ) : (
-                <form action={setEscalation.bind(null, ticket.id)} className="space-y-3">
-                  <input type="hidden" name="escalate" value="true" />
-                  <textarea
-                    name="reason"
-                    required
-                    rows={2}
-                    placeholder="Why does this need senior attention?"
-                    aria-label="Escalation reason"
-                    className={inputClass}
-                  />
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-                  >
-                    Escalate
-                  </button>
-                </form>
+                <Link
+                  href={`${basePath}?escalate=1`}
+                  className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Escalate
+                </Link>
               )}
             </Panel>
+          )}
+          {canAssign && !isClosed && !ticket.is_escalated && sp.escalate === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Escalate">
+              <form action={setEscalation.bind(null, ticket.id)} className="space-y-3">
+                <input type="hidden" name="escalate" value="true" />
+                <textarea
+                  name="reason"
+                  required
+                  rows={2}
+                  placeholder="Why does this need senior attention?"
+                  aria-label="Escalation reason"
+                  className={inputClass}
+                />
+                <button
+                  type="submit"
+                  className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Escalate
+                </button>
+              </form>
+            </Modal>
           )}
 
           {canClose && !isClosed && (
@@ -738,6 +802,13 @@ export default async function ItTicketWorkspacePage({
                   This ticket isn&apos;t resolved yet. Close only duplicates or invalid requests.
                 </p>
               )}
+              <Link href={`${basePath}?close=1`} className={primaryButtonClass}>
+                Close ticket
+              </Link>
+            </Panel>
+          )}
+          {canClose && !isClosed && sp.close === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Close ticket">
               <form action={closeTicket.bind(null, ticket.id)} className="space-y-3">
                 <textarea
                   name="closureRemarks"
@@ -750,7 +821,7 @@ export default async function ItTicketWorkspacePage({
                   Close ticket
                 </button>
               </form>
-            </Panel>
+            </Modal>
           )}
 
           <section className={`${cardClass} p-5`}>

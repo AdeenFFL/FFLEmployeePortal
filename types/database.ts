@@ -1377,6 +1377,25 @@ export type Database = {
           serial_number: string;
         }[];
       };
+      search_my_assets_for_ticket: {
+        Args: { p_search: string };
+        Returns: {
+          asset_id: string;
+          asset_tag: string;
+          asset_name: string;
+          serial_number: string;
+          status: string;
+        }[];
+      };
+      search_unassigned_assets: {
+        Args: { p_search: string };
+        Returns: {
+          asset_id: string;
+          asset_tag: string;
+          asset_name: string;
+          serial_number: string;
+        }[];
+      };
       assign_asset: {
         Args: {
           p_asset_id: string;

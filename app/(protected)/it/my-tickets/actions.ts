@@ -86,6 +86,7 @@ export async function createItTicket(formData: FormData) {
       department_id: optional(formData, "departmentId"),
       company_id: person?.company_id ?? null,
       asset_system_name: optional(formData, "assetSystemName"),
+      linked_asset_id: optional(formData, "linkedAssetId"),
       access_required: optional(formData, "accessRequired"),
       manager_approval_required: formData.get("managerApprovalRequired") === "on",
       preferred_contact_method: contactMethod,
@@ -126,6 +127,19 @@ export async function createItTicket(formData: FormData) {
       ? `Ticket ${ticket.ticket_number} created, but ${failedUploads} attachment(s) could not be uploaded.`
       : `Ticket ${ticket.ticket_number} created. IT has been notified.`;
   redirect(`/it/my-tickets/${ticket.id}?notice=${encodeURIComponent(notice)}`);
+}
+
+// Powers the asset-search combobox on the new-ticket form (IT module revision, Phase 2) —
+// scoped to the caller's own currently-assigned assets via it.search_my_assets_for_ticket, not
+// the whole register (that's the staff-only it.search_assets_for_ticket used on the ticket
+// workspace). Returns data directly; not a form action.
+export async function searchMyAssets(query: string) {
+  const { supabase } = await requireActiveUser();
+  if (!query.trim()) return [];
+  const { data } = await supabase
+    .schema("it")
+    .rpc("search_my_assets_for_ticket", { p_search: query });
+  return data ?? [];
 }
 
 export async function addRequesterComment(ticketId: string, formData: FormData) {

@@ -1,6 +1,9 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
+import { Modal } from "@/components/modal";
 import type { AssetValueType, AssetValueTypeName } from "@/types/database";
+import { inputClass, labelClass, primaryButtonClass, secondaryButtonClass } from "../../_components/ticket-ui";
 import {
   createAssetType,
   updateAssetType,
@@ -10,14 +13,7 @@ import {
 } from "./actions";
 
 const VALUE_TYPE_NAMES: AssetValueTypeName[] = ["New", "Old"];
-
-const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500";
-const labelClass = "mb-1 block text-xs font-medium text-slate-700";
-const primaryButtonClass =
-  "rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700";
-const secondaryButtonClass =
-  "rounded-lg border border-slate-300 px-3 py-1.5 text-xs font-medium text-slate-700 hover:bg-slate-50";
+const BASE_PATH = "/it/inventory/settings";
 
 function ClassificationSelect({ defaultValue }: { defaultValue?: string }) {
   return (
@@ -28,7 +24,12 @@ function ClassificationSelect({ defaultValue }: { defaultValue?: string }) {
   );
 }
 
-export default async function InventorySettingsPage() {
+export default async function InventorySettingsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ compose?: string; editType?: string; editValue?: string }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createClient();
 
   const [{ data: assetTypes }, { data: valueTypes }, { data: canEdit }] = await Promise.all([
@@ -47,12 +48,22 @@ export default async function InventorySettingsPage() {
   const valueTypeByName = new Map<string, AssetValueType>(
     (valueTypes ?? []).map((v) => [v.name, v]),
   );
+  const editingType = canEdit
+    ? (assetTypes ?? []).find((t) => t.id === sp.editType)
+    : undefined;
 
   return (
     <div className="py-6">
       <PageHeader
         title="Inventory Settings"
         description="Asset types used across the asset register, and the depreciation rules for new and old assets."
+        action={
+          canEdit ? (
+            <Link href={`${BASE_PATH}?compose=new`} className={primaryButtonClass}>
+              + Add Asset Type
+            </Link>
+          ) : undefined
+        }
       />
 
       <section className="mb-10">
@@ -62,36 +73,12 @@ export default async function InventorySettingsPage() {
           stock quantities.
         </p>
 
-        {canEdit && (
-          <form
-            action={createAssetType}
-            className="mb-4 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-          >
-            <div>
-              <label className={labelClass}>Name</label>
-              <input name="name" required className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Classification</label>
-              <ClassificationSelect />
-            </div>
-            <div className="min-w-48 flex-1">
-              <label className={labelClass}>Description</label>
-              <input name="description" className={inputClass} />
-            </div>
-            <button type="submit" className={primaryButtonClass}>
-              + Add Asset Type
-            </button>
-          </form>
-        )}
-
         <div className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
           {(assetTypes ?? []).length === 0 && (
             <p className="p-5 text-sm text-slate-400">No asset types yet.</p>
           )}
           <ul className="divide-y divide-slate-100">
             {(assetTypes ?? []).map((type) => {
-              const updateAction = updateAssetType.bind(null, type.id);
               const toggleAction = toggleAssetTypeActive.bind(null, type.id, !type.is_active);
               const deleteAction = deleteAssetType.bind(null, type.id);
 
@@ -123,6 +110,9 @@ export default async function InventorySettingsPage() {
                       </span>
                       {canEdit && (
                         <>
+                          <Link href={`${BASE_PATH}?editType=${type.id}`} className={secondaryButtonClass}>
+                            Edit
+                          </Link>
                           <form action={toggleAction}>
                             <button type="submit" className={secondaryButtonClass}>
                               {type.is_active ? "Deactivate" : "Activate"}
@@ -140,41 +130,60 @@ export default async function InventorySettingsPage() {
                       )}
                     </div>
                   </div>
-
-                  {canEdit && (
-                    <details className="mt-3">
-                      <summary className="cursor-pointer text-xs font-medium text-blue-600 hover:text-blue-700">
-                        Edit
-                      </summary>
-                      <form action={updateAction} className="mt-3 flex flex-wrap items-end gap-3">
-                        <div>
-                          <label className={labelClass}>Name</label>
-                          <input name="name" defaultValue={type.name} required className={inputClass} />
-                        </div>
-                        <div>
-                          <label className={labelClass}>Classification</label>
-                          <ClassificationSelect defaultValue={type.classification} />
-                        </div>
-                        <div className="min-w-48 flex-1">
-                          <label className={labelClass}>Description</label>
-                          <input
-                            name="description"
-                            defaultValue={type.description ?? ""}
-                            className={inputClass}
-                          />
-                        </div>
-                        <button type="submit" className={primaryButtonClass}>
-                          Save
-                        </button>
-                      </form>
-                    </details>
-                  )}
                 </li>
               );
             })}
           </ul>
         </div>
       </section>
+
+      {canEdit && sp.compose === "new" && (
+        <Modal key={Date.now()} closeHref={BASE_PATH} title="Add Asset Type">
+          <form action={createAssetType} className="space-y-3">
+            <div>
+              <label className={labelClass}>Name</label>
+              <input name="name" required className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Classification</label>
+              <ClassificationSelect />
+            </div>
+            <div>
+              <label className={labelClass}>Description</label>
+              <input name="description" className={inputClass} />
+            </div>
+            <button type="submit" className={primaryButtonClass}>
+              Add Asset Type
+            </button>
+          </form>
+        </Modal>
+      )}
+
+      {canEdit && editingType && (
+        <Modal key={Date.now()} closeHref={BASE_PATH} title={`Edit ${editingType.name}`}>
+          <form action={updateAssetType.bind(null, editingType.id)} className="space-y-3">
+            <div>
+              <label className={labelClass}>Name</label>
+              <input name="name" defaultValue={editingType.name} required className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Classification</label>
+              <ClassificationSelect defaultValue={editingType.classification} />
+            </div>
+            <div>
+              <label className={labelClass}>Description</label>
+              <input
+                name="description"
+                defaultValue={editingType.description ?? ""}
+                className={inputClass}
+              />
+            </div>
+            <button type="submit" className={primaryButtonClass}>
+              Save
+            </button>
+          </form>
+        </Modal>
+      )}
 
       <section>
         <h2 className="mb-1 text-lg font-semibold text-slate-900">Asset Value Types</h2>
@@ -185,7 +194,6 @@ export default async function InventorySettingsPage() {
         <div className="grid gap-4 md:grid-cols-2">
           {VALUE_TYPE_NAMES.map((name) => {
             const valueType = valueTypeByName.get(name);
-            const saveAction = saveAssetValueType.bind(null, name);
 
             return (
               <div key={name} className="rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
@@ -198,58 +206,7 @@ export default async function InventorySettingsPage() {
                   )}
                 </div>
 
-                {canEdit ? (
-                  <form action={saveAction} className="grid grid-cols-2 gap-3">
-                    <div>
-                      <label className={labelClass}>Depreciation %</label>
-                      <input
-                        name="depreciation_percentage"
-                        type="number"
-                        min={0}
-                        max={100}
-                        step="0.01"
-                        required
-                        defaultValue={valueType?.depreciation_percentage ?? ""}
-                        className={inputClass}
-                      />
-                    </div>
-                    <div>
-                      <label className={labelClass}>Useful life (years)</label>
-                      <input
-                        name="useful_life_years"
-                        type="number"
-                        min={1}
-                        step={1}
-                        defaultValue={valueType?.useful_life_years ?? ""}
-                        className={inputClass}
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <label className={labelClass}>Depreciation method</label>
-                      <select
-                        name="depreciation_method"
-                        defaultValue={valueType?.depreciation_method ?? "Straight Line"}
-                        className={inputClass}
-                      >
-                        <option value="Straight Line">Straight Line</option>
-                        <option value="Reducing Balance">Reducing Balance</option>
-                      </select>
-                    </div>
-                    <div className="col-span-2">
-                      <label className={labelClass}>Description</label>
-                      <input
-                        name="description"
-                        defaultValue={valueType?.description ?? ""}
-                        className={inputClass}
-                      />
-                    </div>
-                    <div className="col-span-2">
-                      <button type="submit" className={primaryButtonClass}>
-                        Save {name}
-                      </button>
-                    </div>
-                  </form>
-                ) : valueType ? (
+                {valueType ? (
                   <dl className="grid grid-cols-2 gap-3 text-sm">
                     <div>
                       <dt className="text-xs text-slate-500">Depreciation</dt>
@@ -269,11 +226,78 @@ export default async function InventorySettingsPage() {
                 ) : (
                   <p className="text-sm text-slate-400">Not configured yet.</p>
                 )}
+
+                {canEdit && (
+                  <Link href={`${BASE_PATH}?editValue=${name}`} className={`${secondaryButtonClass} mt-4 inline-block`}>
+                    {valueType ? `Edit ${name}` : `Configure ${name}`}
+                  </Link>
+                )}
               </div>
             );
           })}
         </div>
       </section>
+
+      {canEdit && VALUE_TYPE_NAMES.includes(sp.editValue as AssetValueTypeName) && (
+        <Modal key={Date.now()} closeHref={BASE_PATH} title={`Edit ${sp.editValue}`}>
+          {(() => {
+            const name = sp.editValue as AssetValueTypeName;
+            const valueType = valueTypeByName.get(name);
+            return (
+              <form action={saveAssetValueType.bind(null, name)} className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className={labelClass}>Depreciation %</label>
+                  <input
+                    name="depreciation_percentage"
+                    type="number"
+                    min={0}
+                    max={100}
+                    step="0.01"
+                    required
+                    defaultValue={valueType?.depreciation_percentage ?? ""}
+                    className={inputClass}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>Useful life (years)</label>
+                  <input
+                    name="useful_life_years"
+                    type="number"
+                    min={1}
+                    step={1}
+                    defaultValue={valueType?.useful_life_years ?? ""}
+                    className={inputClass}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className={labelClass}>Depreciation method</label>
+                  <select
+                    name="depreciation_method"
+                    defaultValue={valueType?.depreciation_method ?? "Straight Line"}
+                    className={inputClass}
+                  >
+                    <option value="Straight Line">Straight Line</option>
+                    <option value="Reducing Balance">Reducing Balance</option>
+                  </select>
+                </div>
+                <div className="col-span-2">
+                  <label className={labelClass}>Description</label>
+                  <input
+                    name="description"
+                    defaultValue={valueType?.description ?? ""}
+                    className={inputClass}
+                  />
+                </div>
+                <div className="col-span-2">
+                  <button type="submit" className={primaryButtonClass}>
+                    Save {name}
+                  </button>
+                </div>
+              </form>
+            );
+          })()}
+        </Modal>
+      )}
     </div>
   );
 }

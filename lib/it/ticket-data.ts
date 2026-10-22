@@ -26,6 +26,18 @@ export async function fetchPersonNames(supabase: Client, ids: (string | null | u
   return new Map((data ?? []).map((p) => [p.person_id, p.full_name]));
 }
 
+// Separate from fetchPersonNames on purpose: it.asset_person_names has no active-employee
+// filter, so someone who has since left the company still shows by name in assignment history
+// (inventory/[id]/page.tsx) — it.person_names (above) doesn't guarantee that for its own callers
+// (tickets, onboarding), so the two aren't interchangeable despite the similar shape.
+export async function fetchAssetPersonNames(supabase: Client, ids: (string | null | undefined)[]) {
+  const unique = [...new Set(ids.filter((id): id is string => Boolean(id)))];
+  if (unique.length === 0) return new Map<string, string>();
+
+  const { data } = await supabase.schema("it").rpc("asset_person_names", { p_person_ids: unique });
+  return new Map((data ?? []).map((p) => [p.person_id, p.full_name]));
+}
+
 export async function fetchOrgUnits(supabase: Client) {
   const { data } = await supabase.schema("it").rpc("list_org_units");
   const units = data ?? [];
