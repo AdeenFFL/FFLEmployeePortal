@@ -501,6 +501,53 @@ export type ItDocument = {
   uploaded_at: string;
 };
 
+// Procurement Phase 5 — javaria_it_0014_invoices.sql
+export type ItInvoiceStatus =
+  | "Logged"
+  | "Verified"
+  | "Flagged"
+  | "Pending Approval"
+  | "Approved"
+  | "Revise"
+  | "Sent to Finance"
+  | "Confirmed"
+  | "Paid";
+
+export type ItInvoice = {
+  id: string;
+  receiving_id: string;
+  demand_id: string;
+  vendor_id: string | null;
+  site_id: string | null;
+  company_id: string | null;
+  invoice_number: string;
+  invoice_date: string;
+  invoice_quantity: number;
+  invoice_amount: number;
+  tax_amount: number;
+  notes: string | null;
+  status: ItInvoiceStatus;
+  expected_amount: number | null;
+  quantity_mismatch: boolean;
+  amount_mismatch: boolean;
+  verification_notes: string | null;
+  flag_cleared_by: string | null;
+  flag_cleared_at: string | null;
+  flag_clear_note: string | null;
+  submitted_at: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  approval_comments: string | null;
+  revision_reason: string | null;
+  sent_to_finance_at: string | null;
+  sent_to_finance_by: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
 // Phase 6.4 — javaria_it_0007_closure_audit.sql
 export type ItTicketClosureAudit = {
   id: string;
@@ -756,6 +803,7 @@ export type ItNotification = {
   ticket_id: string | null;
   request_id: string | null;
   demand_id: string | null;
+  invoice_id: string | null;
   read_at: string | null;
   email_status: ItNotificationEmailStatus;
   email_error: string | null;
@@ -1242,6 +1290,13 @@ export type Database = {
         Update: Partial<ItDocument>;
         Relationships: [];
       };
+      // javaria_it_0014_invoices.sql — written only through functions.
+      invoices: {
+        Row: ItInvoice;
+        Insert: Partial<ItInvoice>;
+        Update: Partial<ItInvoice>;
+        Relationships: [];
+      };
       // javaria_it_0008_it_roles.sql — roles tagged as IT department roles.
       it_roles: {
         Row: { role_id: string; created_at: string; created_by: string | null };
@@ -1612,6 +1667,70 @@ export type Database = {
           p_note: string | null;
         };
         Returns: undefined;
+      };
+      // javaria_it_0014_invoices.sql
+      can_manage_invoices: {
+        Args: { p_site_id: string };
+        Returns: boolean;
+      };
+      is_invoice_approver: {
+        Args: { p_department_id: string };
+        Returns: boolean;
+      };
+      my_invoice_approver_departments: {
+        Args: Record<string, never>;
+        Returns: string[];
+      };
+      log_invoice: {
+        Args: {
+          p_receiving_id: string;
+          p_invoice_number: string;
+          p_invoice_date: string;
+          p_quantity: number;
+          p_amount: number;
+          p_tax: number;
+          p_notes: string | null;
+        };
+        Returns: string;
+      };
+      update_invoice: {
+        Args: {
+          p_invoice_id: string;
+          p_invoice_number: string;
+          p_invoice_date: string;
+          p_quantity: number;
+          p_amount: number;
+          p_tax: number;
+          p_notes: string | null;
+        };
+        Returns: undefined;
+      };
+      clear_invoice_flag: {
+        Args: { p_invoice_id: string; p_note: string };
+        Returns: undefined;
+      };
+      submit_invoice_for_approval: {
+        Args: { p_invoice_id: string };
+        Returns: undefined;
+      };
+      decide_invoice: {
+        Args: { p_invoice_id: string; p_decision: "Approved" | "Revise"; p_comments: string | null };
+        Returns: undefined;
+      };
+      send_invoice_to_finance: {
+        Args: { p_invoice_id: string };
+        Returns: undefined;
+      };
+      add_invoice_document: {
+        Args: {
+          p_invoice_id: string;
+          p_doc_type: "Invoice" | "Other";
+          p_storage_path: string;
+          p_file_name: string;
+          p_content_type: string | null;
+          p_size_bytes: number;
+        };
+        Returns: string;
       };
       revise_rejected_demand: {
         Args: { p_demand_id: string; p_quantity: number; p_justification: string; p_note: string };

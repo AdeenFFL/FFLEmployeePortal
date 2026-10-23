@@ -187,7 +187,11 @@ export function Sidebar({
       children: [
         { href: "/it/procurement/demands", label: "Demands", permission: "it.demands.read" },
         { href: "/it/procurement/demands/new", label: "Raise Demand", permission: "it.demands.create" },
-        { href: "/it/procurement/approvals", label: "Approvals", permission: "it.demands.approve" },
+        {
+          href: "/it/procurement/approvals",
+          label: "Approvals",
+          permission: ["it.demands.approve", "it.invoices.approve"],
+        },
         // Read-only for procurement staff / approvers (javaria_it_0013).
         {
           href: "/it/procurement/vendors",

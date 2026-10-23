@@ -32,8 +32,8 @@ ERD onto portal conventions) applies here too and isn't repeated.
 
 ## 0. Status — 2026-10-21
 
-**Phases 1–4 built** (code + `javaria_it_0009`–`0012`, not yet applied to the live DB).
-Phases 5–8 not started. **Talha is waiting on this track**:
+**Phases 1–5 built**, plus improvements to 1–4 (code + `javaria_it_0009`–`0014`, not yet applied
+to the live DB). Phases 6–8 not started. **Talha is waiting on this track**:
 
 | What Talha needs | For | His phase |
 |---|---|---|
@@ -316,6 +316,30 @@ verification against receiving (§1.4 → `Verified` / `Flagged`), routing to th
 (→ `Pending Approval`), approve / send back for revision with the reason logged (§5.5.15),
 invoice package compiled from the demand's documents (§5.5.16) and sent to Finance.
 **Screens**: invoice step on PRC-05, invoice items in PRC-06.
+
+✅ Built 2026-10-23 (`javaria_it_0014_invoices.sql`). As built:
+- **One invoice per delivery** (decided 2026-10-23, Javaria; ERD `invoices.receiving_id`), unique
+  per delivery and per vendor + invoice number. "Revise" edits the same invoice.
+- **Automatic check** (`it.check_invoice()`): quantity billed = delivery's accepted quantity;
+  amount before tax within `invoice_tolerance_pct` of accepted × agreed unit price → Verified,
+  else **Flagged** with the reasons. Re-checked on every edit. A flag is cleared only with a note
+  (`it.clear_invoice_flag()`, Manage Invoices).
+- **Approval**: `it.submit_invoice_for_approval()` → department's invoice approvers
+  (`it.invoices.approve` + `department_approvers.can_approve_invoices`);
+  `it.decide_invoice()` Approved / Revise (reason required); whoever logged it can't approve it.
+- **To Finance**: `it.send_invoice_to_finance()` needs the delivery's gate pass number OR picture
+  and an uploaded Invoice file; notifies holders of `it.payments.update` (permission created
+  here, used by Phase 6). Demand: Received + invoice logged → `Invoicing`.
+- Manage Invoices = `it.invoices.update` + site membership (or `it.demands.read_all`).
+- Invoice files: `it.add_invoice_document()` into the same `it-documents` bucket
+  (`entity_type = 'invoice'`).
+- Screens: invoice block per delivery on the demand page (log, edit & re-check, accept
+  difference, send for approval, decide, send to Finance, files); invoices section in
+  Approvals (route now `module:it`, sidebar any-of demand / invoice approve); Needs action
+  shows "Log invoice" for Received demands.
+- Grants: Admin / IT Admin all three keys; IT Executive (HQ) and IT Site Manager Manage Invoices.
+- [ ] Apply `javaria_it_0014` after `0013`; give department heads Approve Invoices; decide who
+      Finance is (role with Finance Processing + View All Sites' Demands).
 
 ### Phase 6 — Finance processing and payments
 **Migration** `javaria_it_0014_payments.sql`: `it.payments`, Finance confirmation, SLA tracking

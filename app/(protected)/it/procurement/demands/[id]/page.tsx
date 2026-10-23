@@ -137,15 +137,20 @@ export default async function DemandPage({
       supabase.schema("it").rpc("list_department_approvers"),
     ]);
 
-  // Phase 4 — deliveries, documents, vendor choices.
-  const [receivingsRes, documentsRes, vendorsRes] = await Promise.all([
+  // Phase 4 — deliveries, documents, vendor choices; Phase 5 — invoices.
+  const [receivingsRes, documentsRes, vendorsRes, invoicesRes, { data: canManageInvoices }, { data: isInvoiceApprover }] =
+    await Promise.all([
     supabase.schema("it").from("receiving_records").select("*").eq("demand_id", id).order("received_date"),
     supabase.schema("it").from("documents").select("*").eq("demand_id", id).order("uploaded_at"),
     canProcess
       ? supabase.schema("it").from("vendors").select("id, vendor_name").eq("is_active", true).order("vendor_name")
       : Promise.resolve({ data: [] as { id: string; vendor_name: string }[] }),
+    supabase.schema("it").from("invoices").select("*").eq("demand_id", id),
+    supabase.schema("it").rpc("can_manage_invoices", { p_site_id: demand.site_id }),
+    supabase.schema("it").rpc("is_invoice_approver", { p_department_id: demand.department_id }),
   ]);
   const receivings = receivingsRes.data ?? [];
+  const invoices = invoicesRes.data ?? [];
   const documents = documentsRes.data ?? [];
   const docPaths = documents.map((d) => d.storage_path);
   const { data: signed } = docPaths.length
@@ -175,6 +180,7 @@ export default async function DemandPage({
     demand.cancelled_by,
     demand.vendor_assigned_by,
     ...receivings.map((r) => r.received_by_person_id),
+    ...invoices.flatMap((i) => [i.approved_by, i.flag_cleared_by]),
     ...approvals.map((a) => a.approver_person_id),
     ...updates.map((u) => u.author_person_id),
   ].filter((v): v is string => Boolean(v));
@@ -394,6 +400,10 @@ export default async function DemandPage({
               documents={documents}
               urls={docUrls}
               canProcess={Boolean(canProcess)}
+              invoices={invoices}
+              canManageInvoices={Boolean(canManageInvoices)}
+              canApproveInvoices={Boolean(isInvoiceApprover)}
+              personId={personId ?? null}
             />
           )}
 

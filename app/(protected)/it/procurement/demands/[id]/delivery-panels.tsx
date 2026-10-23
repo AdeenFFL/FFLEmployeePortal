@@ -1,7 +1,9 @@
 import { StatusPill } from "@/components/status-pill";
-import { formatBytes, formatDate, formatDateTime } from "@/lib/it/tickets";
+import { formatDate } from "@/lib/it/tickets";
 import { DOCUMENT_ACCEPT, formatMoney, RECEIVING_CONDITIONS, todayIso } from "@/lib/it/procurement";
-import type { ItDemand, ItDocument, ItReceivingRecord } from "@/types/database";
+import type { ItDemand, ItDocument, ItInvoice, ItReceivingRecord } from "@/types/database";
+import { DocumentLinks } from "./document-links";
+import { InvoiceBlock } from "./invoice-panel";
 import { assignVendor, recordReceiving, updateReceivingRefs, uploadDemandDocuments } from "../actions";
 import { cardClass, inputClass, labelClass, primaryButtonClass, secondaryButtonClass } from "../../../_components/ticket-ui";
 
@@ -10,31 +12,6 @@ import { cardClass, inputClass, labelClass, primaryButtonClass, secondaryButtonC
 
 const fileInputClass =
   "block w-full text-sm text-slate-600 file:mr-3 file:rounded-lg file:border-0 file:bg-slate-100 file:px-3 file:py-2 file:text-sm file:font-medium file:text-slate-700 hover:file:bg-slate-200";
-
-export function DocumentLinks({ documents, urls }: { documents: ItDocument[]; urls: Map<string, string> }) {
-  if (documents.length === 0) return null;
-  return (
-    <ul className="mt-2 flex flex-wrap gap-2">
-      {documents.map((d) => {
-        const url = urls.get(d.storage_path);
-        return (
-          <li key={d.id}>
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-700 hover:border-blue-300 hover:text-blue-700"
-              title={`${d.file_name} · ${formatBytes(d.size_bytes)} · ${formatDateTime(d.uploaded_at)}`}
-            >
-              <span className="font-medium">{d.doc_type}</span>
-              <span className="max-w-40 truncate text-slate-400">{d.file_name}</span>
-            </a>
-          </li>
-        );
-      })}
-    </ul>
-  );
-}
 
 function UploadForm({
   demandId,
@@ -77,6 +54,10 @@ export function DeliverySection({
   documents,
   urls,
   canProcess,
+  invoices,
+  canManageInvoices,
+  canApproveInvoices,
+  personId,
 }: {
   demand: ItDemand;
   unit: string;
@@ -86,7 +67,12 @@ export function DeliverySection({
   documents: ItDocument[];
   urls: Map<string, string>;
   canProcess: boolean;
+  invoices: ItInvoice[];
+  canManageInvoices: boolean;
+  canApproveInvoices: boolean;
+  personId: string | null;
 }) {
+  const unitPrice = demand.agreed_unit_price ?? demand.estimated_unit_price;
   const target = demand.approved_quantity ?? demand.quantity;
   const due = Math.max(0, target - demand.received_quantity);
   const pct = target > 0 ? Math.min(100, Math.round((demand.received_quantity / target) * 100)) : 0;
@@ -197,6 +183,21 @@ export function DeliverySection({
                     />
                   </details>
                 )}
+
+                <InvoiceBlock
+                  demandId={demand.id}
+                  receiving={r}
+                  invoice={invoices.find((i) => i.receiving_id === r.id) ?? null}
+                  documents={documents}
+                  urls={urls}
+                  names={names}
+                  expectedAmount={unitPrice === null ? null : Number(unitPrice) * r.accepted_quantity}
+                  hasGateProof={hasGateProof}
+                  canManage={canManageInvoices}
+                  canApprove={canApproveInvoices}
+                  personId={personId}
+                  open={open}
+                />
               </li>
             );
           })}

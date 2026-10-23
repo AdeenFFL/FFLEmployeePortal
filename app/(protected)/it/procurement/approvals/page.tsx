@@ -50,6 +50,34 @@ export default async function ApprovalsPage({
   const pending = checked(pendingRes).data ?? [];
   const decisions = decisionsRes.data ?? [];
 
+  // Phase 5 — invoices waiting for this approver (javaria_it_0014).
+  const { data: invoiceDepartments } = await supabase.schema("it").rpc("my_invoice_approver_departments");
+  const invoiceDeptIds = invoiceDepartments ?? [];
+  const { data: invoiceDemands } = invoiceDeptIds.length
+    ? await supabase
+        .schema("it")
+        .from("demands")
+        .select("id, demand_number, product_id, department_id")
+        .in("department_id", invoiceDeptIds)
+        .in("status", ["Partially Received", "Received", "Invoicing"])
+    : { data: [] };
+  const invoiceDemandById = new Map((invoiceDemands ?? []).map((d) => [d.id, d]));
+  const { data: pendingInvoicesRaw } = invoiceDemandById.size
+    ? await supabase
+        .schema("it")
+        .from("invoices")
+        .select("id, demand_id, invoice_number, invoice_amount, vendor_id, submitted_at, created_by")
+        .eq("status", "Pending Approval")
+        .in("demand_id", [...invoiceDemandById.keys()])
+        .order("submitted_at")
+    : { data: [] };
+  const pendingInvoices = pendingInvoicesRaw ?? [];
+  const vendorIds = [...new Set(pendingInvoices.map((i) => i.vendor_id).filter((v): v is string => Boolean(v)))];
+  const { data: vendors } = vendorIds.length
+    ? await supabase.schema("it").from("vendors").select("id, vendor_name").in("id", vendorIds)
+    : { data: [] };
+  const vendorName = new Map((vendors ?? []).map((v) => [v.id, v.vendor_name]));
+
   const decidedIds = [...new Set(decisions.map((d) => d.demand_id))];
   const { data: decidedDemands } = decidedIds.length
     ? await supabase.schema("it").from("demands").select("id, demand_number, product_id, quantity").in("id", decidedIds)
@@ -70,9 +98,46 @@ export default async function ApprovalsPage({
       />
       <FormMessage error={error} notice={notice} />
 
-      {departments.length === 0 && (
+      {invoiceDeptIds.length > 0 && (
+        <section className={`${cardClass} mb-6`}>
+          <h2 className="border-b border-slate-100 px-6 py-4 text-base font-semibold text-slate-900">
+            Invoices waiting for you ({pendingInvoices.length})
+          </h2>
+          {pendingInvoices.length === 0 ? (
+            <p className="px-6 py-8 text-center text-sm text-slate-400">No invoices to approve.</p>
+          ) : (
+            <ul className="divide-y divide-slate-100">
+              {pendingInvoices.map((inv) => {
+                const d = invoiceDemandById.get(inv.demand_id);
+                return (
+                  <li key={inv.id} className="flex flex-wrap items-center gap-3 px-6 py-3 text-sm">
+                    <span className="font-medium text-slate-900">Invoice {inv.invoice_number}</span>
+                    <span className="text-slate-600">
+                      {d?.demand_number} · {productById.get(d?.product_id ?? "")?.product_name ?? ""} ·{" "}
+                      {vendorName.get(inv.vendor_id ?? "") ?? "vendor"} · {orgUnits.nameById.get(d?.department_id ?? "") ?? ""}
+                    </span>
+                    <span className="ml-auto font-medium tabular-nums text-slate-900">{formatMoney(inv.invoice_amount)}</span>
+                    {inv.created_by === personId ? (
+                      <span className="text-xs text-slate-400">You logged it — another approver decides</span>
+                    ) : (
+                      <Link
+                        href={`/it/procurement/demands/${inv.demand_id}`}
+                        className="text-sm font-medium text-blue-700 hover:underline"
+                      >
+                        Review &amp; decide →
+                      </Link>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
+      )}
+
+      {departments.length === 0 && invoiceDeptIds.length === 0 && (
         <p className="mb-6 rounded-lg border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-          You aren&apos;t set as a demand approver for any department yet. An IT admin adds approvers
+          You aren&apos;t set as a demand or invoice approver for any department yet. An IT admin adds approvers
           under Procurement Settings → Department Approvers.
         </p>
       )}

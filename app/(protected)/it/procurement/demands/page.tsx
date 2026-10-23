@@ -19,7 +19,14 @@ import { cardClass, FormMessage, inputClass, primaryButtonClass } from "../../_c
 const PAGE_SIZE = 100;
 
 // Statuses where procurement has the next move (Needs action view).
-const ACTION_STATUSES: ItDemandStatus[] = ["Open", "Categorized", "Approved", "Partially Approved", "Rejected"];
+const ACTION_STATUSES: ItDemandStatus[] = [
+  "Open",
+  "Categorized",
+  "Approved",
+  "Partially Approved",
+  "Rejected",
+  "Received",
+];
 
 function nextStep(
   d: { id: string; status: ItDemandStatus; follow_up_on: string | null },
@@ -36,6 +43,8 @@ function nextStep(
       return "Assign vendor";
     case "Rejected":
       return "Revise or cancel";
+    case "Received":
+      return "Log invoice";
   }
   if (d.follow_up_on && d.follow_up_on <= today && (d.status === "Assigned to Vendor" || d.status === "Partially Received")) {
     return "Follow up delivery";

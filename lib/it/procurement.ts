@@ -1,6 +1,6 @@
 // Shared by the procurement screens (09-it-procurement-plan.md). No server-only imports.
 
-import type { ItDemandCategory, ItDemandStatus } from "@/types/database";
+import type { ItDemandCategory, ItDemandStatus, ItInvoiceStatus } from "@/types/database";
 
 type Tone = "positive" | "neutral" | "warning" | "negative" | "info";
 
@@ -93,6 +93,19 @@ export const MAX_TOTAL_DOCUMENT_BYTES = 8 * 1024 * 1024; // under next.config's 
 export const DOCUMENT_MIME_TYPES = ["image/jpeg", "image/png", "image/webp", "image/heic", "application/pdf"];
 export const DOCUMENT_ACCEPT = ".jpg,.jpeg,.png,.webp,.heic,.pdf,image/*,application/pdf";
 export const RECEIVING_CONDITIONS = ["Good", "Partially Damaged", "Damaged"] as const;
+
+// Phase 5 invoices (javaria_it_0014).
+export const INVOICE_STATUS_TONE: Record<ItInvoiceStatus, Tone> = {
+  Logged: "neutral",
+  Verified: "info",
+  Flagged: "negative",
+  "Pending Approval": "warning",
+  Approved: "positive",
+  Revise: "warning",
+  "Sent to Finance": "info",
+  Confirmed: "info",
+  Paid: "positive",
+};
 
 // Today in Pakistan time as YYYY-MM-DD (date inputs' default / max).
 export function todayIso() {

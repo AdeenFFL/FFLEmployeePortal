@@ -45,9 +45,9 @@ export default async function DepartmentApproversPage({
       <FormMessage error={error} notice={notice} />
 
       <p className="mb-6 text-sm text-slate-500">
-        An approver also needs the <strong>Approve Demands</strong> permission on their role (IT Roles
-        &amp; Permissions → Procurement). People without it are flagged below and won&apos;t receive
-        approvals.
+        An approver also needs the <strong>Approve Demands</strong> and/or <strong>Approve Invoices</strong>{" "}
+        permission on their role (IT Roles &amp; Permissions → Procurement). People without Approve
+        Demands are flagged below and won&apos;t receive demand approvals.
       </p>
 
       {departments.length === 0 ? (
