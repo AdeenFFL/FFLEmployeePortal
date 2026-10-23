@@ -24,6 +24,7 @@ import {
   decideDemand,
   editDemand,
   markStockUpdated,
+  reviseRejectedDemand,
   submitForApproval,
 } from "../actions";
 import {
@@ -199,10 +200,22 @@ export default async function DemandPage({
   const showDelivery =
     Boolean(demand.vendor_id) || receivings.length > 0 || documents.length > 0 || canAssignVendor;
   const canDecide = Boolean(isApprover) && !isOwner && demand.status === "Pending Approval";
+  const canRevise = Boolean(canProcess) && demand.status === "Rejected";
+  // javaria_it_0013: procurement may cancel up to Assigned to Vendor (and Rejected) while nothing
+  // has been accepted.
   const canCancel =
     (isOwner && demand.status === "Open") ||
     (Boolean(canProcess) &&
-      (demand.status === "Open" || demand.status === "Categorized" || demand.status === "Pending Approval"));
+      demand.received_quantity === 0 &&
+      [
+        "Open",
+        "Categorized",
+        "Pending Approval",
+        "Approved",
+        "Partially Approved",
+        "Assigned to Vendor",
+        "Rejected",
+      ].includes(demand.status));
 
   return (
     <div className="py-6">
@@ -545,6 +558,47 @@ export default async function DemandPage({
                 </label>
                 <button type="submit" className={primaryButtonClass}>
                   Record decision
+                </button>
+              </form>
+            </section>
+          )}
+
+          {canRevise && (
+            <section className={`${cardClass} p-6`}>
+              <h2 className="mb-1 text-base font-semibold text-slate-900">Revise &amp; resubmit</h2>
+              <p className="mb-4 text-xs text-slate-500">
+                Change what the approver objected to, then send it for approval again. The rejection
+                stays in the history.
+              </p>
+              <form action={reviseRejectedDemand.bind(null, demand.id)} className="space-y-3">
+                <label className="block">
+                  <span className={labelClass}>Quantity</span>
+                  <input
+                    type="number"
+                    name="quantity"
+                    min={1}
+                    max={100000}
+                    required
+                    defaultValue={demand.quantity}
+                    className={inputClass}
+                  />
+                </label>
+                <label className="block">
+                  <span className={labelClass}>Justification</span>
+                  <textarea
+                    name="justification"
+                    rows={3}
+                    required
+                    defaultValue={demand.justification}
+                    className={inputClass}
+                  />
+                </label>
+                <label className="block">
+                  <span className={labelClass}>What changed (for the approver)</span>
+                  <input name="note" required className={inputClass} />
+                </label>
+                <button type="submit" className={primaryButtonClass}>
+                  Revise
                 </button>
               </form>
             </section>

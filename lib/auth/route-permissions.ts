@@ -37,8 +37,10 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/dashboard": "it.tickets.read",
   "/it/reports": "it.tickets.read",
   // Procurement masters (javaria_it_0009, 09-it-procurement-plan.md Phase 1).
-  "/it/procurement/vendors": "it.vendors.update",
-  "/it/procurement/products": "it.products.update",
+  // Read-only for procurement staff / approvers too (javaria_it_0013): the pages check
+  // it.can_read_procurement_masters() and show the edit forms only with the .update key.
+  "/it/procurement/vendors": "module:it",
+  "/it/procurement/products": "module:it",
   "/it/procurement/settings": "it.procurement_settings.update",
   // Demands (javaria_it_0010). The queue and demand pages stay at module:it: RLS limits rows to
   // the viewer's own demands unless they hold it.demands.read / read_all.

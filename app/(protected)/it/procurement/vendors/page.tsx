@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { checked } from "@/lib/it/ticket-data";
+import { checked, hasItPermission } from "@/lib/it/ticket-data";
 import type { ItVendor } from "@/types/database";
 import { createVendor, setVendorActive, updateVendor } from "./actions";
 import {
@@ -53,7 +54,8 @@ function VendorFields({ vendor }: { vendor?: ItVendor }) {
 }
 
 // PRC-01 Vendor Master (BRD §5.5.7 "Vendor Master", gap 4.5 #5 "IT Manager lacks vendor
-// details"). Gated by it.vendors.update.
+// details"). Read-only for anyone who can read the procurement masters; add / edit / deactivate
+// with it.vendors.update (javaria_it_0013 improvements).
 export default async function VendorsPage({
   searchParams,
 }: {
@@ -62,6 +64,13 @@ export default async function VendorsPage({
   const params = await searchParams;
   const status = params.status === "inactive" || params.status === "all" ? params.status : "active";
   const supabase = await createClient();
+
+  // Readable by procurement / approvers / inventory staff; editable with it.vendors.update.
+  const [{ data: canRead }, canEdit] = await Promise.all([
+    supabase.schema("it").rpc("can_read_procurement_masters"),
+    hasItPermission(supabase, "it.vendors.update"),
+  ]);
+  if (!canRead) notFound();
 
   let query = supabase.schema("it").from("vendors").select("*").order("vendor_name");
   if (status === "active") query = query.eq("is_active", true);
@@ -88,15 +97,17 @@ export default async function VendorsPage({
       />
       <FormMessage error={params.error} notice={params.notice} />
 
-      <details className={`${cardClass} mb-6 p-6`} open={rows.length === 0 && !q}>
-        <summary className="cursor-pointer text-base font-semibold text-slate-900">Add vendor</summary>
-        <form action={createVendor} className="mt-4 space-y-4">
-          <VendorFields />
-          <button type="submit" className={primaryButtonClass}>
-            Add vendor
-          </button>
-        </form>
-      </details>
+      {canEdit && (
+        <details className={`${cardClass} mb-6 p-6`} open={rows.length === 0 && !q}>
+          <summary className="cursor-pointer text-base font-semibold text-slate-900">Add vendor</summary>
+          <form action={createVendor} className="mt-4 space-y-4">
+            <VendorFields />
+            <button type="submit" className={primaryButtonClass}>
+              Add vendor
+            </button>
+          </form>
+        </details>
+      )}
 
       <form method="get" className={`${cardClass} mb-6 flex flex-wrap items-center gap-3 p-4`}>
         <input
@@ -119,7 +130,7 @@ export default async function VendorsPage({
       <div className={cardClass}>
         {rows.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-slate-400">
-            {q || status !== "active" ? "No vendors match." : "No vendors yet — add the first one above."}
+            {q || status !== "active" ? "No vendors match." : canEdit ? "No vendors yet — add the first one above." : "No vendors yet."}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -138,28 +149,33 @@ export default async function VendorsPage({
                       {[v.tax_number && `Tax no. ${v.tax_number}`, v.address].filter(Boolean).join(" · ")}
                     </p>
                   </div>
-                  <form action={setVendorActive.bind(null, v.id, !v.is_active)}>
-                    <button
-                      type="submit"
-                      className={
-                        v.is_active
-                          ? "text-sm text-slate-500 hover:text-red-600"
-                          : "text-sm font-medium text-blue-700 hover:underline"
-                      }
-                    >
-                      {v.is_active ? "Deactivate" : "Reactivate"}
-                    </button>
-                  </form>
+                  {canEdit && (
+                    <form action={setVendorActive.bind(null, v.id, !v.is_active)}>
+                      <button
+                        type="submit"
+                        className={
+                          v.is_active
+                            ? "text-sm text-slate-500 hover:text-red-600"
+                            : "text-sm font-medium text-blue-700 hover:underline"
+                        }
+                      >
+                        {v.is_active ? "Deactivate" : "Reactivate"}
+                      </button>
+                    </form>
+                  )}
                 </div>
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-sm font-medium text-blue-700">Edit</summary>
-                  <form action={updateVendor.bind(null, v.id)} className="mt-3 space-y-3">
-                    <VendorFields vendor={v} />
-                    <button type="submit" className={primaryButtonClass}>
-                      Save vendor
-                    </button>
-                  </form>
-                </details>
+                {v.notes && <p className="mt-1 whitespace-pre-wrap text-xs text-slate-500">{v.notes}</p>}
+                {canEdit && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-sm font-medium text-blue-700">Edit</summary>
+                    <form action={updateVendor.bind(null, v.id)} className="mt-3 space-y-3">
+                      <VendorFields vendor={v} />
+                      <button type="submit" className={primaryButtonClass}>
+                        Save vendor
+                      </button>
+                    </form>
+                  </details>
+                )}
               </li>
             ))}
           </ul>

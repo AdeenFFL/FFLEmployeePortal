@@ -1,8 +1,9 @@
 import Link from "next/link";
+import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { checked } from "@/lib/it/ticket-data";
+import { checked, hasItPermission } from "@/lib/it/ticket-data";
 import { formatMoney, PRODUCT_UNITS } from "@/lib/it/procurement";
 import type { ItProduct } from "@/types/database";
 import { createProduct, setProductActive, updateProduct } from "./actions";
@@ -90,7 +91,8 @@ function ProductFields({
   );
 }
 
-// PRC-02 Product Master (BRD §5.5.7, ERD D "products"). Gated by it.products.update.
+// PRC-02 Product Master (BRD §5.5.7, ERD D "products"). Read-only for anyone who can read the
+// procurement masters; add / edit / deactivate with it.products.update (javaria_it_0013).
 export default async function ProductsPage({
   searchParams,
 }: {
@@ -106,6 +108,12 @@ export default async function ProductsPage({
   const status = params.status === "inactive" || params.status === "all" ? params.status : "active";
   const kind = params.kind === "asset" || params.kind === "consumable" ? params.kind : "all";
   const supabase = await createClient();
+
+  const [{ data: canRead }, canEdit] = await Promise.all([
+    supabase.schema("it").rpc("can_read_procurement_masters"),
+    hasItPermission(supabase, "it.products.update"),
+  ]);
+  if (!canRead) notFound();
 
   let query = supabase.schema("it").from("products").select("*").order("product_name");
   if (status === "active") query = query.eq("is_active", true);
@@ -154,15 +162,17 @@ export default async function ProductsPage({
         ))}
       </datalist>
 
-      <details className={`${cardClass} mb-6 p-6`} open={rows.length === 0 && !filtered}>
-        <summary className="cursor-pointer text-base font-semibold text-slate-900">Add product</summary>
-        <form action={createProduct} className="mt-4 space-y-4">
-          <ProductFields assetTypes={assetTypes} />
-          <button type="submit" className={primaryButtonClass}>
-            Add product
-          </button>
-        </form>
-      </details>
+      {canEdit && (
+        <details className={`${cardClass} mb-6 p-6`} open={rows.length === 0 && !filtered}>
+          <summary className="cursor-pointer text-base font-semibold text-slate-900">Add product</summary>
+          <form action={createProduct} className="mt-4 space-y-4">
+            <ProductFields assetTypes={assetTypes} />
+            <button type="submit" className={primaryButtonClass}>
+              Add product
+            </button>
+          </form>
+        </details>
+      )}
 
       <form method="get" className={`${cardClass} mb-6 flex flex-wrap items-center gap-3 p-4`}>
         <input
@@ -190,7 +200,7 @@ export default async function ProductsPage({
       <div className={cardClass}>
         {rows.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-slate-400">
-            {filtered ? "No products match." : "No products yet — add the first one above."}
+            {filtered ? "No products match." : canEdit ? "No products yet — add the first one above." : "No products yet."}
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -214,28 +224,33 @@ export default async function ProductsPage({
                       Purchase {formatMoney(p.purchase_price)} · Current {formatMoney(p.current_price)}
                     </p>
                   </div>
-                  <form action={setProductActive.bind(null, p.id, !p.is_active)}>
-                    <button
-                      type="submit"
-                      className={
-                        p.is_active
-                          ? "text-sm text-slate-500 hover:text-red-600"
-                          : "text-sm font-medium text-blue-700 hover:underline"
-                      }
-                    >
-                      {p.is_active ? "Deactivate" : "Reactivate"}
-                    </button>
-                  </form>
+                  {canEdit && (
+                    <form action={setProductActive.bind(null, p.id, !p.is_active)}>
+                      <button
+                        type="submit"
+                        className={
+                          p.is_active
+                            ? "text-sm text-slate-500 hover:text-red-600"
+                            : "text-sm font-medium text-blue-700 hover:underline"
+                        }
+                      >
+                        {p.is_active ? "Deactivate" : "Reactivate"}
+                      </button>
+                    </form>
+                  )}
                 </div>
-                <details className="mt-2">
-                  <summary className="cursor-pointer text-sm font-medium text-blue-700">Edit</summary>
-                  <form action={updateProduct.bind(null, p.id)} className="mt-3 space-y-3">
-                    <ProductFields product={p} assetTypes={assetTypes} />
-                    <button type="submit" className={primaryButtonClass}>
-                      Save product
-                    </button>
-                  </form>
-                </details>
+                {p.description && <p className="mt-1 whitespace-pre-wrap text-xs text-slate-500">{p.description}</p>}
+                {canEdit && (
+                  <details className="mt-2">
+                    <summary className="cursor-pointer text-sm font-medium text-blue-700">Edit</summary>
+                    <form action={updateProduct.bind(null, p.id)} className="mt-3 space-y-3">
+                      <ProductFields product={p} assetTypes={assetTypes} />
+                      <button type="submit" className={primaryButtonClass}>
+                        Save product
+                      </button>
+                    </form>
+                  </details>
+                )}
               </li>
             ))}
           </ul>

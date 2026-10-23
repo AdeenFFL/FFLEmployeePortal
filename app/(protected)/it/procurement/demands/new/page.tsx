@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { checked, fetchOrgUnits, fetchTicketScope, hasItPermission } from "@/lib/it/ticket-data";
 import { formatMoney } from "@/lib/it/procurement";
 import { createDemand } from "../actions";
+import { ProductPicker } from "./product-picker";
 import {
   cardClass,
   FormMessage,
@@ -72,18 +73,17 @@ export default async function NewDemandPage({
             <span className={labelClass}>
               Product <span className="text-red-500">*</span>
             </span>
-            <select name="productId" required defaultValue={params.product ?? ""} className={inputClass}>
-              <option value="" disabled>
-                Choose a product…
-              </option>
-              {products.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.product_name}
-                  {p.category ? ` — ${p.category}` : ""} · per {p.unit} ·{" "}
-                  {formatMoney(p.current_price ?? p.purchase_price)}
-                </option>
-              ))}
-            </select>
+            <ProductPicker
+              inputClass={inputClass}
+              defaultValue={params.product}
+              options={products.map((p) => ({
+                id: p.id,
+                label: `${p.product_name}${p.category ? ` — ${p.category}` : ""} · per ${p.unit} · ${formatMoney(
+                  p.current_price ?? p.purchase_price,
+                )}`,
+                search: `${p.product_name} ${p.category ?? ""}`.toLowerCase(),
+              }))}
+            />
             <span className="mt-1 block text-xs text-slate-400">
               Not in the list? Ask procurement to add it to the Product Master.
             </span>

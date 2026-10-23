@@ -1,6 +1,6 @@
 import { StatusPill } from "@/components/status-pill";
 import { formatBytes, formatDate, formatDateTime } from "@/lib/it/tickets";
-import { DOCUMENT_ACCEPT, RECEIVING_CONDITIONS, todayIso } from "@/lib/it/procurement";
+import { DOCUMENT_ACCEPT, formatMoney, RECEIVING_CONDITIONS, todayIso } from "@/lib/it/procurement";
 import type { ItDemand, ItDocument, ItReceivingRecord } from "@/types/database";
 import { assignVendor, recordReceiving, updateReceivingRefs, uploadDemandDocuments } from "../actions";
 import { cardClass, inputClass, labelClass, primaryButtonClass, secondaryButtonClass } from "../../../_components/ticket-ui";
@@ -111,9 +111,15 @@ export function DeliverySection({
         <div>
           <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Expected delivery</dt>
           <dd className="mt-0.5 text-sm text-slate-800">{formatDate(demand.expected_delivery_date) || "—"}</dd>
+          {demand.agreed_unit_price !== null && (
+            <dd className="text-xs text-slate-500">
+              Agreed {formatMoney(demand.agreed_unit_price)} each ·{" "}
+              {formatMoney(Number(demand.agreed_unit_price) * target)} total
+            </dd>
+          )}
         </div>
         <div>
-          <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Received</dt>
+          <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Accepted</dt>
           <dd className="mt-0.5 text-sm text-slate-800">
             {demand.received_quantity} of {target} {unit}
             {due > 0 && demand.received_quantity > 0 && <span className="text-amber-700"> · {due} still due</span>}
@@ -143,7 +149,10 @@ export function DeliverySection({
                 <div className="flex flex-wrap items-center gap-2 text-sm">
                   <span className="font-semibold text-slate-900">{r.receiving_number}</span>
                   <span className="text-slate-600">
-                    {formatDate(r.received_date)} · {r.received_quantity} {unit}
+                    {formatDate(r.received_date)} · {r.received_quantity} {unit} delivered
+                    {r.accepted_quantity !== r.received_quantity && (
+                      <span className="text-red-700"> · {r.accepted_quantity} accepted</span>
+                    )}
                   </span>
                   <StatusPill
                     label={r.status}
@@ -250,15 +259,30 @@ export function VendorPanel({
               ))}
             </select>
           </label>
-          <label className="block">
-            <span className={labelClass}>Expected delivery</span>
-            <input
-              type="date"
-              name="expectedDate"
-              defaultValue={demand.expected_delivery_date ?? ""}
-              className={inputClass}
-            />
-          </label>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className={labelClass}>Expected delivery</span>
+              <input
+                type="date"
+                name="expectedDate"
+                defaultValue={demand.expected_delivery_date ?? ""}
+                className={inputClass}
+              />
+            </label>
+            <label className="block">
+              <span className={labelClass}>Agreed price each (Rs)</span>
+              <input
+                name="agreedPrice"
+                inputMode="decimal"
+                defaultValue={demand.agreed_unit_price ?? demand.estimated_unit_price ?? ""}
+                className={inputClass}
+              />
+            </label>
+          </div>
+          <p className="text-xs text-slate-500">
+            Estimate was {formatMoney(demand.estimated_unit_price)}. Invoices are checked against the
+            agreed price.
+          </p>
           {changing && (
             <label className="block">
               <span className={labelClass}>Reason for the change</span>
@@ -300,10 +324,17 @@ export function ReceivingPanel({
             <input type="date" name="receivedDate" required max={today} defaultValue={today} className={inputClass} />
           </label>
           <label className="block">
-            <span className={labelClass}>Quantity</span>
+            <span className={labelClass}>Delivered</span>
             <input type="number" name="quantity" required min={0} max={due} defaultValue={due} className={inputClass} />
           </label>
         </div>
+        <label className="block">
+          <span className={labelClass}>Accepted (leave empty if all are fine)</span>
+          <input type="number" name="acceptedQuantity" min={0} max={due} className={inputClass} />
+          <span className="mt-1 block text-xs text-slate-400">
+            Damaged or wrong items aren&apos;t accepted — they stay due from the vendor. Explain in the remarks.
+          </span>
+        </label>
         <label className="block">
           <span className={labelClass}>Condition</span>
           <select name="condition" defaultValue="Good" className={inputClass}>

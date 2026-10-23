@@ -287,6 +287,29 @@ Fixed-asset products → Talha's `registerAssetsFromReceipt()` (or the interim i
 - Fixed-asset products: serials in remarks, register by hand (interim, §2).
 - [ ] Apply `javaria_it_0012`; schedule the follow-up sweep; tell Talha `it.receiving_records` is live.
 
+### Improvements to Phases 1–4 — ✅ built 2026-10-23 (`javaria_it_0013_procurement_improvements.sql`)
+Review of what was built, before invoices:
+1. **Agreed unit price** (`demands.agreed_unit_price`), entered at vendor assignment (defaults to
+   the estimate); Phase 5 verifies invoices against it. `it.assign_demand_vendor()` re-signed
+   with `p_agreed_price`.
+2. **Accepted quantity** (`receiving_records.accepted_quantity`): delivered vs accepted; damaged
+   / wrong items stay due and keep the follow-up going. `demands.received_quantity` = accepted
+   total. `it.record_receiving()` re-signed with `p_accepted_quantity`; remarks required when
+   something isn't accepted; delivering more than is due is refused.
+3. **Cancel after approval**: site procurement may cancel Approved / Partially Approved /
+   Assigned to Vendor / Rejected demands while nothing has been accepted (reason required).
+4. **Approval reminders**: `demands.approval_follow_up_on`; the daily sweep
+   (`it.notify_receiving_followups()`) now also reminds the department's approvers.
+5. **Revise & resubmit**: `it.revise_rejected_demand()` — Rejected → Categorized with new quantity
+   / justification and a note for the approver; the rejection stays in the history.
+6. **Needs action** tab on the demand queue (procurement): categorise, send, revise, assign
+   vendor, overdue delivery, gate pass pending — with the next step per row.
+7. **Read-only Vendor / Product masters** for procurement staff and approvers (BRD gap 4.5 #5);
+   routes now `module:it`, pages check `it.can_read_procurement_masters()`, edit forms only with
+   the `.update` keys. Sidebar children accept a list of keys (any-of).
+8. **Searchable product picker** on Raise Demand.
+- [ ] Apply `javaria_it_0013` after `0012`.
+
 ### Phase 5 — Invoices
 **Migration** `javaria_it_0013_invoices.sql`: `it.invoices` (+ approval columns), auto-
 verification against receiving (§1.4 → `Verified` / `Flagged`), routing to the department head

@@ -13,6 +13,7 @@ import {
   MAX_DOCUMENT_BYTES,
   MAX_DOCUMENTS_PER_UPLOAD,
   MAX_TOTAL_DOCUMENT_BYTES,
+  parseMoney,
   RECEIVING_CONDITIONS,
 } from "@/lib/it/procurement";
 import type {
@@ -182,6 +183,27 @@ export async function submitForApproval(demandId: string) {
   done(path, "Sent to the department head for approval.");
 }
 
+// Rejected → revise quantity / justification → Categorized, ready to send again (javaria_it_0013).
+export async function reviseRejectedDemand(demandId: string, formData: FormData) {
+  const path = `${LIST}/${demandId}`;
+  const { supabase } = await requirePermission("it.demands.update");
+
+  const justification = text(formData, "justification");
+  const note = text(formData, "note");
+  if (!justification) fail(path, "Justification can't be empty.");
+  if (!note) fail(path, "Please say what changed for the approver.");
+
+  const { error } = await supabase.schema("it").rpc("revise_rejected_demand", {
+    p_demand_id: demandId,
+    p_quantity: quantity(formData, path),
+    p_justification: justification,
+    p_note: note,
+  });
+  if (error) fail(path, error.message);
+
+  done(path, "Demand revised — send it for approval again when ready.");
+}
+
 // BRD §5.5.5 — the approver's decision. Timestamp and approver are captured by the database.
 export async function decideDemand(demandId: string, formData: FormData) {
   const path = `${LIST}/${demandId}`;
@@ -279,11 +301,14 @@ export async function assignVendor(demandId: string, formData: FormData) {
 
   const vendorId = text(formData, "vendorId");
   if (!vendorId) fail(path, "Please choose a vendor.");
+  const agreedPrice = parseMoney(formData.get("agreedPrice"));
+  if (agreedPrice === undefined) fail(path, "The agreed price must be a positive amount (e.g. 125000 or 125,000.50).");
 
   const { error } = await supabase.schema("it").rpc("assign_demand_vendor", {
     p_demand_id: demandId,
     p_vendor_id: vendorId,
     p_expected_date: text(formData, "expectedDate") || null,
+    p_agreed_price: agreedPrice,
     p_note: text(formData, "note") || null,
   });
   if (error) fail(path, error.message);
@@ -297,7 +322,12 @@ export async function recordReceiving(demandId: string, formData: FormData) {
   const { supabase } = await requirePermission("it.demands.update");
 
   const quantity = Number(text(formData, "quantity"));
-  if (!Number.isInteger(quantity) || quantity < 0) fail(path, "Enter the quantity received (0 if nothing arrived).");
+  if (!Number.isInteger(quantity) || quantity < 0) fail(path, "Enter the quantity delivered (0 if nothing arrived).");
+  const acceptedText = text(formData, "acceptedQuantity");
+  const accepted = acceptedText === "" ? quantity : Number(acceptedText);
+  if (!Number.isInteger(accepted) || accepted < 0 || accepted > quantity) {
+    fail(path, "Accepted quantity must be between 0 and the quantity delivered.");
+  }
   const receivedDate = text(formData, "receivedDate");
   if (!receivedDate) fail(path, "Enter the date the goods arrived.");
   const condition = text(formData, "condition") as ItReceivingCondition;
@@ -308,6 +338,7 @@ export async function recordReceiving(demandId: string, formData: FormData) {
     p_demand_id: demandId,
     p_received_date: receivedDate,
     p_quantity: quantity,
+    p_accepted_quantity: accepted,
     p_condition: condition,
     p_challan_no: text(formData, "challanNo") || null,
     p_gate_pass_no: text(formData, "gatePassNo") || null,

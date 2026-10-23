@@ -11,11 +11,38 @@ import {
   DEMAND_STATUSES,
   demandCategoryLabel,
   formatMoney,
+  todayIso,
 } from "@/lib/it/procurement";
 import type { ItDemandCategory, ItDemandStatus } from "@/types/database";
 import { cardClass, FormMessage, inputClass, primaryButtonClass } from "../../_components/ticket-ui";
 
 const PAGE_SIZE = 100;
+
+// Statuses where procurement has the next move (Needs action view).
+const ACTION_STATUSES: ItDemandStatus[] = ["Open", "Categorized", "Approved", "Partially Approved", "Rejected"];
+
+function nextStep(
+  d: { id: string; status: ItDemandStatus; follow_up_on: string | null },
+  today: string,
+  gatePassPending: Set<string>,
+) {
+  switch (d.status) {
+    case "Open":
+      return "Categorise";
+    case "Categorized":
+      return "Send for approval";
+    case "Approved":
+    case "Partially Approved":
+      return "Assign vendor";
+    case "Rejected":
+      return "Revise or cancel";
+  }
+  if (d.follow_up_on && d.follow_up_on <= today && (d.status === "Assigned to Vendor" || d.status === "Partially Received")) {
+    return "Follow up delivery";
+  }
+  if (gatePassPending.has(d.id)) return "Add gate pass";
+  return null;
+}
 
 // PRC-03 Demand queue. RLS decides which rows come back: own demands always, the sites whose IT
 // team the viewer is on with it.demands.read, every site with it.demands.read_all
@@ -37,13 +64,41 @@ export default async function DemandsPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [canRead, canReadAll, canCreate] = await Promise.all([
+  const [canRead, canReadAll, canCreate, canUpdate] = await Promise.all([
     hasItPermission(supabase, "it.demands.read"),
     hasItPermission(supabase, "it.demands.read_all"),
     hasItPermission(supabase, "it.demands.create"),
+    hasItPermission(supabase, "it.demands.update"),
   ]);
   const isStaff = canRead || canReadAll;
-  const view = !isStaff || params.view === "mine" ? "mine" : "queue";
+  const view: "mine" | "queue" | "action" =
+    !isStaff || params.view === "mine" ? "mine" : params.view === "action" && canUpdate ? "action" : "queue";
+  const today = todayIso();
+
+  // Deliveries with neither a gate pass number nor a gate pass picture (javaria_it_0012), across
+  // everything the viewer can see — feeds the badge and the Needs action view.
+  const { data: noNumber } = await supabase
+    .schema("it")
+    .from("receiving_records")
+    .select("id, demand_id")
+    .is("gate_pass_no", null)
+    .gt("received_quantity", 0)
+    .limit(500);
+  const { data: gatePics } = (noNumber ?? []).length
+    ? await supabase
+        .schema("it")
+        .from("documents")
+        .select("entity_id")
+        .eq("doc_type", "Gate Pass")
+        .in(
+          "entity_id",
+          (noNumber ?? []).map((r) => r.id),
+        )
+    : { data: [] };
+  const withPicture = new Set((gatePics ?? []).map((d) => d.entity_id));
+  const gatePassPending = new Set(
+    (noNumber ?? []).filter((r) => !withPicture.has(r.id)).map((r) => r.demand_id),
+  );
   const status = (DEMAND_STATUSES as string[]).includes(params.status ?? "")
     ? (params.status as ItDemandStatus)
     : params.status === "all"
@@ -59,12 +114,22 @@ export default async function DemandsPage({
     .schema("it")
     .from("demands")
     .select(
-      "id, demand_number, product_id, quantity, estimated_unit_price, status, demand_category, site_id, department_id, requested_by_person_id, created_at",
+      "id, demand_number, product_id, quantity, estimated_unit_price, status, demand_category, site_id, department_id, requested_by_person_id, created_at, follow_up_on",
     )
     .order("created_at", { ascending: false })
     .limit(PAGE_SIZE);
   if (view === "mine") query = query.eq("requested_by_person_id", personId ?? "");
-  if (status === "active") query = query.in("status", ACTIVE_DEMAND_STATUSES);
+  if (view === "action") {
+    // Waiting on procurement: categorise, send / revise, assign vendor, overdue delivery, gate pass.
+    const pending = [...gatePassPending];
+    query = query.or(
+      [
+        `status.in.(${ACTION_STATUSES.map((s) => `"${s}"`).join(",")})`,
+        `and(status.in.("Assigned to Vendor","Partially Received"),follow_up_on.lte.${today})`,
+        ...(pending.length ? [`and(id.in.(${pending.join(",")}),status.not.in.("Closed","Cancelled"))`] : []),
+      ].join(","),
+    );
+  } else if (status === "active") query = query.in("status", ACTIVE_DEMAND_STATUSES);
   else if (status !== "all") query = query.eq("status", status);
   if (category === "none") query = query.is("demand_category", null);
   else if (category) query = query.eq("demand_category", category);
@@ -96,39 +161,12 @@ export default async function DemandsPage({
     : { data: [] };
   const nameById = new Map((people ?? []).map((p) => [p.person_id, p.full_name]));
 
-  // Deliveries with neither a gate pass number nor a gate pass picture (javaria_it_0012).
-  const demandIds = rows.map((r) => r.id);
-  const { data: noNumber } = demandIds.length
-    ? await supabase
-        .schema("it")
-        .from("receiving_records")
-        .select("id, demand_id")
-        .in("demand_id", demandIds)
-        .is("gate_pass_no", null)
-        .gt("received_quantity", 0)
-    : { data: [] };
-  const { data: gatePics } = (noNumber ?? []).length
-    ? await supabase
-        .schema("it")
-        .from("documents")
-        .select("entity_id")
-        .eq("doc_type", "Gate Pass")
-        .in(
-          "entity_id",
-          (noNumber ?? []).map((r) => r.id),
-        )
-    : { data: [] };
-  const withPicture = new Set((gatePics ?? []).map((d) => d.entity_id));
-  const gatePassPending = new Set(
-    (noNumber ?? []).filter((r) => !withPicture.has(r.id)).map((r) => r.demand_id),
-  );
-
   const kpis = [
     { label: "To categorise / route", value: openRes.count ?? 0 },
     { label: "Awaiting approval", value: approvalRes.count ?? 0 },
     { label: "Awaiting delivery", value: deliveryRes.count ?? 0 },
   ];
-  const tab = (key: "queue" | "mine", label: string) => (
+  const tab = (key: "queue" | "mine" | "action", label: string) => (
     <Link
       href={`/it/procurement/demands?view=${key}`}
       className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
@@ -142,10 +180,12 @@ export default async function DemandsPage({
   return (
     <div className="py-6">
       <PageHeader
-        title={view === "mine" ? "My Demands" : "Demand Queue"}
+        title={view === "mine" ? "My Demands" : view === "action" ? "Needs Action" : "Demand Queue"}
         description={
           view === "mine"
             ? "Purchase demands you've raised."
+            : view === "action"
+              ? "Demands waiting on procurement: categorise, send for approval, revise, assign a vendor, follow up a delivery or add a gate pass."
             : canReadAll
               ? "Purchase demands from every site."
               : "Purchase demands for the sites whose IT team you're on."
@@ -162,6 +202,7 @@ export default async function DemandsPage({
 
       {isStaff && (
         <div className="mb-4 flex gap-2">
+          {canUpdate && tab("action", "Needs action")}
           {tab("queue", "Queue")}
           {tab("mine", "My demands")}
         </div>
@@ -185,15 +226,17 @@ export default async function DemandsPage({
           aria-label="Search demand number"
           className={`${inputClass} w-40`}
         />
-        <select name="status" defaultValue={status} aria-label="Status" className={`${inputClass} w-auto`}>
-          <option value="active">Active</option>
-          <option value="all">All statuses</option>
-          {DEMAND_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+        {view !== "action" && (
+          <select name="status" defaultValue={status} aria-label="Status" className={`${inputClass} w-auto`}>
+            <option value="active">Active</option>
+            <option value="all">All statuses</option>
+            {DEMAND_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {s}
+              </option>
+            ))}
+          </select>
+        )}
         <select name="category" defaultValue={category} aria-label="Category" className={`${inputClass} w-auto`}>
           <option value="">All categories</option>
           <option value="none">Not categorised</option>
@@ -203,7 +246,7 @@ export default async function DemandsPage({
             </option>
           ))}
         </select>
-        {view === "queue" && (
+        {view !== "mine" && (
           <select name="site" defaultValue={params.site ?? ""} aria-label="Site" className={`${inputClass} w-auto`}>
             <option value="">All my sites</option>
             {orgUnits.sites.map((s) => (
@@ -221,7 +264,11 @@ export default async function DemandsPage({
       <div className={cardClass}>
         {rows.length === 0 ? (
           <p className="px-6 py-10 text-center text-sm text-slate-400">
-            {view === "mine" ? "You haven't raised any demands matching this filter." : "No demands match."}
+            {view === "mine"
+              ? "You haven't raised any demands matching this filter."
+              : view === "action"
+                ? "Nothing waiting on procurement right now."
+                : "No demands match."}
           </p>
         ) : (
           <div className="overflow-x-auto">
@@ -233,10 +280,11 @@ export default async function DemandsPage({
                   <th className="px-6 py-3 text-right font-medium">Qty</th>
                   <th className="px-6 py-3 text-right font-medium">Est. total</th>
                   <th className="px-6 py-3 font-medium">Category</th>
-                  {view === "queue" && <th className="px-6 py-3 font-medium">Requested by</th>}
+                  {view !== "mine" && <th className="px-6 py-3 font-medium">Requested by</th>}
                   <th className="px-6 py-3 font-medium">Site</th>
                   <th className="px-6 py-3 font-medium">Raised</th>
                   <th className="px-6 py-3 font-medium">Status</th>
+                  {view === "action" && <th className="px-6 py-3 font-medium">Next step</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
@@ -261,7 +309,7 @@ export default async function DemandsPage({
                         {formatMoney(total)}
                       </td>
                       <td className="px-6 py-3 text-slate-600">{demandCategoryLabel(d.demand_category)}</td>
-                      {view === "queue" && (
+                      {view !== "mine" && (
                         <td className="px-6 py-3 text-slate-600">{nameById.get(d.requested_by_person_id) ?? "—"}</td>
                       )}
                       <td className="px-6 py-3 text-slate-600">{orgUnits.nameById.get(d.site_id) ?? "—"}</td>
@@ -272,6 +320,16 @@ export default async function DemandsPage({
                           {gatePassPending.has(d.id) && <StatusPill label="Gate pass pending" tone="warning" />}
                         </div>
                       </td>
+                      {view === "action" && (
+                        <td className="whitespace-nowrap px-6 py-3">
+                          <Link
+                            href={`/it/procurement/demands/${d.id}`}
+                            className="text-sm font-medium text-blue-700 hover:underline"
+                          >
+                            {nextStep(d, today, gatePassPending) ?? "Open"} →
+                          </Link>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}

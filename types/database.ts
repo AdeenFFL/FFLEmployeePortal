@@ -399,7 +399,11 @@ export type ItDemand = {
   vendor_assigned_at: string | null;
   vendor_assigned_by: string | null;
   follow_up_on: string | null;
+  // Total ACCEPTED quantity across deliveries (javaria_it_0013).
   received_quantity: number;
+  // javaria_it_0013_procurement_improvements.sql
+  agreed_unit_price: number | null;
+  approval_follow_up_on: string | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -456,7 +460,9 @@ export type ItReceivingRecord = {
   vendor_id: string | null;
   received_by_person_id: string | null;
   received_date: string;
+  // Delivered; accepted_quantity excludes damaged / rejected items (javaria_it_0013).
   received_quantity: number;
+  accepted_quantity: number;
   condition: ItReceivingCondition;
   status: "Full" | "Partial" | "Not Received";
   delivery_challan_no: string | null;
@@ -1558,6 +1564,10 @@ export type Database = {
         Args: { p_site_id: string };
         Returns: boolean;
       };
+      can_read_procurement_masters: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
       // javaria_it_0011_demand_approvals.sql
       is_demand_approver: {
         Args: { p_department_id: string };
@@ -1598,8 +1608,13 @@ export type Database = {
           p_demand_id: string;
           p_vendor_id: string;
           p_expected_date: string | null;
+          p_agreed_price: number | null;
           p_note: string | null;
         };
+        Returns: undefined;
+      };
+      revise_rejected_demand: {
+        Args: { p_demand_id: string; p_quantity: number; p_justification: string; p_note: string };
         Returns: undefined;
       };
       record_receiving: {
@@ -1607,6 +1622,7 @@ export type Database = {
           p_demand_id: string;
           p_received_date: string;
           p_quantity: number;
+          p_accepted_quantity: number | null;
           p_condition: ItReceivingCondition;
           p_challan_no: string | null;
           p_gate_pass_no: string | null;

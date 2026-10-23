@@ -23,7 +23,8 @@ type IconComponent = (props: { className?: string }) => React.ReactElement;
 // see regardless of role — everything else is shown only if the viewer's resolved permission set
 // (computed in app/(protected)/current-user.ts, keyed off role_permissions, never a role
 // *name*) actually contains it, so a brand-new custom role sees exactly what it was granted.
-type NavChild = { href: string; label: string; permission?: string };
+// A child may list several keys: shown if the viewer holds ANY of them.
+type NavChild = { href: string; label: string; permission?: string | string[] };
 type NavLeaf = { type: "link"; href: string; label: string; icon: IconComponent; permission?: string };
 type NavGroup = {
   type: "group";
@@ -47,7 +48,9 @@ export function Sidebar({
   homePath: string;
 }) {
   const granted = new Set(permissions);
-  const has = (permission?: string) => !permission || granted.has(permission);
+  const has = (permission?: string | string[]) =>
+    !permission ||
+    (Array.isArray(permission) ? permission.some((p) => granted.has(p)) : granted.has(permission));
   const pathname = usePathname();
   const [expandedByHover, setExpandedByHover] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -185,8 +188,17 @@ export function Sidebar({
         { href: "/it/procurement/demands", label: "Demands", permission: "it.demands.read" },
         { href: "/it/procurement/demands/new", label: "Raise Demand", permission: "it.demands.create" },
         { href: "/it/procurement/approvals", label: "Approvals", permission: "it.demands.approve" },
-        { href: "/it/procurement/vendors", label: "Vendors", permission: "it.vendors.update" },
-        { href: "/it/procurement/products", label: "Products", permission: "it.products.update" },
+        // Read-only for procurement staff / approvers (javaria_it_0013).
+        {
+          href: "/it/procurement/vendors",
+          label: "Vendors",
+          permission: ["it.vendors.update", "it.demands.read", "it.demands.read_all", "it.demands.approve"],
+        },
+        {
+          href: "/it/procurement/products",
+          label: "Products",
+          permission: ["it.products.update", "it.demands.read", "it.demands.read_all", "it.demands.approve"],
+        },
         {
           href: "/it/procurement/settings",
           label: "Procurement Settings",
