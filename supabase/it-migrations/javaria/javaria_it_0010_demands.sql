@@ -5,7 +5,7 @@
 -- Depends on:  javaria_it_0003_notifications.sql (it.notifications), javaria_it_0005_site_routing.sql
 --              (it.site_it_staff, it.is_site_member, it.hq_site_id),
 --              javaria_it_0009_procurement_masters.sql (it.products, it.procurement_settings)
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-10-23 by read-only check)
 --
 -- What this does
 --   * it.demands — a purchase demand raised by Site Support (DMD-000123), for one product from the

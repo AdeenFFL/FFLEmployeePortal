@@ -3,7 +3,7 @@
 -- Feature:     Procurement Phase 1 — Vendor & product masters (09-it-procurement-plan.md §5)
 -- Depends on:  talha_it_0001_foundation.sql / 0024 (grants, it schema);
 --              talha_it_0002 / 0026 (it.asset_types)
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-10-23 by read-only check)
 --
 -- ERD v4 section D: vendors, products (+ accepted addition #5 products.asset_type_id), and the
 -- procurement settings row (plan addition P4). These unblock Talha:
