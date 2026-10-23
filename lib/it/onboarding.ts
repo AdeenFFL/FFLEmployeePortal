@@ -1,3 +1,4 @@
+import { COMPANY_EMAIL_DOMAIN } from "@/lib/constants";
 import type {
   ItChecklistStatus,
   ItChecklistTaskType,
@@ -66,9 +67,27 @@ const ASSET_FIELDS: DetailField[] = [
   { key: "condition", label: "Condition", placeholder: "e.g. Good, minor scratches" },
 ];
 
+// Semi-automated email provisioning (IT module revision, part 2): the portal can't create a
+// real mailbox itself (the Graph app registration only has Mail.Send, not account/license
+// management), so it proposes a username/address from the employee's name and IT confirms it
+// while actually creating the mailbox in Microsoft 365, then marks the task complete.
+export function suggestEmailAccount(employeeName: string) {
+  const parts = employeeName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z\s]/g, "")
+    .split(/\s+/)
+    .filter(Boolean);
+  const username = parts.length >= 2 ? `${parts[0]}.${parts[parts.length - 1]}` : parts[0] || "";
+  return {
+    username,
+    email_address: username ? `${username}@${COMPANY_EMAIL_DOMAIN}` : "",
+  };
+}
+
 export const TASK_DETAIL_FIELDS: Record<ItChecklistTaskType, DetailField[]> = {
   email_account: [
-    { key: "email_address", label: "Company email address", placeholder: "name@faujifoods.com" },
+    { key: "email_address", label: "Company email address", placeholder: `name@${COMPANY_EMAIL_DOMAIN}` },
     { key: "username", label: "Username" },
   ],
   access_provisioning: [

@@ -13,6 +13,17 @@ import type { Database } from "@/types/database";
 //      the only way to set a password without an email round-trip. The actual `persons` /
 //      `user_accounts` row inserts for a new password account still go through the acting
 //      Admin's own RLS-respecting session, not this client.
+//   3. app/(protected)/it/onboarding/actions.ts's createLifecycleRequest pre-fills the
+//      auto-created "Email Account" checklist item with a suggested address right after
+//      insert — the HR requester's own session usually can't write checklist_items (that
+//      needs it.onboarding.assign/update), and this is a same-request system default, not a
+//      user-authored edit.
+//   4. The same file's deactivatePortalAccess sets persons.status = 'Inactive' when an IT
+//      Executive closes out offboarding — persons is admin-only under RLS ("persons update by
+//      admin" / "persons select own or admin"), but it.onboarding.assign is the real
+//      authorization boundary for this one, narrow, already-permission-checked read+write.
+//      app/(protected)/it/onboarding/[id]/page.tsx reads the leaver's current status the same
+//      way, to show the right button state.
 export function createAdminClient() {
   return createSupabaseClient<Database>(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,

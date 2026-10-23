@@ -4,8 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { requireActiveUser } from "@/lib/auth/require-user";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { logAuditEvent } from "@/lib/audit/log";
 import { queueItEmails } from "@/lib/it/notifications";
-import { CHECKLIST_STATUSES, LIFECYCLE_KINDS, TASK_DETAIL_FIELDS } from "@/lib/it/onboarding";
+import {
+  CHECKLIST_STATUSES,
+  LIFECYCLE_KINDS,
+  suggestEmailAccount,
+  TASK_DETAIL_FIELDS,
+} from "@/lib/it/onboarding";
 import { TICKET_PRIORITIES } from "@/lib/it/tickets";
 import type {
   ItChecklistStatus,
@@ -104,6 +111,21 @@ export async function createLifecycleRequest(formData: FormData) {
     .select("id, request_number")
     .single();
   if (error || !created) go(back, "error", error?.message ?? "Could not create the request.");
+
+  // Pre-fill the auto-created "Email Account" task with a suggested address so IT starts from
+  // a concrete proposal instead of a blank field (see suggestEmailAccount's own comment for why
+  // this is a suggestion, not a real mailbox creation).
+  if (kind === "Onboarding" && formData.get("emailRequired") === "on") {
+    const { email_address, username } = suggestEmailAccount(employeeName);
+    if (email_address) {
+      await createAdminClient()
+        .schema("it")
+        .from("checklist_items")
+        .update({ details: { email_address, username } })
+        .eq("request_id", created.id)
+        .eq("task_type", "email_account");
+    }
+  }
 
   refresh();
   go(`/it/onboarding/${created.id}`, "notice", `${created.request_number} raised. IT has been notified.`);
@@ -365,6 +387,55 @@ export async function signOffboarding(requestId: string, role: "executive" | "ho
     "notice",
     role === "hod" ? "Approved by HOD IT. Offboarding completed." : "Signed by IT Executive.",
   );
+}
+
+// Portal-account deactivation for offboarding (IT module revision, part 2). persons.status is
+// already checked by proxy.ts and requireActiveUser()/requirePermission() — setting it to
+// Inactive here locks the leaver out immediately, same effect as admin/users' setUserStatus but
+// gated for the offboarding workflow (it.onboarding.assign) instead of route:/admin/users, which
+// an IT Executive wouldn't hold. Deliberately separate from setUserStatus rather than reusing it
+// directly, since that action's permission gate doesn't fit this caller.
+export async function deactivatePortalAccess(requestId: string) {
+  const path = `/it/onboarding/${requestId}`;
+  const { supabase, personId: actorId, actorLabel } = await requirePermission("it.onboarding.assign");
+
+  const { data: request } = await supabase
+    .schema("it")
+    .from("onboarding_offboarding")
+    .select("kind, person_id")
+    .eq("id", requestId)
+    .maybeSingle();
+  if (!request) go(path, "error", "Request not found.");
+  if (request.kind !== "Offboarding" || !request.person_id) {
+    go(path, "error", "This request has no linked portal account to deactivate.");
+  }
+
+  const { data: account } = await supabase
+    .from("user_accounts")
+    .select("email")
+    .eq("person_id", request.person_id)
+    .maybeSingle();
+
+  // persons is admin-only under RLS ("persons update by admin") — the app-layer permission
+  // check above is the real authorization boundary for this specific, narrow write, same
+  // justification as the other documented uses in lib/supabase/admin.ts.
+  const { error } = await createAdminClient()
+    .from("persons")
+    .update({ status: "Inactive" })
+    .eq("id", request.person_id);
+  if (error) go(path, "error", error.message);
+
+  await logAuditEvent({
+    supabase,
+    actorId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details: `Deactivated portal access for ${account?.email ?? request.person_id} (offboarding ${requestId})`,
+  });
+
+  refresh(requestId);
+  go(path, "notice", "Portal access deactivated.");
 }
 
 export async function addLifecycleUpdate(requestId: string, formData: FormData) {
