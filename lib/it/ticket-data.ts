@@ -53,7 +53,7 @@ export async function fetchCategoryMaps(supabase: Client) {
     supabase
       .schema("it")
       .from("ticket_categories")
-      .select("id, parent_id, name, is_active, sort_order")
+      .select("id, parent_id, name, is_active, sort_order, needs_access_field")
       .order("sort_order")
       .order("name"),
     supabase
