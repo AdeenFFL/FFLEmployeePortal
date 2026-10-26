@@ -32,8 +32,8 @@ ERD onto portal conventions) applies here too and isn't repeated.
 
 ## 0. Status — 2026-10-21
 
-**Phases 1–5 built**, plus improvements to 1–4 (code + `javaria_it_0009`–`0014`, not yet applied
-to the live DB). Phases 6–8 not started. **Talha is waiting on this track**:
+**Phases 1–6 built**, plus improvements to 1–4 (code + `javaria_it_0009`–`0015`; 0009–0014
+applied to the live DB, 0015 not yet). Phases 7–8 not started. **Talha is waiting on this track**:
 
 | What Talha needs | For | His phase |
 |---|---|---|
@@ -347,6 +347,27 @@ and reminders (pg_cron sweep, same pattern as `it.notify_sla_breaches()`), payme
 **emailed to the vendor** (`it.notifications.recipient_email`), demand closed end-to-end with the
 full history (§5.5.20).
 **Screens**: PRC-07, payment step on PRC-05.
+
+✅ Built 2026-10-26 (`javaria_it_0015_payments.sql`). As built:
+- Finance = `it.payments.update` (+ `it.demands.read_all` to see every site). Finance
+  **confirms** a package (Sent to Finance → Confirmed) or **returns** it to procurement with a
+  reason (→ Approved; only while unpaid; the reason shows on the invoice).
+- `it.payments` (`PAY-` numbers): one or more per invoice — reference, date, amount, method
+  (Bank Transfer / Cheque / Online / Cash / Other), remarks, optional payment-proof file
+  (`it.add_payment_document()`). `it.record_payment()` refuses over-payment; payments covering
+  the invoice → **Paid** (`invoices.paid_amount`, `paid_at`).
+- **Vendor email** (§5.5.19): optional on each payment, or re-sent later
+  (`it.send_payment_reference()`); queued as `it.notifications.recipient_email` to the vendor's
+  Vendor Master email and delivered by `lib/it/notifications.ts` with a plain template (no portal
+  button). Payment status Recorded → Reference Sent to Vendor.
+- **Finance SLA**: `invoices.finance_due_on` = sent date + `finance_sla_days`, reset on re-send;
+  the daily sweep reminds Finance about overdue packages every reminder interval.
+- **Closing** (§5.5.20): `it.close_demand_if_complete()` after each full payment — everything
+  approved accepted + every delivery's invoice Paid → demand **Closed**.
+- Screens: `/it/procurement/finance` (KPIs, To confirm / To pay / Paid tabs, inline payment
+  form), Finance block per invoice on the demand page; sidebar "Finance".
+- [ ] Apply `javaria_it_0015` after `0014`; decide the Finance role (Finance Processing + View
+      All Sites' Demands); vendor emails need `MS_GRAPH_*` configured (otherwise "skipped").
 
 ### Phase 7 — Dashboard and reports
 **Screens**: PRC-09 with CSV export, `<ProcurementKpis>` on `/it/dashboard`.

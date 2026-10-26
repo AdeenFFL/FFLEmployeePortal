@@ -1,7 +1,8 @@
 import { StatusPill } from "@/components/status-pill";
 import { formatDate, formatDateTime } from "@/lib/it/tickets";
 import { DOCUMENT_ACCEPT, formatMoney, INVOICE_STATUS_TONE, todayIso } from "@/lib/it/procurement";
-import type { ItDocument, ItInvoice, ItReceivingRecord } from "@/types/database";
+import type { ItDocument, ItInvoice, ItPayment, ItReceivingRecord } from "@/types/database";
+import { PaymentBlock } from "./payment-panel";
 import {
   clearInvoiceFlag,
   decideInvoice,
@@ -78,6 +79,9 @@ export function InvoiceBlock({
   canApprove,
   personId,
   open,
+  payments,
+  isFinance,
+  vendorHasEmail,
 }: {
   demandId: string;
   receiving: ItReceivingRecord;
@@ -91,6 +95,9 @@ export function InvoiceBlock({
   canApprove: boolean;
   personId: string | null;
   open: boolean;
+  payments: ItPayment[];
+  isFinance: boolean;
+  vendorHasEmail: boolean;
 }) {
   if (receiving.accepted_quantity === 0) return null;
 
@@ -162,6 +169,9 @@ export function InvoiceBlock({
       )}
       {invoice.status === "Revise" && invoice.revision_reason && (
         <p className="mt-1 text-xs font-medium text-amber-800">Sent back: {invoice.revision_reason}</p>
+      )}
+      {invoice.status === "Approved" && invoice.revision_reason && (
+        <p className="mt-1 text-xs font-medium text-amber-800">Returned by Finance: {invoice.revision_reason}</p>
       )}
       {invoice.approval_comments && invoice.status !== "Revise" && (
         <p className="mt-1 text-xs text-slate-600">Approver: {invoice.approval_comments}</p>
@@ -259,6 +269,16 @@ export function InvoiceBlock({
           </form>
         </details>
       )}
+
+      <PaymentBlock
+        demandId={demandId}
+        invoice={invoice}
+        payments={payments.filter((p) => p.invoice_id === invoice.id)}
+        documents={documents}
+        urls={urls}
+        isFinance={isFinance}
+        vendorHasEmail={vendorHasEmail}
+      />
     </div>
   );
 }

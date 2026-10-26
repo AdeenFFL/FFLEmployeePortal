@@ -541,6 +541,38 @@ export type ItInvoice = {
   revision_reason: string | null;
   sent_to_finance_at: string | null;
   sent_to_finance_by: string | null;
+  // javaria_it_0015_payments.sql
+  finance_due_on: string | null;
+  finance_reminded_on: string | null;
+  finance_confirmed_at: string | null;
+  finance_confirmed_by: string | null;
+  paid_amount: number;
+  paid_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+// Procurement Phase 6 — javaria_it_0015_payments.sql
+export type ItPaymentMethod = "Bank Transfer" | "Cheque" | "Online" | "Cash" | "Other";
+
+export type ItPayment = {
+  id: string;
+  payment_number: string;
+  invoice_id: string;
+  demand_id: string;
+  vendor_id: string | null;
+  site_id: string | null;
+  company_id: string | null;
+  payment_reference: string;
+  payment_date: string;
+  paid_amount: number;
+  payment_method: ItPaymentMethod;
+  status: "Recorded" | "Reference Sent to Vendor";
+  remarks: string | null;
+  vendor_notified_at: string | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -1297,6 +1329,13 @@ export type Database = {
         Update: Partial<ItInvoice>;
         Relationships: [];
       };
+      // javaria_it_0015_payments.sql — written only through functions.
+      payments: {
+        Row: ItPayment;
+        Insert: Partial<ItPayment>;
+        Update: Partial<ItPayment>;
+        Relationships: [];
+      };
       // javaria_it_0008_it_roles.sql — roles tagged as IT department roles.
       it_roles: {
         Row: { role_id: string; created_at: string; created_by: string | null };
@@ -1667,6 +1706,45 @@ export type Database = {
           p_note: string | null;
         };
         Returns: undefined;
+      };
+      // javaria_it_0015_payments.sql
+      is_finance: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      confirm_invoice_package: {
+        Args: { p_invoice_id: string; p_note: string | null };
+        Returns: undefined;
+      };
+      return_invoice_package: {
+        Args: { p_invoice_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      record_payment: {
+        Args: {
+          p_invoice_id: string;
+          p_reference: string;
+          p_payment_date: string;
+          p_amount: number;
+          p_method: ItPaymentMethod;
+          p_remarks: string | null;
+          p_notify_vendor: boolean;
+        };
+        Returns: string;
+      };
+      send_payment_reference: {
+        Args: { p_payment_id: string };
+        Returns: undefined;
+      };
+      add_payment_document: {
+        Args: {
+          p_payment_id: string;
+          p_storage_path: string;
+          p_file_name: string;
+          p_content_type: string | null;
+          p_size_bytes: number;
+        };
+        Returns: string;
       };
       // javaria_it_0014_invoices.sql
       can_manage_invoices: {

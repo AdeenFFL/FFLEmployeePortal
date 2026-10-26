@@ -28,6 +28,17 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#39;");
 }
 
+// External recipients (vendors — javaria_it_0015 payment references) have no portal account:
+// plain message, no portal button, no "request you're involved in" footer.
+function externalEmailHtml({ title, body }: { title: string; body: string | null }) {
+  return `
+    <div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #0f172a;">
+      <p style="font-size: 16px; font-weight: 600;">${escapeHtml(title)}</p>
+      ${body ? `<p style="white-space: pre-wrap; color: #334155;">${escapeHtml(body)}</p>` : ""}
+    </div>
+  `;
+}
+
 function emailHtml({ title, body, url }: { title: string; body: string | null; url: string }) {
   return `
     <div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #0f172a;">
@@ -110,7 +121,9 @@ export async function dispatchItEmails() {
         await sendMail({
           to,
           subject: n.title,
-          html: emailHtml({ title: n.title, body: n.body, url: `${siteUrl}${n.link ?? "/it/notifications"}` }),
+          html: n.recipient_person_id
+            ? emailHtml({ title: n.title, body: n.body, url: `${siteUrl}${n.link ?? "/it/notifications"}` })
+            : externalEmailHtml({ title: n.title, body: n.body }),
         });
       } catch (error) {
         await admin

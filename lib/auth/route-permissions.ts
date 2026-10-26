@@ -50,6 +50,8 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // /it/procurement/settings above.
   // Demand OR invoice approvers (javaria_it_0014); the page shows only what the viewer approves.
   "/it/procurement/approvals": "module:it",
+  // Finance inbox (javaria_it_0015).
+  "/it/procurement/finance": "it.payments.update",
   // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
   // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
   // the first match in insertion order).

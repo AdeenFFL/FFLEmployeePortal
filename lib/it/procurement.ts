@@ -107,6 +107,9 @@ export const INVOICE_STATUS_TONE: Record<ItInvoiceStatus, Tone> = {
   Paid: "positive",
 };
 
+// Phase 6 payments (javaria_it_0015).
+export const PAYMENT_METHODS = ["Bank Transfer", "Cheque", "Online", "Cash", "Other"] as const;
+
 // Today in Pakistan time as YYYY-MM-DD (date inputs' default / max).
 export function todayIso() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Karachi" }).format(new Date());

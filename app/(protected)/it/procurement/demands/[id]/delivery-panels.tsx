@@ -1,7 +1,7 @@
 import { StatusPill } from "@/components/status-pill";
 import { formatDate } from "@/lib/it/tickets";
 import { DOCUMENT_ACCEPT, formatMoney, RECEIVING_CONDITIONS, todayIso } from "@/lib/it/procurement";
-import type { ItDemand, ItDocument, ItInvoice, ItReceivingRecord } from "@/types/database";
+import type { ItDemand, ItDocument, ItInvoice, ItPayment, ItReceivingRecord } from "@/types/database";
 import { DocumentLinks } from "./document-links";
 import { InvoiceBlock } from "./invoice-panel";
 import { assignVendor, recordReceiving, updateReceivingRefs, uploadDemandDocuments } from "../actions";
@@ -58,6 +58,9 @@ export function DeliverySection({
   canManageInvoices,
   canApproveInvoices,
   personId,
+  payments,
+  isFinance,
+  vendorHasEmail,
 }: {
   demand: ItDemand;
   unit: string;
@@ -71,6 +74,9 @@ export function DeliverySection({
   canManageInvoices: boolean;
   canApproveInvoices: boolean;
   personId: string | null;
+  payments: ItPayment[];
+  isFinance: boolean;
+  vendorHasEmail: boolean;
 }) {
   const unitPrice = demand.agreed_unit_price ?? demand.estimated_unit_price;
   const target = demand.approved_quantity ?? demand.quantity;
@@ -197,6 +203,9 @@ export function DeliverySection({
                   canApprove={canApproveInvoices}
                   personId={personId}
                   open={open}
+                  payments={payments}
+                  isFinance={isFinance}
+                  vendorHasEmail={vendorHasEmail}
                 />
               </li>
             );

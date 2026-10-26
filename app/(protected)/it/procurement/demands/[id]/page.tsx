@@ -125,7 +125,7 @@ export default async function DemandPage({
         .order("product_name"),
       supabase.schema("it").from("procurement_settings").select("consumable_path_enabled").eq("id", true).maybeSingle(),
       demand.vendor_id
-        ? supabase.schema("it").from("vendors").select("vendor_name").eq("id", demand.vendor_id).maybeSingle()
+        ? supabase.schema("it").from("vendors").select("vendor_name, email").eq("id", demand.vendor_id).maybeSingle()
         : Promise.resolve({ data: null }),
       supabase.schema("it").rpc("is_demand_approver", { p_department_id: demand.department_id }),
       supabase
@@ -151,6 +151,13 @@ export default async function DemandPage({
   ]);
   const receivings = receivingsRes.data ?? [];
   const invoices = invoicesRes.data ?? [];
+
+  // Phase 6 — payments + Finance access.
+  const [paymentsRes, { data: isFinance }] = await Promise.all([
+    supabase.schema("it").from("payments").select("*").eq("demand_id", id).order("payment_date"),
+    supabase.schema("it").rpc("is_finance"),
+  ]);
+  const payments = paymentsRes.data ?? [];
   const documents = documentsRes.data ?? [];
   const docPaths = documents.map((d) => d.storage_path);
   const { data: signed } = docPaths.length
@@ -404,6 +411,9 @@ export default async function DemandPage({
               canManageInvoices={Boolean(canManageInvoices)}
               canApproveInvoices={Boolean(isInvoiceApprover)}
               personId={personId ?? null}
+              payments={payments}
+              isFinance={Boolean(isFinance)}
+              vendorHasEmail={Boolean(vendorRes.data?.email)}
             />
           )}
 
