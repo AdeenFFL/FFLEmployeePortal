@@ -27,7 +27,7 @@ export function ErrorCampfire({
   return (
     <div className="flex min-h-[40vh] flex-col items-center justify-center py-16">
       <div className="mx-auto max-w-lg rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
-        <BurntCampfireIcon className="mx-auto h-10 w-10 text-slate-300" />
+        <BurntCampfireIcon className="mx-auto h-10 w-10" />
         <h1 className="mt-4 text-lg font-semibold text-slate-900">{title}</h1>
         <p className="mt-2 text-sm text-slate-600">{description}</p>
         {error.digest && <p className="mt-3 text-xs text-slate-400">Reference: {error.digest}</p>}

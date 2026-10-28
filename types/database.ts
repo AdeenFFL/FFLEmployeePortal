@@ -849,9 +849,14 @@ export type Database = {
         Args: { p_permission_key: string };
         Returns: boolean;
       };
-      route_permission_allowed: {
-        Args: { p_permission_key: string };
-        Returns: boolean;
+      resolve_proxy_access: {
+        Args: { p_permission_key?: string | null };
+        Returns: {
+          person_id: string | null;
+          is_active: boolean;
+          has_role: boolean;
+          permission_ok: boolean;
+        }[];
       };
       update_own_biodata: {
         Args: {

@@ -149,31 +149,26 @@ export function TicketIcon(props: IconProps) {
 }
 
 // "Employee Campsite" branding (lib/constants.ts's APP_NAME) — the campfire is the loading/error
-// motif: lit for loading (components/loading-campfire.tsx, animated via globals.css's
-// animate-flame-flicker at the call site), burnt out for error (components/error-campfire.tsx).
-export function CampfireIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <path d="M12 3c1.2 2 .5 3-.3 4-.9 1.1-1.2 2.3-.4 3.4.3-1 1-1.6 1.7-2 .1 1 .5 1.6 1.2 2.1 1 .7 1.3 1.8.8 2.9" />
-      <path d="M7 21c0-3 2-4.5 5-4.5s5 1.5 5 4.5" fill="currentColor" fillOpacity="0.12" />
-      <path d="M4 21 9.5 15" />
-      <path d="M20 21 14.5 15" />
-      <path d="M4 15.5 9.5 21" />
-      <path d="M20 15.5 14.5 21" />
-    </Icon>
-  );
+// motif. Both use the same source image (public/icons/campfire.png, a flat black silhouette on
+// a transparent background) rather than two separate hand-drawn icons: loading gets it
+// full-strength and animated (flicker + rising ash, see components/loading-campfire.tsx),
+// error gets it dimmed and desaturated to read as "burnt out" (components/error-campfire.tsx).
+// This is a plain <img>, not the stroke-based <Icon> wrapper every other icon in this file
+// uses — those are single-color line icons sized by `currentColor`; this one is a raster
+// silhouette image sized by its own width/height.
+export function CampfireIcon({ className }: IconProps) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/icons/campfire.png" alt="" className={className} />;
 }
 
-export function BurntCampfireIcon(props: IconProps) {
+export function BurntCampfireIcon({ className }: IconProps) {
   return (
-    <Icon {...props}>
-      <path d="M4 21 9.5 15" />
-      <path d="M20 21 14.5 15" />
-      <path d="M4 15.5 9.5 21" />
-      <path d="M20 15.5 14.5 21" />
-      <path d="M9.5 10.5h5" strokeDasharray="1.5 1.8" />
-      <path d="M12 6v2" strokeDasharray="1.5 1.8" />
-    </Icon>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/icons/campfire.png"
+      alt=""
+      className={`${className ?? ""} opacity-30 grayscale brightness-150`}
+    />
   );
 }
 

@@ -27,20 +27,22 @@ export async function proxy(request: NextRequest) {
   if (pathname === "/auth/callback") return response;
 
   // NFR-06: RBAC enforced server-side, before any page renders — not just hidden in the UI.
-  // Two status columns now exist (account-level login suspension vs. person-level employment
-  // status) — either one being non-Active blocks access, same as requirePermission()/requireActiveUser().
-  const { data: account } = await supabase
-    .from("user_accounts")
-    .select("person_id, status, persons(status)")
-    .eq("auth_user_id", user.id)
+  // resolve_proxy_access() (0046) collapses what used to be 3 sequential round trips (account +
+  // status lookup, role-assignment check, permission check) into one — this runs on every
+  // single protected-route navigation, and the dominant cost is network latency per round trip,
+  // not any one query's complexity. `permissionKey` is computed first (pure, no DB) so it can be
+  // passed straight into the one RPC call.
+  const permissionKey = permissionKeyForPath(pathname);
+  const { data: access } = await supabase
+    .rpc("resolve_proxy_access", { p_permission_key: permissionKey })
     .maybeSingle();
 
-  // Account may not exist yet on the very first request right after OAuth (callback creates
-  // it); treat that edge case the same as "pending" rather than erroring.
-  const personId = account?.person_id ?? null;
-  const isActive = account
-    ? account.status === "Active" && account.persons?.status === "Active"
-    : true;
+  const personId = access?.person_id ?? null;
+  // Two status columns exist (account-level login suspension vs. person-level employment
+  // status) — either one being non-Active blocks access, same as requirePermission()/
+  // requireActiveUser(). No account yet (first request right after OAuth, before the callback
+  // has provisioned one) is treated as active-but-pending rather than blocked.
+  const isActive = access?.is_active ?? true;
 
   if (!isActive) {
     if (pathname === "/unauthorized") return response;
@@ -49,17 +51,7 @@ export async function proxy(request: NextRequest) {
     );
   }
 
-  if (!personId) {
-    if (pathname === "/pending-setup") return response;
-    return NextResponse.redirect(new URL("/pending-setup", request.url));
-  }
-
-  const { data: roleRows } = await supabase
-    .from("user_roles")
-    .select("role_id")
-    .eq("person_id", personId);
-
-  if ((roleRows ?? []).length === 0) {
+  if (!personId || !access?.has_role) {
     if (pathname === "/pending-setup") return response;
     return NextResponse.redirect(new URL("/pending-setup", request.url));
   }
@@ -67,26 +59,16 @@ export async function proxy(request: NextRequest) {
   // A role-assigned user hitting /login or /pending-setup gets sent to their role home
   // (SCR-00: "redirects authenticated users to their role home screen"). Resolved from
   // permissions, not role name — any role, including a brand-new custom one, lands somewhere
-  // sensible with no name-matching involved (see lib/auth/home-path.ts).
+  // sensible with no name-matching involved (see lib/auth/home-path.ts). Needs the caller's
+  // full permission set, not just the one key resolve_proxy_access already checked — kept as
+  // its own call since it's only hit on these two paths, not every request.
   if (pathname === "/login" || pathname === "/pending-setup") {
     const grantedKeys = await getGrantedPermissionKeys(supabase, personId);
     return NextResponse.redirect(new URL(resolveHomePath(grantedKeys), request.url));
   }
 
-  const permissionKey = permissionKeyForPath(pathname);
-  if (permissionKey) {
-    // route_permission_allowed() (0045) collapses what used to be two sequential round trips
-    // (does this key exist in `permissions`? -> is it granted?) into one, since this runs on
-    // every single protected-route navigation. Same fail-open behavior as before: a permission
-    // key not seeded in the DB allows the route through rather than locking everyone out over a
-    // config mismatch — the function does that check internally now.
-    const { data: allowed } = await supabase.rpc("route_permission_allowed", {
-      p_permission_key: permissionKey,
-    });
-
-    if (!allowed) {
-      return NextResponse.redirect(new URL("/unauthorized", request.url));
-    }
+  if (permissionKey && !access?.permission_ok) {
+    return NextResponse.redirect(new URL("/unauthorized", request.url));
   }
 
   return response;
