@@ -849,6 +849,10 @@ export type Database = {
         Args: { p_permission_key: string };
         Returns: boolean;
       };
+      route_permission_allowed: {
+        Args: { p_permission_key: string };
+        Returns: boolean;
+      };
       update_own_biodata: {
         Args: {
           p_display_name: string | null;

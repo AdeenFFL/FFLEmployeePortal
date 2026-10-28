@@ -148,6 +148,35 @@ export function TicketIcon(props: IconProps) {
   );
 }
 
+// "Employee Campsite" branding (lib/constants.ts's APP_NAME) — the campfire is the loading/error
+// motif: lit for loading (components/loading-campfire.tsx, animated via globals.css's
+// animate-flame-flicker at the call site), burnt out for error (components/error-campfire.tsx).
+export function CampfireIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 3c1.2 2 .5 3-.3 4-.9 1.1-1.2 2.3-.4 3.4.3-1 1-1.6 1.7-2 .1 1 .5 1.6 1.2 2.1 1 .7 1.3 1.8.8 2.9" />
+      <path d="M7 21c0-3 2-4.5 5-4.5s5 1.5 5 4.5" fill="currentColor" fillOpacity="0.12" />
+      <path d="M4 21 9.5 15" />
+      <path d="M20 21 14.5 15" />
+      <path d="M4 15.5 9.5 21" />
+      <path d="M20 15.5 14.5 21" />
+    </Icon>
+  );
+}
+
+export function BurntCampfireIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M4 21 9.5 15" />
+      <path d="M20 21 14.5 15" />
+      <path d="M4 15.5 9.5 21" />
+      <path d="M20 15.5 14.5 21" />
+      <path d="M9.5 10.5h5" strokeDasharray="1.5 1.8" />
+      <path d="M12 6v2" strokeDasharray="1.5 1.8" />
+    </Icon>
+  );
+}
+
 export function LaptopIcon(props: IconProps) {
   return (
     <Icon {...props}>

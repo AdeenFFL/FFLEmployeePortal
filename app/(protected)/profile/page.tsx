@@ -28,9 +28,13 @@ export default async function ProfilePage({
   const { edit } = await searchParams;
   const { supabase, personId } = await requireActiveUser();
 
+  // Explicit FK hints (companies!persons_company_id_fkey, not just companies(...)) so PostgREST
+  // never has to auto-discover which relationship to embed — a stale schema cache (e.g. right
+  // after a raw DDL change outside the normal migration flow) can otherwise report "more than
+  // one relationship was found" even when only one FK actually exists.
   const { data: profile, error: profileError } = await supabase
     .from("persons")
-    .select("*, companies(name), org_units(name)")
+    .select("*, companies!persons_company_id_fkey(name), org_units!persons_site_id_fkey(name)")
     .eq("id", personId)
     .single();
 

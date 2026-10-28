@@ -44,3 +44,21 @@ body {
 .animate-gentle-bounce {
   animation: gentle-bounce 2s ease-in-out infinite;
 }
+
+/* Flicker for the campfire loading icon (components/icons.tsx's CampfireIcon, used by every
+   page's loading.tsx per the "Employee Campsite" branding) — opacity + a touch of scale so the
+   flame reads as alive without the whole icon visibly jumping around like gentle-bounce. */
+@keyframes flame-flicker {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.55;
+    transform: scale(0.92);
+  }
+}
+.animate-flame-flicker {
+  animation: flame-flicker 1.1s ease-in-out infinite;
+}

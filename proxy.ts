@@ -75,27 +75,17 @@ export async function proxy(request: NextRequest) {
 
   const permissionKey = permissionKeyForPath(pathname);
   if (permissionKey) {
-    // Delegates to the has_permission() SQL function (0019_direct_role_permissions.sql) — it already
-    // aggregates across every role the person holds and every permission group each role
-    // includes, so there's nothing left to join here. Missing key or genuinely ungranted both
-    // resolve to `false`, which is the whole point of NULL-safe boolean SQL, but they mean
-    // different things for the response below.
-    const { data: permission } = await supabase
-      .from("permissions")
-      .select("id")
-      .eq("key", permissionKey)
-      .maybeSingle();
+    // route_permission_allowed() (0045) collapses what used to be two sequential round trips
+    // (does this key exist in `permissions`? -> is it granted?) into one, since this runs on
+    // every single protected-route navigation. Same fail-open behavior as before: a permission
+    // key not seeded in the DB allows the route through rather than locking everyone out over a
+    // config mismatch — the function does that check internally now.
+    const { data: allowed } = await supabase.rpc("route_permission_allowed", {
+      p_permission_key: permissionKey,
+    });
 
-    // Permission key not seeded in the DB — treat like an unmapped route (allow through)
-    // rather than locking everyone out over a config mismatch.
-    if (permission) {
-      const { data: granted } = await supabase.rpc("has_permission", {
-        p_permission_key: permissionKey,
-      });
-
-      if (!granted) {
-        return NextResponse.redirect(new URL("/unauthorized", request.url));
-      }
+    if (!allowed) {
+      return NextResponse.redirect(new URL("/unauthorized", request.url));
     }
   }
 
