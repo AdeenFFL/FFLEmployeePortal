@@ -148,16 +148,6 @@ export function TicketIcon(props: IconProps) {
   );
 }
 
-export function LaptopIcon(props: IconProps) {
-  return (
-    <Icon {...props}>
-      <rect x="4" y="4" width="16" height="11" rx="1.5" />
-      <path d="M2 19h20" />
-      <path d="M9 19 8.5 20.5M15 19l.5 1.5" />
-    </Icon>
-  );
-}
-
 export function ShoppingBagIcon(props: IconProps) {
   return (
     <Icon {...props}>

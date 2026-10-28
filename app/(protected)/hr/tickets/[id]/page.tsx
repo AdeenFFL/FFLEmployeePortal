@@ -1,19 +1,11 @@
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
-import { StatusPill } from "@/components/status-pill";
 import { replyToTicket } from "../actions";
 import { updateTicketStatus, deleteTicket } from "../../feedback/actions";
-import { HR_STATUS_TONE } from "../page";
-import { cardClass, Fact, inputClass, primaryButtonClass } from "../../../it/_components/ticket-ui";
 
 const STATUSES = ["Open", "In Progress", "Resolved", "Closed"];
 
-// Two-column layout matching IT's ticket workspace convention (app/(protected)/it/tickets/[id]/
-// page.tsx) — main column is the thread, side column is Fact-based metadata. hr.ticket_messages
-// has no update_type/internal-note distinction the way it.ticket_updates does, so this keeps its
-// own small message-thread rendering instead of reusing IT's Timeline component, which assumes
-// that field exists.
 export default async function TicketThreadPage({
   params,
 }: {
@@ -60,97 +52,86 @@ export default async function TicketThreadPage({
 
   return (
     <div className="py-6">
-      <PageHeader title={ticket.subject} />
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <div className="space-y-6 lg:col-span-2">
-          <section className={`${cardClass} p-6`}>
-            <p className="whitespace-pre-wrap text-sm text-slate-800">{ticket.body}</p>
-            <p className="mt-3 text-xs text-slate-400">
-              Submitted {new Date(ticket.created_at).toLocaleString()}
-            </p>
-          </section>
-
-          <section className={`${cardClass} p-6`}>
-            <h2 className="mb-4 text-base font-semibold text-slate-900">Replies</h2>
-            <div className="flex flex-col gap-3">
-              {(messages ?? []).map((m) => (
-                <div key={m.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
-                  <p className="text-slate-700">{m.body}</p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    {senderNameById.get(m.sender_person_id) ?? "Unknown"} ·{" "}
-                    {new Date(m.created_at).toLocaleString()}
-                  </p>
-                </div>
-              ))}
-              {(messages ?? []).length === 0 && (
-                <p className="py-4 text-center text-sm text-slate-400">No replies yet.</p>
-              )}
-            </div>
-
-            {ticket.status !== "Closed" && (
-              <form action={replyAction} className="mt-4 border-t border-slate-100 pt-4">
-                <textarea
-                  name="body"
-                  required
-                  rows={3}
-                  placeholder="Write a reply…"
-                  className={`${inputClass} mb-2`}
-                />
-                <button type="submit" className={primaryButtonClass}>
-                  Reply
+      <PageHeader
+        title={ticket.subject}
+        description={`${ticket.ticket_categories?.name ?? "General"} · ${ticket.status}`}
+        action={
+          <div className="flex items-center gap-2">
+            {canUpdate && (
+              <form action={statusAction} className="flex items-center gap-2">
+                <select
+                  name="status"
+                  defaultValue={ticket.status}
+                  className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+                >
+                  {STATUSES.map((s) => (
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Update Status
                 </button>
               </form>
             )}
-          </section>
+            {canDelete && (
+              <form action={deleteAction}>
+                <button
+                  type="submit"
+                  className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                >
+                  Delete
+                </button>
+              </form>
+            )}
+          </div>
+        }
+      />
+
+      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 px-6 py-4">
+          <p className="whitespace-pre-wrap text-sm text-slate-700">{ticket.body}</p>
+          <p className="mt-2 text-xs text-slate-400">
+            Submitted {new Date(ticket.created_at).toLocaleString()}
+          </p>
         </div>
 
-        <div className="space-y-6">
-          <section className={`${cardClass} p-5`}>
-            <dl className="space-y-4">
-              <Fact label="Status">
-                <StatusPill label={ticket.status} tone={HR_STATUS_TONE[ticket.status] ?? "neutral"} />
-              </Fact>
-              <Fact label="Category">{ticket.ticket_categories?.name ?? "General"}</Fact>
-            </dl>
-          </section>
-
-          {(canUpdate || canDelete) && (
-            <section className={`${cardClass} p-5 space-y-4`}>
-              {canUpdate && (
-                <form action={statusAction} className="flex items-center gap-2">
-                  <select
-                    name="status"
-                    defaultValue={ticket.status}
-                    className="rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-                  >
-                    {STATUSES.map((s) => (
-                      <option key={s} value={s}>
-                        {s}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    type="submit"
-                    className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
-                  >
-                    Update
-                  </button>
-                </form>
-              )}
-              {canDelete && (
-                <form action={deleteAction}>
-                  <button
-                    type="submit"
-                    className="w-full rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
-                  >
-                    Delete ticket
-                  </button>
-                </form>
-              )}
-            </section>
+        <div className="flex flex-col gap-3 px-6 py-4">
+          {(messages ?? []).map((m) => (
+            <div key={m.id} className="rounded-lg bg-slate-50 px-3 py-2 text-sm">
+              <p className="text-slate-700">{m.body}</p>
+              <p className="mt-1 text-xs text-slate-400">
+                {senderNameById.get(m.sender_person_id) ?? "Unknown"} ·{" "}
+                {new Date(m.created_at).toLocaleString()}
+              </p>
+            </div>
+          ))}
+          {(messages ?? []).length === 0 && (
+            <p className="py-4 text-center text-sm text-slate-400">No replies yet.</p>
           )}
         </div>
+
+        {ticket.status !== "Closed" && (
+          <form action={replyAction} className="border-t border-slate-200 p-4">
+            <textarea
+              name="body"
+              required
+              rows={3}
+              placeholder="Write a reply…"
+              className="mb-2 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
+            />
+            <button
+              type="submit"
+              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            >
+              Reply
+            </button>
+          </form>
+        )}
       </div>
     </div>
   );

@@ -617,7 +617,6 @@ export type ItTicketCategory = {
   is_active: boolean;
   sort_order: number;
   handled_at: ItHandledAt; // javaria_it_0005
-  needs_access_field: boolean; // 0044_it_category_access_field
   created_at: string;
   updated_at: string;
 };

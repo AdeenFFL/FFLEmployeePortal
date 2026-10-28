@@ -10,7 +10,6 @@ import {
   createRequestType,
   setCategoryActive,
   setCategoryHandledAt,
-  setCategoryNeedsAccessField,
   setRequestTypeActive,
   setRequestTypeHandledAt,
   updateCategory,
@@ -102,15 +101,6 @@ function CategoryRow({ category, indent }: { category: ItTicketCategory; indent?
           category.handled_at === "hq" ? "site" : "hq",
         )}
       />
-      <form
-        action={setCategoryNeedsAccessField.bind(null, category.id, !category.needs_access_field)}
-        className="flex items-center gap-2"
-      >
-        {category.needs_access_field && <StatusPill label="Shows Access field" tone="info" />}
-        <button type="submit" className={linkButton}>
-          {category.needs_access_field ? "Hide access field" : "Show access field"}
-        </button>
-      </form>
       {!category.is_active && <StatusPill label="Inactive" tone="neutral" />}
       <ActiveToggle
         active={category.is_active}
