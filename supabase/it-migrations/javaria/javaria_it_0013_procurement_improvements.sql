@@ -3,7 +3,7 @@
 -- Feature:     Procurement — improvements to Phases 1–4 before invoices
 --              (09-it-procurement-plan.md §5 "Improvements 2026-10-23")
 -- Depends on:  javaria_it_0009 … javaria_it_0012
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-10-28 by read-only check)
 --
 -- What this does
 --   1. Agreed unit price: the price agreed with the vendor, set at vendor assignment (defaults to

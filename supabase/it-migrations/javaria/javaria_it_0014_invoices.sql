@@ -4,7 +4,7 @@
 --              BRD §5.5.10–5.5.16, ERD D "invoices" + accepted addition #2)
 -- Depends on:  javaria_it_0011 (department approvers), javaria_it_0012 (receiving, documents),
 --              javaria_it_0013 (agreed price, accepted quantity)
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-10-28 by read-only check)
 --
 -- Decisions (2026-10-23, Javaria)
 --   * ONE invoice per delivery (ERD invoices.receiving_id). A delivery has at most one live

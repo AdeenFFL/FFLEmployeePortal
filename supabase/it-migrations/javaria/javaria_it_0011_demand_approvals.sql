@@ -3,7 +3,7 @@
 -- Feature:     Procurement Phase 3 — Department-head approval
 --              (09-it-procurement-plan.md §5 Phase 3; BRD §5.5.4–5.5.6, plan addition P3)
 -- Depends on:  javaria_it_0009_procurement_masters.sql, javaria_it_0010_demands.sql
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-10-28 by read-only check)
 --
 -- What this does
 --   * it.department_approvers (P3) — who heads which department for procurement. has_permission()

@@ -3,7 +3,7 @@
 -- Feature:     Procurement Phase 4 — Vendor assignment, goods receiving and documents
 --              (09-it-procurement-plan.md §5 Phase 4; BRD §5.5.7–5.5.9, §5.6.8; additions P1)
 -- Depends on:  javaria_it_0010_demands.sql, javaria_it_0011_demand_approvals.sql
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-10-28 by read-only check)
 --
 -- What this does
 --   * Vendor assignment (§5.5.7): site procurement picks an active vendor from the master for an

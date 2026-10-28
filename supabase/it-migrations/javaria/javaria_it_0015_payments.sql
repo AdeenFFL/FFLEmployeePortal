@@ -3,7 +3,7 @@
 -- Feature:     Procurement Phase 6 — Finance processing and payments
 --              (09-it-procurement-plan.md §5 Phase 6; BRD §5.5.17–5.5.20, ERD D "payments")
 -- Depends on:  javaria_it_0014_invoices.sql (it.invoices, it.payments.update)
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-10-28 by read-only check)
 --
 -- What this does
 --   * Finance (it.payments.update, plus it.demands.read_all to see every site's demands):
