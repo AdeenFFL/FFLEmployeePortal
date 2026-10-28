@@ -62,7 +62,9 @@ export async function createDemand(formData: FormData) {
   const productId = text(formData, "productId");
   const departmentId = text(formData, "departmentId");
   const justification = text(formData, "justification");
+  const category = text(formData, "category") as ItDemandCategory;
   if (!productId) fail(NEW, "Please choose a product.");
+  if (!DEMAND_CATEGORIES.some((c) => c.value === category)) fail(NEW, "Please choose the demand category.");
   if (!departmentId) fail(NEW, "Please choose the department.");
   if (!justification) fail(NEW, "Please explain why this is needed.");
 
@@ -76,12 +78,21 @@ export async function createDemand(formData: FormData) {
       site_id: text(formData, "siteId") || undefined,
       quantity: quantity(formData, NEW),
       justification,
+      demand_category: category,
     })
     .select("id, demand_number")
     .single();
   if (error || !demand) fail(NEW, error?.message ?? "Could not raise the demand.");
 
-  done(`${LIST}/${demand.id}`, `Demand ${demand.demand_number} raised. Procurement has been notified.`);
+  // The database routes non-consumables to the department head straight away (javaria_it_0017,
+  // an AFTER INSERT trigger — so re-read: RETURNING shows the row before that ran).
+  const { data: after } = await supabase.schema("it").from("demands").select("status").eq("id", demand.id).maybeSingle();
+  done(
+    `${LIST}/${demand.id}`,
+    after?.status === "Pending Approval"
+      ? `Demand ${demand.demand_number} raised and sent to the department head for approval.`
+      : `Demand ${demand.demand_number} raised. Procurement has been notified.`,
+  );
 }
 
 // Requester or procurement staff, while Open.
@@ -201,7 +212,13 @@ export async function reviseRejectedDemand(demandId: string, formData: FormData)
   });
   if (error) fail(path, error.message);
 
-  done(path, "Demand revised — send it for approval again when ready.");
+  const { data: after } = await supabase.schema("it").from("demands").select("status").eq("id", demandId).maybeSingle();
+  done(
+    path,
+    after?.status === "Pending Approval"
+      ? "Demand revised and sent back to the department head."
+      : "Demand revised. It couldn't be routed automatically — see the timeline.",
+  );
 }
 
 // BRD §5.5.5 — the approver's decision. Timestamp and approver are captured by the database.

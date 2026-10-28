@@ -40,7 +40,15 @@ function invoiceFields(formData: FormData, path: string) {
   if (!Number.isInteger(quantity) || quantity < 0) fail(path, "Enter the quantity billed.");
   if (amount === undefined || amount === null) fail(path, "Enter the invoice total (e.g. 125000 or 125,000.50).");
   if (tax === undefined) fail(path, "Tax must be a positive amount, or empty.");
-  return { invoiceNumber, invoiceDate, quantity, amount, tax: tax ?? 0, notes: text(formData, "notes") || null };
+  return {
+    invoiceNumber,
+    invoiceDate,
+    quantity,
+    amount,
+    tax: tax ?? 0,
+    costCenter: text(formData, "costCenter") || null,
+    notes: text(formData, "notes") || null,
+  };
 }
 
 async function attachInvoiceFiles(
@@ -48,7 +56,7 @@ async function attachInvoiceFiles(
   demandId: string,
   invoiceId: string,
   files: File[],
-  docType: "Invoice" | "Other",
+  docType: "Invoice" | "Approval" | "Other",
 ) {
   let failed = 0;
   for (const file of files) {
@@ -87,6 +95,7 @@ export async function logInvoice(demandId: string, receivingId: string, formData
     p_quantity: f.quantity,
     p_amount: f.amount,
     p_tax: f.tax,
+    p_cost_center: f.costCenter,
     p_notes: f.notes,
   });
   if (error || !invoiceId) {
@@ -112,6 +121,7 @@ export async function updateInvoice(demandId: string, invoiceId: string, formDat
     p_quantity: f.quantity,
     p_amount: f.amount,
     p_tax: f.tax,
+    p_cost_center: f.costCenter,
     p_notes: f.notes,
   });
   if (error) fail(path, error.code === "23505" ? "This vendor already has an invoice with that number." : error.message);
@@ -123,7 +133,8 @@ export async function uploadInvoiceFiles(demandId: string, invoiceId: string, fo
   const path = `${LIST}/${demandId}`;
   const { supabase } = await requirePermission("it.invoices.update");
 
-  const docType = text(formData, "docType") === "Other" ? "Other" : "Invoice";
+  const rawType = text(formData, "docType");
+  const docType = rawType === "Other" || rawType === "Approval" ? rawType : "Invoice";
   const files = documentFiles(formData, "files");
   if (files.length === 0) fail(path, "Choose a file to upload.");
   const fileError = documentFilesError(files);

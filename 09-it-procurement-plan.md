@@ -404,6 +404,33 @@ see invoice amounts?), notification wording, `tsc` / `eslint` / `npm run build` 
 
 ---
 
+### BRD alignment review — 2026-10-28 (`javaria_it_0017_procurement_brd_alignment.sql`)
+Phases 1–8 compared step by step with the BRD to-be process (§5.5.1–5.5.20), the procurement
+gaps (§4.5), scope and the data-field tables. Matches: masters, DMD numbers, approvals with
+approver + timestamp, Site IT notifications, vendor master visibility, receiving Full / Partial /
+Not Received with follow-up and re-route, auto-verification, revise loop, SLA reminders, Finance
+confirm, payment reference to vendor, end-to-end close. Built to close the differences:
+1. **Category chosen when raising** (§5.5.2, mandatory, suggested from the product) — new
+   demands start Categorized.
+2. **Automatic routing to the Department Head** (§5.5.4) whenever a non-consumable demand is
+   Categorized (raised, re-categorised, revised) — `it.route_demand_for_approval()`; consumables
+   wait for stock; no approver → stays Categorized with a timeline note + notification.
+3. **Automatic routing of verified invoices** (§5.5.14) on log / edit / flag cleared —
+   `it.route_invoice_for_approval()`.
+4. **Finance can log / edit invoices and upload files** (§5.5.12) — `it.can_manage_invoices()`
+   includes Finance (Finance still needs View All Sites' Demands to find the delivery).
+5. **Invoice package** (§5.5.16) — `/it/procurement/invoices/[id]`: invoice, DC, gate pass,
+   demand + invoice approvals, **GL / cost center** (`invoices.cost_center`) and optional
+   **cost-center sign-off** document (`doc_type = 'Approval'`), payments, with a contents
+   checklist.
+6. **Audit log** (scope) — every procurement timeline event except comments is mirrored into
+   `public.audit_log` (Administration → Audit Log).
+Also: timeline entries keep insertion order (`demand_updates.created_at` = `clock_timestamp()`).
+Still open: consumable stock movement + automatic asset creation (Talha), Security Guard gate
+pass entry, whether the GL / cost-center sign-off must be mandatory (IT BA).
+Not BRD scope (dropped): quotation comparison / vendor selection, GL postings.
+- [ ] Apply `javaria_it_0017` after `0016`.
+
 ## 6. Per-PR checklist
 
 Same as `07-it-inventory-plan.md` §6, with the folder `supabase/it-migrations/javaria/` and file

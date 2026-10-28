@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { checked, fetchOrgUnits, fetchTicketScope, hasItPermission } from "@/lib/it/ticket-data";
-import { formatMoney } from "@/lib/it/procurement";
+import { DEMAND_CATEGORIES, formatMoney } from "@/lib/it/procurement";
 import { createDemand } from "../actions";
 import { ProductPicker } from "./product-picker";
 import {
@@ -49,7 +49,7 @@ export default async function NewDemandPage({
     <div className="py-6">
       <PageHeader
         title="Raise Demand"
-        description="Request an item from the Product Master. Procurement categorises it and routes it for approval."
+        description="Request an item from the Product Master. Non-consumables go straight to the department head for approval."
         action={
           <Link href="/it/procurement/demands" className={secondaryButtonClass}>
             Back to demands
@@ -69,25 +69,21 @@ export default async function NewDemandPage({
         </p>
       ) : (
         <form action={createDemand} className={`${cardClass} max-w-3xl space-y-5 p-6`}>
-          <label className="block">
-            <span className={labelClass}>
-              Product <span className="text-red-500">*</span>
-            </span>
-            <ProductPicker
-              inputClass={inputClass}
-              defaultValue={params.product}
-              options={products.map((p) => ({
-                id: p.id,
-                label: `${p.product_name}${p.category ? ` — ${p.category}` : ""} · per ${p.unit} · ${formatMoney(
-                  p.current_price ?? p.purchase_price,
-                )}`,
-                search: `${p.product_name} ${p.category ?? ""}`.toLowerCase(),
-              }))}
-            />
-            <span className="mt-1 block text-xs text-slate-400">
-              Not in the list? Ask procurement to add it to the Product Master.
-            </span>
-          </label>
+          <ProductPicker
+            inputClass={inputClass}
+            labelClass={labelClass}
+            defaultValue={params.product}
+            categories={DEMAND_CATEGORIES}
+            options={products.map((p) => ({
+              id: p.id,
+              label: `${p.product_name}${p.category ? ` — ${p.category}` : ""} · per ${p.unit} · ${formatMoney(
+                p.current_price ?? p.purchase_price,
+              )}`,
+              search: `${p.product_name} ${p.category ?? ""}`.toLowerCase(),
+              // Fixed-asset products are a purchase; anything else is suggested as a consumable.
+              suggestedCategory: p.asset_type_id ? "Open" : "Consumable",
+            }))}
+          />
 
           <div className="grid gap-4 md:grid-cols-3">
             <label className="block">

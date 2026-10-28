@@ -525,6 +525,7 @@ export type ItInvoice = {
   invoice_quantity: number;
   invoice_amount: number;
   tax_amount: number;
+  cost_center: string | null; // javaria_it_0017
   notes: string | null;
   status: ItInvoiceStatus;
   expected_amount: number | null;
@@ -1767,6 +1768,7 @@ export type Database = {
           p_quantity: number;
           p_amount: number;
           p_tax: number;
+          p_cost_center: string | null;
           p_notes: string | null;
         };
         Returns: string;
@@ -1779,6 +1781,7 @@ export type Database = {
           p_quantity: number;
           p_amount: number;
           p_tax: number;
+          p_cost_center: string | null;
           p_notes: string | null;
         };
         Returns: undefined;
@@ -1802,7 +1805,7 @@ export type Database = {
       add_invoice_document: {
         Args: {
           p_invoice_id: string;
-          p_doc_type: "Invoice" | "Other";
+          p_doc_type: "Invoice" | "Approval" | "Other";
           p_storage_path: string;
           p_file_name: string;
           p_content_type: string | null;

@@ -453,8 +453,8 @@ export default async function DemandPage({
                 {demand.status === "Open" ? "Categorise" : "Change category"}
               </h2>
               <p className="mb-4 text-xs text-slate-500">
-                Consumables are issued from stock; everything else goes to the department head for
-                approval.
+                Consumables are issued from stock; anything else is sent to the department head for
+                approval automatically.
               </p>
               <form action={categorizeDemand.bind(null, demand.id, demand.status)} className="space-y-3">
                 <fieldset className="space-y-2">
@@ -508,10 +508,15 @@ export default async function DemandPage({
 
           {canSubmit && (
             <section className={`${cardClass} p-6`}>
-              <h2 className="mb-1 text-base font-semibold text-slate-900">Send for approval</h2>
+              <h2 className="mb-1 text-base font-semibold text-slate-900">
+                {demand.demand_category === "Consumable" ? "Out of stock? Buy it instead" : "Send for approval"}
+              </h2>
               {departmentApprovers.length > 0 ? (
                 <>
                   <p className="mb-4 text-xs text-slate-500">
+                    {demand.demand_category === "Consumable"
+                      ? "If it can't be issued from stock, send it for approval to purchase. "
+                      : "It wasn't sent automatically (an approver was added later). "}
                     Goes to the {orgUnits.nameById.get(demand.department_id) ?? "department"} head:{" "}
                     {departmentApprovers.map((a) => a.full_name).join(", ")}.
                   </p>
@@ -587,8 +592,8 @@ export default async function DemandPage({
             <section className={`${cardClass} p-6`}>
               <h2 className="mb-1 text-base font-semibold text-slate-900">Revise &amp; resubmit</h2>
               <p className="mb-4 text-xs text-slate-500">
-                Change what the approver objected to, then send it for approval again. The rejection
-                stays in the history.
+                Change what the approver objected to — it goes back to the department head
+                automatically. The rejection stays in the history.
               </p>
               <form action={reviseRejectedDemand.bind(null, demand.id)} className="space-y-3">
                 <label className="block">
@@ -618,7 +623,7 @@ export default async function DemandPage({
                   <input name="note" required className={inputClass} />
                 </label>
                 <button type="submit" className={primaryButtonClass}>
-                  Revise
+                  Revise &amp; resubmit
                 </button>
               </form>
             </section>

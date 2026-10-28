@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { StatusPill } from "@/components/status-pill";
 import { formatDate, formatDateTime } from "@/lib/it/tickets";
 import { DOCUMENT_ACCEPT, formatMoney, INVOICE_STATUS_TONE, todayIso } from "@/lib/it/procurement";
@@ -59,6 +60,15 @@ function InvoiceFields({ invoice, defaultQuantity }: { invoice?: ItInvoice; defa
         <input name="tax" inputMode="decimal" defaultValue={invoice?.tax_amount ?? ""} className={inputClass} />
       </label>
       <label className="block">
+        <span className={labelClass}>GL / cost center</span>
+        <input
+          name="costCenter"
+          defaultValue={invoice?.cost_center ?? ""}
+          placeholder="e.g. 6105-IT"
+          className={inputClass}
+        />
+      </label>
+      <label className="block sm:col-span-2">
         <span className={labelClass}>Notes</span>
         <input name="notes" defaultValue={invoice?.notes ?? ""} className={inputClass} />
       </label>
@@ -145,6 +155,12 @@ export function InvoiceBlock({
       <div className="flex flex-wrap items-center gap-2 text-sm">
         <span className="font-semibold text-slate-900">Invoice {invoice.invoice_number}</span>
         <StatusPill label={invoice.status} tone={INVOICE_STATUS_TONE[invoice.status]} />
+        <Link
+          href={`/it/procurement/invoices/${invoice.id}`}
+          className="ml-auto text-xs font-medium text-blue-700 hover:underline"
+        >
+          View package →
+        </Link>
         <span className="text-slate-600">
           {formatDate(invoice.invoice_date)} · {invoice.invoice_quantity} billed · {formatMoney(invoice.invoice_amount)}
           {Number(invoice.tax_amount) > 0 && ` (tax ${formatMoney(invoice.tax_amount)})`}
@@ -152,6 +168,7 @@ export function InvoiceBlock({
       </div>
       <p className="mt-1 text-xs text-slate-500">
         Before tax {formatMoney(net)} · expected {formatMoney(invoice.expected_amount)}
+        {invoice.cost_center && ` · cost center ${invoice.cost_center}`}
         {invoice.approved_at &&
           ` · approved ${formatDateTime(invoice.approved_at)} by ${names.get(invoice.approved_by ?? "") ?? "approver"}`}
         {invoice.sent_to_finance_at && ` · sent to Finance ${formatDateTime(invoice.sent_to_finance_at)}`}
@@ -257,8 +274,9 @@ export function InvoiceBlock({
           </summary>
           <form action={uploadInvoiceFiles.bind(null, demandId, invoice.id)} className="mt-2 space-y-2">
             <div className="flex flex-wrap items-center gap-2">
-              <select name="docType" defaultValue={hasFile ? "Other" : "Invoice"} aria-label="File type" className={`${inputClass} w-auto`}>
+              <select name="docType" defaultValue={hasFile ? "Approval" : "Invoice"} aria-label="File type" className={`${inputClass} w-auto`}>
                 <option value="Invoice">Invoice</option>
+                <option value="Approval">Cost center sign-off</option>
                 <option value="Other">Other</option>
               </select>
               <input type="file" name="files" multiple required accept={DOCUMENT_ACCEPT} className={`${fileInputClass} flex-1`} />

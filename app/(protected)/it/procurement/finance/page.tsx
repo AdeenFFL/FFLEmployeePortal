@@ -144,7 +144,7 @@ export default async function FinancePage({
                   <div className="text-right">
                     <p className="text-lg font-semibold tabular-nums text-slate-900">{formatMoney(inv.invoice_amount)}</p>
                     <Link
-                      href={`/it/procurement/demands/${inv.demand_id}`}
+                      href={`/it/procurement/invoices/${inv.id}`}
                       className="text-sm font-medium text-blue-700 hover:underline"
                     >
                       Open package →

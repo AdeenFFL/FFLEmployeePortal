@@ -55,6 +55,9 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // Procurement reports (Phase 7): procurement staff OR Finance — the page and the CSV route
   // check any of it.demands.read / read_all / it.payments.update themselves.
   "/it/procurement/reports": "module:it",
+  // Invoice package (javaria_it_0017): RLS on it.invoices limits it to procurement staff,
+  // invoice approvers and Finance; the page 404s for anyone else.
+  "/it/procurement/invoices": "module:it",
   // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
   // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
   // the first match in insertion order).
