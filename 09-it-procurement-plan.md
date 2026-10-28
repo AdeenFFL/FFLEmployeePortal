@@ -369,8 +369,21 @@ full history (§5.5.20).
 - [ ] Apply `javaria_it_0015` after `0014`; decide the Finance role (Finance Processing + View
       All Sites' Demands); vendor emails need `MS_GRAPH_*` configured (otherwise "skipped").
 
-### Phase 7 — Dashboard and reports
+### Phase 7 — Dashboard and reports — ✅ built 2026-10-28
 **Screens**: PRC-09 with CSV export, `<ProcurementKpis>` on `/it/dashboard`.
+
+As built (no migration — everything reads through the existing RLS, so a site's staff see their
+sites, all-sites / Finance see every site):
+- `/it/procurement/reports` (route `module:it`; page + CSV route require any of
+  `it.demands.read` / `it.demands.read_all` / `it.payments.update`): KPI tiles (spent in period,
+  awaiting approval, awaiting delivery with late count, unpaid with Finance with SLA-overdue
+  count), spend-by-vendor bar chart (single series, table view), and seven reports with a date
+  range and CSV export (`lib/it/procurement-reports.ts`): Demand register, Cycle time (raised →
+  approved → ordered → received → paid, with averages), Spend by vendor / department / site,
+  Receiving shortfalls (incl. not-accepted items, days late), Pending at Finance (SLA ageing).
+- `/it/dashboard`: a Procurement row (to route, awaiting delivery, with Finance, spent) for
+  viewers with procurement access.
+- CSV: formula-injection guard + UTF-8 BOM.
 
 ### Phase 8 — Hardening
 RLS review with the tester (can a site see another site's demands? can a department head approve

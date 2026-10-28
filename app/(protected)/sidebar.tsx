@@ -193,6 +193,11 @@ export function Sidebar({
           permission: ["it.demands.approve", "it.invoices.approve"],
         },
         { href: "/it/procurement/finance", label: "Finance", permission: "it.payments.update" },
+        {
+          href: "/it/procurement/reports",
+          label: "Procurement Reports",
+          permission: ["it.demands.read", "it.demands.read_all", "it.payments.update"],
+        },
         // Read-only for procurement staff / approvers (javaria_it_0013).
         {
           href: "/it/procurement/vendors",

@@ -15,6 +15,8 @@ import {
   technicianReport,
   weeklyVolume,
 } from "@/lib/it/ticket-metrics";
+import { formatMoney } from "@/lib/it/procurement";
+import { PROCUREMENT_REPORT_KEYS, procurementKpis } from "@/lib/it/procurement-reports";
 import { BarList, ColumnChart, StatTile } from "../_components/charts";
 import { cardClass, secondaryButtonClass } from "../_components/ticket-ui";
 
@@ -61,11 +63,14 @@ export default async function ItDashboardPage({
   const to = new Date(now);
   const from = new Date(now.getTime() - days * 24 * 3_600_000);
 
-  const [tickets, maps, canSeeOnboarding] = await Promise.all([
+  const [tickets, maps, canSeeOnboarding, procurementAccess] = await Promise.all([
     fetchMetricTickets(supabase, from, to),
     fetchCategoryMaps(supabase),
     hasItPermission(supabase, "it.onboarding.read"),
+    Promise.all(PROCUREMENT_REPORT_KEYS.map((k) => hasItPermission(supabase, k))),
   ]);
+  // <ProcurementKpis> (09-it-procurement-plan.md Phase 7) — only for procurement staff / Finance.
+  const procurement = procurementAccess.some(Boolean) ? await procurementKpis(supabase, from, to) : null;
 
   const categoryName = (id: string | null) =>
     (id && maps.categoryNameById.get(id)) ?? "Uncategorised";
@@ -204,6 +209,43 @@ export default async function ItDashboardPage({
           />
         )}
       </div>
+
+      {procurement && (
+        <section className="mb-6" aria-labelledby="procurement-kpis">
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <h2 id="procurement-kpis" className="text-base font-semibold text-slate-900">
+              Procurement
+            </h2>
+            <Link href="/it/procurement/reports" className="text-sm font-medium text-blue-700 hover:underline">
+              Procurement reports
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+            <StatTile
+              label="Demands to route"
+              value={procurement.toRoute.toLocaleString()}
+              context={`${procurement.awaitingApproval} awaiting approval`}
+            />
+            <StatTile
+              label="Awaiting delivery"
+              value={procurement.awaitingDelivery.toLocaleString()}
+              alert={procurement.lateDeliveries > 0 && `${procurement.lateDeliveries} past expected date`}
+              context="Approved, not fully received"
+            />
+            <StatTile
+              label="With Finance"
+              value={formatMoney(procurement.unpaidAtFinance)}
+              alert={procurement.overdueAtFinance > 0 && `${procurement.overdueAtFinance} overdue (SLA)`}
+              context={`${procurement.atFinance} invoice${procurement.atFinance === 1 ? "" : "s"} unpaid`}
+            />
+            <StatTile
+              label="Spent"
+              value={formatMoney(procurement.spent)}
+              context={`Last ${days} days · ${procurement.raised} demands raised`}
+            />
+          </div>
+        </section>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-2">
         <Card title="Tickets raised per week" subtitle={`Last ${days} days`}>

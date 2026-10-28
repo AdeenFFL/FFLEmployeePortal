@@ -52,6 +52,9 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/procurement/approvals": "module:it",
   // Finance inbox (javaria_it_0015).
   "/it/procurement/finance": "it.payments.update",
+  // Procurement reports (Phase 7): procurement staff OR Finance — the page and the CSV route
+  // check any of it.demands.read / read_all / it.payments.update themselves.
+  "/it/procurement/reports": "module:it",
   // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
   // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
   // the first match in insertion order).
