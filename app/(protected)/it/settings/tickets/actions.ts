@@ -137,6 +137,23 @@ export async function setCategoryHandledAt(id: string, handledAt: ItHandledAt) {
   done(handledAt === "hq" ? "Now handled by HQ." : "Now handled at the requester's site.");
 }
 
+export async function setCategoryNeedsAccessField(id: string, needsAccessField: boolean) {
+  const { supabase } = await requirePermission("it.ticket_settings.update");
+
+  const { error } = await supabase
+    .schema("it")
+    .from("ticket_categories")
+    .update({ needs_access_field: needsAccessField })
+    .eq("id", id);
+  if (error) go("error", error.message);
+
+  done(
+    needsAccessField
+      ? "Access required field now shows for this category."
+      : "Access required field hidden for this category.",
+  );
+}
+
 export async function createCategory(formData: FormData) {
   const { supabase } = await requirePermission("it.ticket_settings.update");
 
