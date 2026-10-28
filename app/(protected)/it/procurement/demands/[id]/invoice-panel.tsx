@@ -102,9 +102,9 @@ export function InvoiceBlock({
   if (receiving.accepted_quantity === 0) return null;
 
   if (!invoice) {
-    if (!canManage || !open) {
-      return <p className="mt-2 text-xs text-slate-400">No invoice yet.</p>;
-    }
+    // Invoices are visible only to procurement / approvers / Finance (javaria_it_0016), so a
+    // requester seeing none doesn't mean there is none — say nothing to them.
+    if (!canManage || !open) return null;
     return (
       <details className="mt-3 rounded-lg border border-dashed border-slate-300 p-3">
         <summary className="cursor-pointer text-sm font-medium text-blue-700">Log invoice</summary>

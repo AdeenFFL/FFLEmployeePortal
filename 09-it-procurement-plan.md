@@ -385,7 +385,18 @@ sites, all-sites / Finance see every site):
   viewers with procurement access.
 - CSV: formula-injection guard + UTF-8 BOM.
 
-### Phase 8 — Hardening
+### Phase 8 — Hardening — ✅ review done 2026-10-28 (`javaria_it_0016_procurement_hardening.sql`)
+Findings: (a) cross-site visibility, department-scoped approval, self-approval and post-approval
+edits were already blocked; (b) **fixed**: invoices, payments and invoice / payment-proof files
+were readable by anyone who could see the demand (incl. the plain requester) — now procurement
+staff, invoice managers, invoice approvers and Finance only (`it.can_see_demand_finances()`);
+(c) **fixed**: Finance needed View All Sites' Demands to open its packages — now
+`it.finance_can_see_demand()` (security definer, no policy recursion). `npm run build` passes;
+procurement files lint-clean. Open: 21 `react-hooks/purity` lint errors (`key={Date.now()}` on
+`<Modal>`) in the senior dev's ticket / onboarding / inventory pages — not procurement.
+- [ ] Apply `javaria_it_0016` after `0015`.
+
+Original checklist:
 RLS review with the tester (can a site see another site's demands? can a department head approve
 a department they don't head? can anyone edit an approved quantity after approval? can a guard
 see invoice amounts?), notification wording, `tsc` / `eslint` / `npm run build` before the
