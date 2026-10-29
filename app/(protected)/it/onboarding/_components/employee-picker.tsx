@@ -62,6 +62,7 @@ export function EmployeePicker({
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<EmployeeLookup[]>([]);
+  const [searchError, setSearchError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(0);
@@ -80,14 +81,19 @@ export function EmployeePicker({
     const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const rows = await findEmployees(q);
+        const { rows, error } = await findEmployees(q);
         if (!cancelled) {
           setResults(rows);
+          setSearchError(error);
           setActive(0);
           setOpen(true);
         }
       } catch {
-        if (!cancelled) setResults([]);
+        if (!cancelled) {
+          setResults([]);
+          setSearchError("Couldn't reach the server — try again.");
+          setOpen(true);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -167,8 +173,15 @@ export function EmployeePicker({
             role="listbox"
             className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-lg border border-slate-200 bg-white shadow-lg"
           >
-            {results.length === 0 && !loading ? (
-              <li className="px-3 py-2 text-sm text-slate-400">No employee matches “{query.trim()}”.</li>
+            {searchError ? (
+              <li role="alert" className="px-3 py-2 text-sm text-red-700">
+                {searchError}
+              </li>
+            ) : results.length === 0 && !loading ? (
+              <li className="px-3 py-2 text-sm text-slate-400">
+                No employee matches “{query.trim()}”. They need an employee record in the portal first (User
+                Management).
+              </li>
             ) : (
               results.map((e, i) => (
                 <li

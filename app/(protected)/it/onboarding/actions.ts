@@ -48,14 +48,21 @@ function refresh(requestId?: string) {
 }
 
 // Type-ahead for the employee picker (javaria_it_0018). it.employee_lookup() does the access
-// check (HR / onboarding staff) and returns nothing to anyone else, so no throw here — the
-// picker just shows "no matches".
-export async function findEmployees(query: string): Promise<EmployeeLookup[]> {
+// check (HR / onboarding staff) and returns nothing to anyone else. A database error (e.g. the
+// migration not applied yet) comes back as `error` so the picker can say so instead of
+// pretending nobody matched.
+export async function findEmployees(
+  query: string,
+): Promise<{ rows: EmployeeLookup[]; error: string | null }> {
   const q = query.trim();
-  if (q.length < 2) return [];
+  if (q.length < 2) return { rows: [], error: null };
   const supabase = await createClient();
-  const { data } = await supabase.schema("it").rpc("employee_lookup", { p_search: q.slice(0, 80) });
-  return data ?? [];
+  const { data, error } = await supabase.schema("it").rpc("employee_lookup", { p_search: q.slice(0, 80) });
+  if (error) {
+    console.error("employee_lookup failed", error.message);
+    return { rows: [], error: "Employee search isn't available right now. Ask IT to apply javaria_it_0018." };
+  }
+  return { rows: data ?? [], error: null };
 }
 
 // BRD §5.1.1 / §5.2.1 — HR raises the request; the default checklist is created by trigger.
