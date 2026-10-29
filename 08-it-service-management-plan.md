@@ -214,6 +214,21 @@ permissions. Emits `it.employee_offboarded` (direct call to Talha's `listOpenAss
 portal account); the asset allocation / return items plug in once his forms exist.
 **Open dependency**: who writes employment status on offboarding, HR or IT (`context.md` §6).
 
+**Improvement 2026-10-29 — pick the employee, details fill themselves** (`javaria_it_0018_employee_lookup.sql`):
+- `it.employee_lookup(p_search | p_person_id)` (security definer): code, name, designation,
+  company, location, category, joining date, contract end, status. HR / onboarding staff can look
+  anyone up; anyone can look up themselves. Category is mapped from `persons.employment_type`
+  (`permanent` → Permanent; `contractual_with_email` / `contractual_no_email` /
+  `third_party_vendor` → Contractual; empty → HR chooses).
+- HR form (Offboarding / Replacement): type-ahead (300 ms, no Search button), picking shows a
+  read-only card with "Change" on designation, location and category; last working date
+  pre-filled with the contract end for contractual staff. Unchanged fields are left empty so
+  `it.lifecycle_before_insert()` copies them from `persons` as before.
+- Employee's own "Request offboarding" (`/it/my-offboarding/new`, senior dev's screen): shows
+  their record as a read-only card; category taken from the record (asked only if unknown); last
+  working date pre-filled from the contract end.
+- [ ] Apply `javaria_it_0018`. Cards show "—" until HR fills persons (site, company, joining date).
+
 ### Phase 5 — Notifications and hardening *(notifications built, migration not applied; hardening pass still to do)*
 **As built** (`javaria_it_0003_notifications.sql` + `lib/it/notifications.ts`): `it.notifications`
 inbox written only by security-definer triggers (ticket created / assigned / resolved / closed /

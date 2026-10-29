@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { requireActiveUser } from "@/lib/auth/require-user";
 import { createAdminClient } from "@/lib/supabase/admin";
+import { createClient } from "@/lib/supabase/server";
 import { logAuditEvent } from "@/lib/audit/log";
 import { queueItEmails } from "@/lib/it/notifications";
 import {
@@ -15,6 +16,7 @@ import {
 } from "@/lib/it/onboarding";
 import { TICKET_PRIORITIES } from "@/lib/it/tickets";
 import type {
+  EmployeeLookup,
   ItChecklistStatus,
   ItEmployeeCategory,
   ItLifecycleKind,
@@ -43,6 +45,17 @@ function refresh(requestId?: string) {
   revalidatePath("/it/my-onboarding");
   revalidatePath("/it/my-offboarding");
   if (requestId) revalidatePath(`/it/onboarding/${requestId}`);
+}
+
+// Type-ahead for the employee picker (javaria_it_0018). it.employee_lookup() does the access
+// check (HR / onboarding staff) and returns nothing to anyone else, so no throw here — the
+// picker just shows "no matches".
+export async function findEmployees(query: string): Promise<EmployeeLookup[]> {
+  const q = query.trim();
+  if (q.length < 2) return [];
+  const supabase = await createClient();
+  const { data } = await supabase.schema("it").rpc("employee_lookup", { p_search: q.slice(0, 80) });
+  return data ?? [];
 }
 
 // BRD §5.1.1 / §5.2.1 — HR raises the request; the default checklist is created by trigger.

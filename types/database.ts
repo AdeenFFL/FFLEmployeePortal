@@ -352,6 +352,22 @@ export type ItProcurementSettings = {
   updated_by: string | null;
 };
 
+// Employee picker / own details — javaria_it_0018_employee_lookup.sql
+export type EmployeeLookup = {
+  person_id: string;
+  full_name: string;
+  employee_code: string | null;
+  designation: string | null;
+  company_name: string | null;
+  site_id: string | null;
+  site_name: string | null;
+  employment_type: string | null;
+  employee_category: ItEmployeeCategory | null;
+  date_of_joining: string | null;
+  contract_end_date: string | null;
+  status: string;
+};
+
 // Procurement Phase 2 — javaria_it_0010_demands.sql
 export type ItDemandStatus =
   | "Open"
@@ -1645,6 +1661,11 @@ export type Database = {
       list_org_units: {
         Args: Record<string, never>;
         Returns: { id: string; name: string; type: OrgUnitType }[];
+      };
+      // javaria_it_0018_employee_lookup.sql
+      employee_lookup: {
+        Args: { p_search?: string | null; p_person_id?: string | null };
+        Returns: EmployeeLookup[];
       };
       // javaria_it_0010_demands.sql
       demand_person_names: {
