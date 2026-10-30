@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { getCurrentUserNav } from "../../current-user";
 import { PageHeader } from "@/components/page-header";
-import { TicketIcon, BuildingIcon } from "@/components/icons";
+import { TicketIcon, BuildingIcon, LogoutIcon } from "@/components/icons";
 import { secondaryButtonClass } from "../../it/_components/ticket-ui";
 
 // The front door for raising anything — purely a routing/UX layer in front of the two
@@ -25,6 +25,13 @@ export default async function NewRequestPage() {
       description: "Benefits, policy, or anything HR-related.",
       icon: BuildingIcon,
       permission: "module:hr",
+    },
+    {
+      href: "/it/my-offboarding/new",
+      label: "Resignation / offboarding",
+      description: "Filing your own resignation or offboarding request.",
+      icon: LogoutIcon,
+      permission: "module:it",
     },
   ].filter((c) => granted.has(c.permission));
 

@@ -135,6 +135,7 @@ export type InvitedUser = {
   date_of_joining: string | null;
   invited_by: string | null;
   invited_at: string;
+  onboarding_request_id: string | null;
 };
 
 export type OrgUnit = {
@@ -287,6 +288,14 @@ export type ItSiteItStaff = {
 export type ItCategoryOwner = {
   category_id: string;
   site_id: string;
+  person_id: string;
+  is_primary: boolean;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type ItTaskTypeOwner = {
+  task_type: string;
   person_id: string;
   is_primary: boolean;
   created_at: string;
@@ -453,10 +462,13 @@ export type ItLifecycleStatus =
   | "Cancelled";
 export type ItChecklistStatus = "Pending" | "In Progress" | "Completed" | "Not Applicable";
 export type ItChecklistTaskType =
+  | "role_assignment"
   | "email_account"
+  | "license_assignment"
   | "access_provisioning"
   | "software_installation"
   | "asset_allocation"
+  | "asset_handover"
   | "portal_account"
   | "email_backup_closure"
   | "access_revocation"
@@ -488,6 +500,7 @@ export type ItLifecycleRequest = {
   site_id: string | null;
   department_id: string | null;
   reporting_manager_name: string | null;
+  reporting_manager_id: string | null;
   personal_email: string | null;
   joining_date: string | null;
   last_working_date: string | null;
@@ -1013,6 +1026,12 @@ export type Database = {
         Update: Partial<ItCategoryOwner>;
         Relationships: [];
       };
+      task_type_owners: {
+        Row: ItTaskTypeOwner;
+        Insert: Partial<ItTaskTypeOwner> & Pick<ItTaskTypeOwner, "task_type" | "person_id">;
+        Update: Partial<ItTaskTypeOwner>;
+        Relationships: [];
+      };
       ticket_assignees: {
         Row: ItTicketAssignee;
         Insert: Partial<ItTicketAssignee> & Pick<ItTicketAssignee, "ticket_id" | "person_id">;
@@ -1269,6 +1288,7 @@ export type Database = {
           designation: string | null;
           site_id: string | null;
           status: string;
+          onboarding_cleared: boolean;
         }[];
       };
       list_onboarding_staff: {
@@ -1352,6 +1372,15 @@ export type Database = {
         Returns: {
           category_id: string;
           site_id: string;
+          person_id: string;
+          full_name: string;
+          is_primary: boolean;
+        }[];
+      };
+      list_task_type_owners: {
+        Args: Record<string, never>;
+        Returns: {
+          task_type: string;
           person_id: string;
           full_name: string;
           is_primary: boolean;

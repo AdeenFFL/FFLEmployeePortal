@@ -55,14 +55,21 @@ export default async function AssetRegisterPage({
   // Site/company names come from public tables: cross-schema embeds aren't typeable in
   // supabase-js (see types/database.ts), so they're fetched separately. Sites go through
   // it.list_org_units() because public.org_units is admin-readable only.
-  const [{ data: assets }, { data: assetTypes }, { data: companies }, { sites, nameById: siteNameById }, { data: canCreate }] =
-    await Promise.all([
-      query.order("updated_at", { ascending: false }).limit(MAX_ROWS),
-      supabase.schema("it").from("asset_types").select("id, name").order("name"),
-      supabase.from("companies").select("id, name").order("name"),
-      fetchOrgUnits(supabase),
-      supabase.rpc("has_permission", { p_permission_key: "it.assets.create" }),
-    ]);
+  const [
+    { data: assets },
+    { data: assetTypes },
+    { data: companies },
+    { sites, nameById: siteNameById },
+    { data: canCreate },
+    { data: canRequestReplacement },
+  ] = await Promise.all([
+    query.order("updated_at", { ascending: false }).limit(MAX_ROWS),
+    supabase.schema("it").from("asset_types").select("id, name").order("name"),
+    supabase.from("companies").select("id, name").order("name"),
+    fetchOrgUnits(supabase),
+    supabase.rpc("has_permission", { p_permission_key: "it.assets.create" }),
+    supabase.rpc("has_permission", { p_permission_key: "it.onboarding.create" }),
+  ]);
 
   const hasFilters = Boolean(search || params.type || status || params.site || params.company);
 
@@ -72,13 +79,25 @@ export default async function AssetRegisterPage({
         title="Asset Register"
         description="Every IT asset across all companies and sites."
         action={
-          canCreate ? (
-            <Link
-              href="/it/inventory/new"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              + Add Asset
-            </Link>
+          canCreate || canRequestReplacement ? (
+            <div className="flex flex-wrap gap-2">
+              {canRequestReplacement && (
+                <Link
+                  href="/it/onboarding/new?kind=Replacement"
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Request replacement
+                </Link>
+              )}
+              {canCreate && (
+                <Link
+                  href="/it/inventory/new"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  + Add Asset
+                </Link>
+              )}
+            </div>
           ) : undefined
         }
       />

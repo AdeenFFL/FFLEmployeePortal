@@ -19,6 +19,12 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/tickets": "it.tickets.read",
   "/it/my-onboarding": "module:it",
   "/it/my-offboarding": "module:it",
+  // Unified staff queue (tickets + onboarding/offboarding/replacement) — needs either
+  // it.tickets.read or it.onboarding.read, which this single-key map can't express as "any of".
+  // Gated at module:it here; the page itself only queries/shows each half the viewer actually
+  // holds the specific permission for (same permissive-then-filter shape as the "/it" catch-all
+  // below), same as sidebar.tsx's "Requests" nav entry decides visibility the same way.
+  "/it/requests": "module:it",
   // More specific prefix first — permissionKeyForPath returns the first match.
   "/it/onboarding/new": "it.onboarding.create",
   "/it/onboarding": "it.onboarding.read",
@@ -31,6 +37,10 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // Category owners: settings admins edit any site, site IT managers their own; other IT staff
   // see it read-only — so the route only needs queue access (javaria_it_0006).
   "/it/settings/owners": "it.tickets.read",
+  // Same "read gates the route, RLS gates the write" shape as category owners above — anyone who
+  // can see the onboarding queue can view task-type owners; only it.onboarding.assign holders
+  // (enforced by it.task_type_owners' RLS) can actually change them.
+  "/it/settings/onboarding-owners": "it.onboarding.read",
   // SCR-06: the IT Dashboard is for IT team members who handle tickets, not every employee with
   // module:it — reconciled per Javaria's own note anticipating this conflict (she built the real
   // dashboard; it.tickets.read replaces the earlier module:it placeholder gate).

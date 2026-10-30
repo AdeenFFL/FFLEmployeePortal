@@ -3,9 +3,14 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { fetchOrgUnits } from "@/lib/it/ticket-data";
 import { LIFECYCLE_KINDS } from "@/lib/it/onboarding";
+
+// Onboarding/Offboarding is one request (a tab switch between the two); Replacement is a wholly
+// separate request raised from the Asset Register, so it never appears alongside these tabs.
+const ONBOARDING_OFFBOARDING_KINDS: ItLifecycleKind[] = ["Onboarding", "Offboarding"];
 import { TICKET_PRIORITIES } from "@/lib/it/tickets";
 import type { ItLifecycleKind } from "@/types/database";
 import { createLifecycleRequest } from "../actions";
+import { ReportingManagerPicker } from "../_components/reporting-manager-picker";
 import {
   cardClass,
   FormMessage,
@@ -34,14 +39,6 @@ function Field({
   );
 }
 
-const INTRO: Record<ItLifecycleKind, string> = {
-  Onboarding:
-    "New joiner details for IT (BRD §5.1.1). IT gets a checklist for email, access, software, equipment and the portal account.",
-  Offboarding:
-    "Leaver details for IT (BRD §5.2.1). IT gets a checklist for mailbox backup, access revocation and asset recovery, routed to the HQ or plant-site IT team by location.",
-  Replacement: "Equipment replacement for an existing employee: return the old asset, issue the new one.",
-};
-
 // ONB-01 — HR raises an onboarding / offboarding / replacement request.
 export default async function NewLifecycleRequestPage({
   searchParams,
@@ -53,6 +50,7 @@ export default async function NewLifecycleRequestPage({
     ? (params.kind as ItLifecycleKind)
     : "Onboarding";
   const isOnboarding = kind === "Onboarding";
+  const isReplacement = kind === "Replacement";
   const supabase = await createClient();
 
   const [{ sites, departments }, { data: employees }] = await Promise.all([
@@ -66,28 +64,32 @@ export default async function NewLifecycleRequestPage({
     <div className="py-6">
       <PageHeader
         title={`New ${kind.toLowerCase()} request`}
-        description={INTRO[kind]}
         action={
-          <Link href="/it/onboarding" className={secondaryButtonClass}>
-            Back to list
+          <Link
+            href={isReplacement ? "/it/inventory" : "/it/onboarding"}
+            className={secondaryButtonClass}
+          >
+            {isReplacement ? "Back to Asset Register" : "Back to list"}
           </Link>
         }
       />
       <FormMessage error={params.error} />
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        {LIFECYCLE_KINDS.map((k) => (
-          <Link
-            key={k}
-            href={`/it/onboarding/new?kind=${k}`}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium ${
-              k === kind ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"
-            }`}
-          >
-            {k}
-          </Link>
-        ))}
-      </div>
+      {!isReplacement && (
+        <div className="mb-6 flex flex-wrap gap-2">
+          {ONBOARDING_OFFBOARDING_KINDS.map((k) => (
+            <Link
+              key={k}
+              href={`/it/onboarding/new?kind=${k}`}
+              className={`rounded-full px-4 py-1.5 text-sm font-medium ${
+                k === kind ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"
+              }`}
+            >
+              {k}
+            </Link>
+          ))}
+        </div>
+      )}
 
       {!isOnboarding && (
         <form method="get" className={`${cardClass} mb-4 flex flex-wrap items-end gap-3 p-4`}>
@@ -131,6 +133,9 @@ export default async function NewLifecycleRequestPage({
                       </span>
                       {e.status !== "Active" && (
                         <span className="text-xs text-amber-600">{e.status}</span>
+                      )}
+                      {kind === "Offboarding" && !e.onboarding_cleared && (
+                        <span className="text-xs text-red-600">Onboarding not yet completed</span>
                       )}
                     </label>
                   </li>
@@ -180,7 +185,7 @@ export default async function NewLifecycleRequestPage({
             </select>
           </Field>
           <Field label="Reporting manager">
-            <input name="reportingManager" className={inputClass} />
+            <ReportingManagerPicker name="reportingManagerId" />
           </Field>
           <Field label="Employee category" required={kind === "Offboarding"}>
             <select

@@ -6,6 +6,7 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { requireActiveUser } from "@/lib/auth/require-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logAuditEvent } from "@/lib/audit/log";
+import { sendAccountSetupEmail, sendInviteEmail } from "@/lib/email/invite";
 import { queueItEmails } from "@/lib/it/notifications";
 import {
   CHECKLIST_STATUSES,
@@ -71,9 +72,31 @@ export async function createLifecycleRequest(formData: FormData) {
   const employeeName = text(formData, "employeeName");
   const category = optional(formData, "employeeCategory") as ItEmployeeCategory | null;
 
+  const emailRequired = formData.get("emailRequired") === "on";
+  const personalEmail = optional(formData, "personalEmail");
+
+  const reportingManagerId = optional(formData, "reportingManagerId");
+  let reportingManagerName: string | null = null;
+  if (reportingManagerId) {
+    // persons is admin-only under RLS for anyone but themselves — the HR requester's own
+    // session can't read an arbitrary colleague's name, so this denormalized display value is
+    // looked up with the admin client, same reasoning as use 4/6 in lib/supabase/admin.ts.
+    const { data: manager } = await createAdminClient()
+      .from("persons")
+      .select("full_name")
+      .eq("id", reportingManagerId)
+      .maybeSingle();
+    reportingManagerName = manager?.full_name ?? null;
+  }
+
   if (kind === "Onboarding") {
     if (!employeeName) go(back, "error", "Enter the new joiner's name.");
     if (!text(formData, "joiningDate")) go(back, "error", "Enter the joining date.");
+    // No company email means their portal account gets auto-created on their personal address
+    // (see below) — there's nowhere else to send it.
+    if (!emailRequired && !personalEmail) {
+      go(back, "error", "Enter a personal email — it's needed to set up their portal account.");
+    }
   } else {
     if (!personId) go(back, "error", "Select the employee.");
     if (kind === "Offboarding") {
@@ -96,12 +119,13 @@ export async function createLifecycleRequest(formData: FormData) {
       employee_category: category,
       site_id: optional(formData, "siteId"),
       department_id: optional(formData, "departmentId"),
-      reporting_manager_name: optional(formData, "reportingManager"),
-      personal_email: optional(formData, "personalEmail"),
+      reporting_manager_id: reportingManagerId,
+      reporting_manager_name: reportingManagerName,
+      personal_email: personalEmail,
       joining_date: optional(formData, "joiningDate"),
       last_working_date: optional(formData, "lastWorkingDate"),
       laptop_required: formData.get("laptopRequired") === "on",
-      email_required: kind === "Onboarding" ? formData.get("emailRequired") === "on" : true,
+      email_required: kind === "Onboarding" ? emailRequired : true,
       access_required: optional(formData, "accessRequired"),
       software_required: optional(formData, "softwareRequired"),
       known_assets_accesses: optional(formData, "knownAssetsAccesses"),
@@ -115,7 +139,7 @@ export async function createLifecycleRequest(formData: FormData) {
   // Pre-fill the auto-created "Email Account" task with a suggested address so IT starts from
   // a concrete proposal instead of a blank field (see suggestEmailAccount's own comment for why
   // this is a suggestion, not a real mailbox creation).
-  if (kind === "Onboarding" && formData.get("emailRequired") === "on") {
+  if (kind === "Onboarding" && emailRequired) {
     const { email_address, username } = suggestEmailAccount(employeeName);
     if (email_address) {
       await createAdminClient()
@@ -124,6 +148,105 @@ export async function createLifecycleRequest(formData: FormData) {
         .update({ details: { email_address, username } })
         .eq("request_id", created.id)
         .eq("task_type", "email_account");
+    }
+  }
+
+  // One checklist task per requested access, instead of a single generic always-on task (the
+  // trigger no longer seeds one at all — see 0047_it_onboarding_fixed_checklist.sql). Same
+  // admin-client justification as the email suggestion above: the HR requester's own RLS session
+  // can't write checklist_items directly.
+  if (kind === "Onboarding") {
+    const accessLines = text(formData, "accessRequired")
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean);
+    if (accessLines.length > 0) {
+      await createAdminClient()
+        .schema("it")
+        .from("checklist_items")
+        .insert(
+          accessLines.map((line, i) => ({
+            request_id: created.id,
+            task_type: "access_provisioning" as const,
+            task_name: `Access: ${line}`,
+            sort_order: 20 + i,
+            due_date: optional(formData, "joiningDate"),
+          })),
+        );
+    }
+  }
+
+  // No company email required: provision the portal account immediately on the personal
+  // address instead of waiting on the Email Account task — mirrors
+  // app/(protected)/admin/users/actions.ts's password-account flow exactly (same create-user /
+  // persons / user_accounts sequence, same rollback-on-any-failure), but with a real one-time
+  // "set your password" link (lib/email/invite.ts's sendAccountSetupEmail) instead of a
+  // human-typed password nobody can deliver automatically.
+  if (kind === "Onboarding" && !emailRequired && personalEmail) {
+    const admin = createAdminClient();
+
+    const { data: pendingRole } = await supabase
+      .from("roles")
+      .select("id")
+      .eq("name", "Onboarding Pending")
+      .maybeSingle();
+
+    const { data: authUser, error: authError } = await admin.auth.admin.createUser({
+      email: personalEmail,
+      password: crypto.randomUUID(), // discarded — the account setup email's link is the real credential
+      email_confirm: true,
+    });
+
+    if (authError) {
+      console.error("Onboarding personal-email account creation failed", authError);
+    } else if (authUser.user) {
+      const { data: newPerson, error: personError } = await admin
+        .from("persons")
+        .insert({ full_name: employeeName, status: "Active" })
+        .select("id")
+        .single();
+
+      if (personError || !newPerson) {
+        await admin.auth.admin.deleteUser(authUser.user.id);
+        console.error("Onboarding personal-email account creation failed", personError);
+      } else {
+        const { error: accountError } = await admin.from("user_accounts").insert({
+          person_id: newPerson.id,
+          auth_user_id: authUser.user.id,
+          email: personalEmail,
+          auth_method: "password",
+        });
+
+        if (accountError) {
+          await admin.from("persons").delete().eq("id", newPerson.id);
+          await admin.auth.admin.deleteUser(authUser.user.id);
+          console.error("Onboarding personal-email account creation failed", accountError);
+        } else {
+          if (pendingRole) {
+            await admin.from("user_roles").insert({ person_id: newPerson.id, role_id: pendingRole.id });
+          }
+          await admin
+            .schema("it")
+            .from("onboarding_offboarding")
+            .update({ person_id: newPerson.id })
+            .eq("id", created.id);
+
+          const { data: link, error: linkError } = await admin.auth.admin.generateLink({
+            type: "recovery",
+            email: personalEmail,
+            options: { redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL ?? ""}/auth/set-password` },
+          });
+          if (linkError) {
+            console.error("Onboarding account setup link generation failed", linkError);
+          } else {
+            await sendAccountSetupEmail({
+              to: personalEmail,
+              displayName: employeeName,
+              actionLink: link.properties.action_link,
+            });
+          }
+        }
+      }
     }
   }
 
@@ -213,6 +336,101 @@ export async function updateChecklistItem(requestId: string, itemId: string, for
   go(path, "notice", `Task saved as ${status}.`);
 }
 
+// Special-cased instead of going through updateChecklistItem (same "special task type, own
+// action" pattern as assignAssetForOnboardingTask/completeHandoverTask): completing this task
+// with a real address is also the trigger to stage the new hire's portal account invite — the
+// Microsoft path defers real account creation to their first actual sign-in
+// (app/auth/callback/route.ts already handles that), so this only ever stages an invited_users
+// row + sends the invite email, mirroring exactly what the Admin → Users "Add New User" Microsoft
+// flow already does.
+export async function completeEmailAccountTask(requestId: string, itemId: string, formData: FormData) {
+  const path = `/it/onboarding/${requestId}`;
+  const { supabase } = await requirePermission("it.onboarding.read");
+
+  const status = text(formData, "status") as ItChecklistStatus;
+  if (!CHECKLIST_STATUSES.includes(status)) go(path, "error", "Invalid task status.");
+  const emailAddress = optional(formData, "detail_email_address");
+  const username = optional(formData, "detail_username");
+
+  const { data: item } = await supabase
+    .schema("it")
+    .from("checklist_items")
+    .select("task_type")
+    .eq("id", itemId)
+    .eq("request_id", requestId)
+    .maybeSingle();
+  if (!item || item.task_type !== "email_account") go(path, "error", "Task not found.");
+
+  const details: Record<string, string> = {};
+  if (emailAddress) details.email_address = emailAddress;
+  if (username) details.username = username;
+
+  const { data: updated, error } = await supabase
+    .schema("it")
+    .from("checklist_items")
+    .update({ status, details })
+    .eq("id", itemId)
+    .eq("request_id", requestId)
+    .select("id");
+  if (error) go(path, "error", error.message);
+  if (!updated?.length) go(path, "error", "You can only update tasks assigned to you.");
+
+  if (status === "Completed" && emailAddress) {
+    const { data: request } = await supabase
+      .schema("it")
+      .from("onboarding_offboarding")
+      .select("employee_name, employee_code, designation, site_id, department_id")
+      .eq("id", requestId)
+      .maybeSingle();
+
+    const admin = createAdminClient();
+    const { data: existingInvite } = await admin
+      .from("invited_users")
+      .select("email")
+      .eq("email", emailAddress)
+      .maybeSingle();
+
+    if (!existingInvite) {
+      // invited_users.role_id is NOT NULL — "Onboarding Pending" is seeded (0049) and expected
+      // to always exist; if it's somehow been deleted, skip staging rather than let the insert
+      // fail on the constraint.
+      const { data: pendingRole } = await admin.from("roles").select("id").eq("name", "Onboarding Pending").maybeSingle();
+      if (!pendingRole) {
+        console.error("Staging onboarding invite failed: 'Onboarding Pending' role not found");
+      } else {
+        const { error: inviteError } = await admin.from("invited_users").insert({
+          email: emailAddress,
+          display_name: request?.employee_name ?? null,
+          role_id: pendingRole.id,
+          department: null,
+          site: null,
+          employee_code: request?.employee_code ?? null,
+          designation: request?.designation ?? null,
+          onboarding_request_id: requestId,
+        });
+        if (inviteError) {
+          console.error("Staging onboarding invite failed", inviteError);
+        } else {
+          await sendInviteEmail({ to: emailAddress, displayName: request?.employee_name ?? null, authMethod: "microsoft" });
+        }
+      }
+    }
+  }
+
+  refresh(requestId);
+  go(path, "notice", `Task saved as ${status}.`);
+}
+
+// Powers the reporting-manager combobox on the New request form. Data-returning, not a form
+// action; reuses the same it.search_employees RPC the Offboarding/Replacement employee picker
+// on that page already calls server-side, gated the same way the form itself is.
+export async function searchReportingManagers(query: string) {
+  const { supabase } = await requirePermission("it.onboarding.create");
+  if (!query.trim()) return [];
+  const { data } = await supabase.schema("it").rpc("search_employees", { p_search: query });
+  return data ?? [];
+}
+
 // Powers the asset-search combobox on the Asset Allocation task form. Data-returning, not a
 // form action; gated the same as it.assign_asset() itself since that's what a selection feeds.
 export async function searchUnassignedAssets(query: string) {
@@ -282,6 +500,141 @@ export async function assignAssetForOnboardingTask(
 
   refresh(requestId);
   go(path, "notice", "Asset assigned and task marked complete.");
+}
+
+// Confirms the Asset Handover task — reads real acknowledgment data from the linked
+// asset_allocation task's assignment (it.acknowledge_assignment, already wired to "My Assets"),
+// rather than letting IT mark it complete on their own say-so. Deliberately doesn't touch
+// it.acknowledge_assignment() itself — this is purely additive, reading its result.
+export async function completeHandoverTask(requestId: string, itemId: string) {
+  const path = `/it/onboarding/${requestId}`;
+  const { supabase } = await requirePermission("it.onboarding.assign");
+
+  const [{ data: item }, { data: allocationItem }] = await Promise.all([
+    supabase
+      .schema("it")
+      .from("checklist_items")
+      .select("task_type")
+      .eq("id", itemId)
+      .eq("request_id", requestId)
+      .maybeSingle(),
+    supabase
+      .schema("it")
+      .from("checklist_items")
+      .select("assignment_id")
+      .eq("request_id", requestId)
+      .eq("task_type", "asset_allocation")
+      .maybeSingle(),
+  ]);
+  if (!item || item.task_type !== "asset_handover") go(path, "error", "Task not found.");
+  if (!allocationItem?.assignment_id) {
+    go(path, "error", "No asset has been assigned yet — assign one first.");
+  }
+
+  // asset_assignments requires it.assets.read or being the holder — an IT Executive working
+  // onboarding (it.onboarding.assign) doesn't necessarily hold either, so this one read uses
+  // the admin client, same justification as the other documented uses in lib/supabase/admin.ts.
+  const { data: assignment } = await createAdminClient()
+    .schema("it")
+    .from("asset_assignments")
+    .select("acknowledged_at")
+    .eq("id", allocationItem.assignment_id)
+    .maybeSingle();
+  if (!assignment?.acknowledged_at) {
+    go(path, "error", "The employee hasn't acknowledged receiving the asset yet.");
+  }
+
+  const { data: updated, error } = await supabase
+    .schema("it")
+    .from("checklist_items")
+    .update({ status: "Completed" })
+    .eq("id", itemId)
+    .eq("request_id", requestId)
+    .select("id");
+  if (error) go(path, "error", error.message);
+  if (!updated?.length) go(path, "error", "Couldn't mark the handover task complete.");
+
+  refresh(requestId);
+  go(path, "notice", "Handover confirmed.");
+}
+
+// Assigns a real role, not free text — two cases depending on whether the new hire has a real
+// persons row yet. The Microsoft path (completeEmailAccountTask) defers real account creation to
+// their first actual sign-in, so there may only be a staged invited_users row to update instead.
+export async function assignRoleForOnboardingTask(requestId: string, itemId: string, formData: FormData) {
+  const path = `/it/onboarding/${requestId}`;
+  const { supabase, personId: actorId, actorLabel } = await requirePermission("it.onboarding.assign");
+
+  const roleId = text(formData, "roleId");
+  if (!roleId) go(path, "error", "Choose a role.");
+
+  const [{ data: item }, { data: request }] = await Promise.all([
+    supabase
+      .schema("it")
+      .from("checklist_items")
+      .select("task_type")
+      .eq("id", itemId)
+      .eq("request_id", requestId)
+      .maybeSingle(),
+    supabase
+      .schema("it")
+      .from("onboarding_offboarding")
+      .select("person_id")
+      .eq("id", requestId)
+      .maybeSingle(),
+  ]);
+  if (!item || item.task_type !== "role_assignment") go(path, "error", "Task not found.");
+
+  const admin = createAdminClient();
+
+  if (request?.person_id) {
+    // user_roles/roles writes are admin-only under RLS — the app-layer permission check above
+    // is the real authorization boundary for this narrow, already-permission-checked write.
+    const { error: deleteError } = await admin.from("user_roles").delete().eq("person_id", request.person_id);
+    if (deleteError) go(path, "error", deleteError.message);
+
+    const { error: insertError } = await admin
+      .from("user_roles")
+      .insert({ person_id: request.person_id, role_id: roleId, granted_by: actorId });
+    if (insertError) go(path, "error", insertError.message);
+  } else {
+    const { data: invite } = await admin
+      .from("invited_users")
+      .select("email")
+      .eq("onboarding_request_id", requestId)
+      .maybeSingle();
+    if (!invite) {
+      go(path, "error", "Set up the email account first — there's no account or invite to assign a role to yet.");
+    }
+
+    const { error: updateError } = await admin
+      .from("invited_users")
+      .update({ role_id: roleId })
+      .eq("email", invite.email);
+    if (updateError) go(path, "error", updateError.message);
+  }
+
+  const { data: updated, error } = await supabase
+    .schema("it")
+    .from("checklist_items")
+    .update({ status: "Completed" })
+    .eq("id", itemId)
+    .eq("request_id", requestId)
+    .select("id");
+  if (error) go(path, "error", error.message);
+  if (!updated?.length) go(path, "error", "Role assigned, but the task couldn't be marked complete.");
+
+  await logAuditEvent({
+    supabase,
+    actorId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details: `Assigned role for onboarding request ${requestId}`,
+  });
+
+  refresh(requestId);
+  go(path, "notice", "Role assigned.");
 }
 
 export async function addChecklistItem(requestId: string, formData: FormData) {

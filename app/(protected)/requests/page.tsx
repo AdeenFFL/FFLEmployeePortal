@@ -96,7 +96,7 @@ export default async function MyRequestsPage() {
       label: r.request_number,
       status: r.status,
       createdAt: r.created_at,
-      href: "/it/my-onboarding",
+      href: `/it/onboarding/${r.id}`,
     })),
     ...(offboarding ?? []).map((r) => ({
       key: `off-${r.id}`,
@@ -104,7 +104,7 @@ export default async function MyRequestsPage() {
       label: r.request_number,
       status: r.status,
       createdAt: r.created_at,
-      href: "/it/my-offboarding",
+      href: `/it/onboarding/${r.id}`,
     })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 

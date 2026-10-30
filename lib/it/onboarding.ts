@@ -85,10 +85,40 @@ export function suggestEmailAccount(employeeName: string) {
   };
 }
 
+// Human-readable label per task type, for the task-type owners settings screen
+// (/it/settings/onboarding-owners) — matches the task_name wording the seeding trigger uses.
+export const TASK_TYPE_LABELS: Record<ItChecklistTaskType, string> = {
+  role_assignment: "Portal Role Assignment",
+  email_account: "Email Account Creation",
+  license_assignment: "Software License Assignment",
+  access_provisioning: "User Access Provisioning",
+  software_installation: "Software Installation & Device Configuration",
+  asset_allocation: "Asset Allocation & Assignment Form",
+  asset_handover: "Asset Handover Confirmation",
+  portal_account: "Employee Portal Account Creation",
+  email_backup_closure: "Email Backup & Account Closure",
+  access_revocation: "User Access Revocation",
+  hardware_recovery: "Laptop & Hardware Recovery",
+  asset_return: "Asset Return Form",
+  license_deactivation: "Software License Deactivation",
+  other: "Other",
+};
+
 export const TASK_DETAIL_FIELDS: Record<ItChecklistTaskType, DetailField[]> = {
+  // No free-text fields — the role picker is a real dropdown in its own dedicated form
+  // (assignRoleForOnboardingTask), not a generic detail field.
+  role_assignment: [],
   email_account: [
     { key: "email_address", label: "Company email address", placeholder: `name@${COMPANY_EMAIL_DOMAIN}` },
     { key: "username", label: "Username" },
+  ],
+  license_assignment: [
+    {
+      key: "license_sku",
+      label: "License / SKU assigned",
+      placeholder: "Microsoft 365 E3, Adobe Reader DC, …",
+      multiline: true,
+    },
   ],
   access_provisioning: [
     {
@@ -107,6 +137,10 @@ export const TASK_DETAIL_FIELDS: Record<ItChecklistTaskType, DetailField[]> = {
     },
   ],
   asset_allocation: ASSET_FIELDS,
+  // No manual fields — completion is driven by the real acknowledgment data on the linked
+  // asset_assignments row (it.acknowledge_assignment, "My Assets"), not typed-in details. See
+  // app/(protected)/it/onboarding/actions.ts's completeHandoverTask.
+  asset_handover: [],
   portal_account: [{ key: "username", label: "Portal username" }],
   email_backup_closure: [
     { key: "backup_date", label: "Mailbox backup date", placeholder: "YYYY-MM-DD" },

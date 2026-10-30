@@ -6,8 +6,11 @@ import { permissionKeyForPath } from "@/lib/auth/route-permissions";
 
 // Paths reachable without an authenticated, active, role-assigned user. /forgot-password is
 // here (unlike /unauthorized, which is only ever reached by an already-authenticated user) —
-// its whole audience is someone who can't sign in at all.
-const PUBLIC_PATHS = ["/login", "/auth/callback", "/forgot-password", "/feedback"];
+// its whole audience is someone who can't sign in at all. /auth/set-password must be here too:
+// its recovery session comes from a URL hash fragment the server never sees — supabase-js only
+// establishes it client-side after the page loads, so the server-side check here would otherwise
+// always see "no session" and redirect to /login before that can happen.
+const PUBLIC_PATHS = ["/login", "/auth/callback", "/auth/set-password", "/forgot-password", "/feedback"];
 
 function isPublicPath(pathname: string) {
   return PUBLIC_PATHS.some(

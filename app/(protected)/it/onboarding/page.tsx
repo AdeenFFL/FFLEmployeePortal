@@ -2,14 +2,17 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { checked, fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
+import { checked, fetchOrgUnits, fetchPersonNames } from "@/lib/it/ticket-data";
 import {
   FINISHED_STATUSES,
   KIND_TONE,
-  LIFECYCLE_KINDS,
   LIFECYCLE_STATUSES,
   LIFECYCLE_STATUS_TONE,
 } from "@/lib/it/onboarding";
+
+// Onboarding/Offboarding is a separate request from Replacement (raised from the Asset
+// Register) — this queue only ever shows the former.
+const ONBOARDING_OFFBOARDING_KINDS: ItLifecycleKind[] = ["Onboarding", "Offboarding"];
 import { formatDate } from "@/lib/it/tickets";
 import type { ItLifecycleKind, ItLifecycleStatus } from "@/types/database";
 import {
@@ -45,6 +48,7 @@ export default async function OnboardingQueuePage({
     .select(
       "id, request_number, kind, employee_name, employee_code, site_id, routing_team, due_date, status, it_executive_person_id, created_at",
     )
+    .in("kind", ONBOARDING_OFFBOARDING_KINDS)
     .order("created_at", { ascending: false })
     .limit(200);
 
@@ -52,7 +56,7 @@ export default async function OnboardingQueuePage({
   else if (LIFECYCLE_STATUSES.includes(status as ItLifecycleStatus)) {
     query = query.eq("status", status as ItLifecycleStatus);
   }
-  if (filters.kind && LIFECYCLE_KINDS.includes(filters.kind as ItLifecycleKind)) {
+  if (filters.kind && ONBOARDING_OFFBOARDING_KINDS.includes(filters.kind as ItLifecycleKind)) {
     query = query.eq("kind", filters.kind as ItLifecycleKind);
   }
   if (filters.team === "IT HQ Team" || filters.team === "IT Plant Site Team") {
@@ -65,10 +69,9 @@ export default async function OnboardingQueuePage({
     );
   }
 
-  const [{ data: requests }, orgUnits, canCreate] = await Promise.all([
+  const [{ data: requests }, orgUnits] = await Promise.all([
     query.then(checked),
     fetchOrgUnits(supabase),
-    hasItPermission(supabase, "it.onboarding.create"),
   ]);
   const rows = requests ?? [];
 
@@ -103,22 +106,7 @@ export default async function OnboardingQueuePage({
     <div className="py-6">
       <PageHeader
         title="Onboarding & Offboarding"
-        description="New joiners, leavers and equipment replacements — every IT step in one checklist."
-        action={
-          canCreate ? (
-            <div className="flex flex-wrap gap-2">
-              <Link href="/it/onboarding/new?kind=Onboarding" className={primaryButtonClass}>
-                New onboarding
-              </Link>
-              <Link href="/it/onboarding/new?kind=Offboarding" className={secondaryButtonClass}>
-                New offboarding
-              </Link>
-              <Link href="/it/onboarding/new?kind=Replacement" className={secondaryButtonClass}>
-                Replacement
-              </Link>
-            </div>
-          ) : undefined
-        }
+        description="New joiners and leavers — every IT step in one checklist. Raised by HR; replacement requests are a separate request raised from the Asset Register."
       />
       <FormMessage error={filters.error} notice={filters.notice} />
 
@@ -132,7 +120,7 @@ export default async function OnboardingQueuePage({
         />
         <select name="kind" defaultValue={filters.kind ?? ""} aria-label="Type" className={inputClass}>
           <option value="">All types</option>
-          {LIFECYCLE_KINDS.map((k) => (
+          {ONBOARDING_OFFBOARDING_KINDS.map((k) => (
             <option key={k} value={k}>
               {k}
             </option>
