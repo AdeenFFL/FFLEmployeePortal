@@ -48,6 +48,16 @@ function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
+// A fixed-asset product (linked to an asset type) is bought and registered as an asset — it
+// can't take the consumable "issue from stock" path.
+const FIXED_ASSET_NOT_CONSUMABLE =
+  "This product is a fixed asset (it has an asset type), so it can't be a Consumable — choose General purchase, Repair, Maintenance or Fix.";
+
+async function isFixedAssetProduct(supabase: Awaited<ReturnType<typeof requirePermission>>["supabase"], productId: string) {
+  const { data } = await supabase.schema("it").from("products").select("asset_type_id").eq("id", productId).maybeSingle();
+  return Boolean(data?.asset_type_id);
+}
+
 function quantity(formData: FormData, path: string) {
   const n = Number(text(formData, "quantity"));
   if (!Number.isInteger(n) || n < 1 || n > 100000) fail(path, "Quantity must be a whole number from 1 to 100,000.");
@@ -67,6 +77,7 @@ export async function createDemand(formData: FormData) {
   if (!DEMAND_CATEGORIES.some((c) => c.value === category)) fail(NEW, "Please choose the demand category.");
   if (!departmentId) fail(NEW, "Please choose the department.");
   if (!justification) fail(NEW, "Please explain why this is needed.");
+  if (category === "Consumable" && (await isFixedAssetProduct(supabase, productId))) fail(NEW, FIXED_ASSET_NOT_CONSUMABLE);
 
   const { data: demand, error } = await supabase
     .schema("it")
@@ -125,6 +136,10 @@ export async function categorizeDemand(demandId: string, status: ItDemand["statu
 
   const category = text(formData, "category") as ItDemandCategory;
   if (!DEMAND_CATEGORIES.some((c) => c.value === category)) fail(path, "Please choose a category.");
+  if (category === "Consumable") {
+    const { data: d } = await supabase.schema("it").from("demands").select("product_id").eq("id", demandId).maybeSingle();
+    if (d && (await isFixedAssetProduct(supabase, d.product_id))) fail(path, FIXED_ASSET_NOT_CONSUMABLE);
+  }
 
   const { error } = await supabase
     .schema("it")
