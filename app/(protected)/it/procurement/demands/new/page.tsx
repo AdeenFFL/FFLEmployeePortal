@@ -26,7 +26,7 @@ export default async function NewDemandPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [productsRes, { sites, departments }, scope, readAll, personRes] = await Promise.all([
+  const [productsRes, { sites, departments }, scope, readAll, personRes, canAddProducts] = await Promise.all([
     supabase
       .schema("it")
       .from("products")
@@ -37,6 +37,7 @@ export default async function NewDemandPage({
     fetchTicketScope(supabase),
     hasItPermission(supabase, "it.demands.read_all"),
     supabase.from("persons").select("site_id").eq("id", personId ?? "").maybeSingle(),
+    hasItPermission(supabase, "it.products.update"),
   ]);
   const products = checked(productsRes).data ?? [];
   const homeSite = personRes.data?.site_id ?? null;
@@ -59,9 +60,16 @@ export default async function NewDemandPage({
       <FormMessage error={params.error} />
 
       {products.length === 0 ? (
-        <p className={`${cardClass} p-6 text-sm text-slate-500`}>
-          There are no active products yet. Ask procurement to add the item to the Product Master first.
-        </p>
+        <div className={`${cardClass} p-6 text-sm text-slate-500`}>
+          <p>There are no active products yet — a demand is always for an item from the Product Master.</p>
+          {canAddProducts ? (
+            <Link href="/it/procurement/products" className={`${primaryButtonClass} mt-4 inline-block`}>
+              Add products
+            </Link>
+          ) : (
+            <p className="mt-1">Ask procurement to add the item to the Product Master first.</p>
+          )}
+        </div>
       ) : allowedSites.length === 0 ? (
         <p className={`${cardClass} p-6 text-sm text-slate-500`}>
           Your profile has no site and you&apos;re not on any site&apos;s IT team, so there&apos;s no
