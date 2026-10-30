@@ -46,6 +46,28 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // dashboard; it.tickets.read replaces the earlier module:it placeholder gate).
   "/it/dashboard": "it.tickets.read",
   "/it/reports": "it.tickets.read",
+  // Procurement masters (javaria_it_0009, 09-it-procurement-plan.md Phase 1).
+  // Read-only for procurement staff / approvers too (javaria_it_0013): the pages check
+  // it.can_read_procurement_masters() and show the edit forms only with the .update key.
+  "/it/procurement/vendors": "module:it",
+  "/it/procurement/products": "module:it",
+  "/it/procurement/settings": "it.procurement_settings.update",
+  // Demands (javaria_it_0010). The queue and demand pages stay at module:it: RLS limits rows to
+  // the viewer's own demands unless they hold it.demands.read / read_all.
+  "/it/procurement/demands/new": "it.demands.create",
+  "/it/procurement/demands": "module:it",
+  // Department-head approval inbox (javaria_it_0011). /settings/approvers falls under
+  // /it/procurement/settings above.
+  // Demand OR invoice approvers (javaria_it_0014); the page shows only what the viewer approves.
+  "/it/procurement/approvals": "module:it",
+  // Finance inbox (javaria_it_0015).
+  "/it/procurement/finance": "it.payments.update",
+  // Procurement reports (Phase 7): procurement staff OR Finance — the page and the CSV route
+  // check any of it.demands.read / read_all / it.payments.update themselves.
+  "/it/procurement/reports": "module:it",
+  // Invoice package (javaria_it_0017): RLS on it.invoices limits it to procurement staff,
+  // invoice approvers and Finance; the page 404s for anyone else.
+  "/it/procurement/invoices": "module:it",
   // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
   // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
   // the first match in insertion order).

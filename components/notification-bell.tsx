@@ -36,9 +36,15 @@ export function NotificationBell({
 
   useEffect(() => {
     const poll = setInterval(async () => {
-      const result = await getRecentNotifications();
-      setUnreadCount(result.unreadCount);
-      setNotifications(result.notifications);
+      // A missed poll (server restarting, laptop waking up, network blip) must not surface as an
+      // error — keep the last counts and try again on the next tick.
+      try {
+        const result = await getRecentNotifications();
+        setUnreadCount(result.unreadCount);
+        setNotifications(result.notifications);
+      } catch {
+        // ignore; next poll retries
+      }
     }, POLL_MS);
     return () => clearInterval(poll);
   }, []);

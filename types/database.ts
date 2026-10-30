@@ -318,6 +318,294 @@ export type ItTicketTaskAssignee = {
   assigned_at: string;
 };
 
+// Procurement Phase 1 — javaria_it_0009_procurement_masters.sql
+export type ItVendor = {
+  id: string;
+  vendor_name: string;
+  contact_person: string | null;
+  contact_no: string | null;
+  email: string | null;
+  address: string | null;
+  tax_number: string | null;
+  notes: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItProduct = {
+  id: string;
+  product_name: string;
+  category: string | null;
+  unit: string;
+  purchase_price: number | null;
+  current_price: number | null;
+  description: string | null;
+  asset_type_id: string | null;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItProcurementSettings = {
+  id: boolean;
+  finance_sla_days: number;
+  reminder_interval_days: number;
+  invoice_tolerance_pct: number;
+  consumable_path_enabled: boolean;
+  updated_at: string;
+  updated_by: string | null;
+};
+
+// Employee picker / own details — javaria_it_0018_employee_lookup.sql
+export type EmployeeLookup = {
+  person_id: string;
+  full_name: string;
+  employee_code: string | null;
+  designation: string | null;
+  company_name: string | null;
+  site_id: string | null;
+  site_name: string | null;
+  employment_type: string | null;
+  employee_category: ItEmployeeCategory | null;
+  date_of_joining: string | null;
+  contract_end_date: string | null;
+  status: string;
+};
+
+// Procurement Phase 2 — javaria_it_0010_demands.sql
+export type ItDemandStatus =
+  | "Open"
+  | "Categorized"
+  | "Pending Approval"
+  | "Approved"
+  | "Partially Approved"
+  | "Rejected"
+  | "Assigned to Vendor"
+  | "Partially Received"
+  | "Received"
+  | "Invoicing"
+  | "Stock Updated"
+  | "Closed"
+  | "Cancelled";
+
+export type ItDemandCategory = "Consumable" | "Open" | "Repair" | "Maintenance" | "Fix";
+
+export type ItDemand = {
+  id: string;
+  demand_number: string;
+  product_id: string;
+  requested_by_person_id: string;
+  department_id: string;
+  site_id: string;
+  company_id: string | null;
+  quantity: number;
+  justification: string;
+  estimated_unit_price: number | null;
+  status: ItDemandStatus;
+  demand_category: ItDemandCategory | null;
+  categorized_at: string | null;
+  categorized_by: string | null;
+  vendor_id: string | null;
+  approved_quantity: number | null;
+  stock_note: string | null;
+  stock_updated_at: string | null;
+  stock_updated_by: string | null;
+  closed_at: string | null;
+  cancelled_at: string | null;
+  cancelled_by: string | null;
+  cancellation_reason: string | null;
+  // javaria_it_0012_receiving_documents.sql
+  expected_delivery_date: string | null;
+  vendor_assigned_at: string | null;
+  vendor_assigned_by: string | null;
+  follow_up_on: string | null;
+  // Total ACCEPTED quantity across deliveries (javaria_it_0013).
+  received_quantity: number;
+  // javaria_it_0013_procurement_improvements.sql
+  agreed_unit_price: number | null;
+  approval_follow_up_on: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItDemandUpdate = {
+  id: string;
+  demand_id: string;
+  author_person_id: string | null;
+  update_type:
+    | "comment"
+    | "work_note"
+    | "created"
+    | "edit"
+    | "category_change"
+    | "status_change"
+    | "system";
+  body: string;
+  is_internal: boolean;
+  created_at: string;
+};
+
+// Procurement Phase 3 — javaria_it_0011_demand_approvals.sql
+export type ItDemandDecision = "Approved" | "Partially Approved" | "Rejected";
+
+export type ItDepartmentApprover = {
+  department_id: string;
+  person_id: string;
+  can_approve_demands: boolean;
+  can_approve_invoices: boolean;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type ItDemandApproval = {
+  id: string;
+  demand_id: string;
+  approver_person_id: string;
+  decision: ItDemandDecision;
+  approved_quantity: number;
+  comments: string | null;
+  decided_at: string;
+};
+
+// Procurement Phase 4 — javaria_it_0012_receiving_documents.sql
+export type ItReceivingCondition = "Good" | "Partially Damaged" | "Damaged";
+
+export type ItReceivingRecord = {
+  id: string;
+  receiving_number: string;
+  demand_id: string;
+  vendor_id: string | null;
+  received_by_person_id: string | null;
+  received_date: string;
+  // Delivered; accepted_quantity excludes damaged / rejected items (javaria_it_0013).
+  received_quantity: number;
+  accepted_quantity: number;
+  condition: ItReceivingCondition;
+  status: "Full" | "Partial" | "Not Received";
+  delivery_challan_no: string | null;
+  gate_pass_no: string | null;
+  remarks: string | null;
+  site_id: string | null;
+  company_id: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+export type ItDocumentType =
+  | "Delivery Challan"
+  | "Gate Pass"
+  | "Quotation"
+  | "Invoice"
+  | "Approval"
+  | "Payment Proof"
+  | "Photo"
+  | "Other";
+
+export type ItDocument = {
+  id: string;
+  entity_type: "demand" | "receiving" | "invoice" | "payment" | "asset";
+  entity_id: string;
+  demand_id: string | null;
+  doc_type: ItDocumentType;
+  storage_path: string;
+  file_name: string;
+  content_type: string | null;
+  size_bytes: number | null;
+  uploaded_by: string | null;
+  uploaded_at: string;
+};
+
+// Procurement Phase 5 — javaria_it_0014_invoices.sql
+export type ItInvoiceStatus =
+  | "Logged"
+  | "Verified"
+  | "Flagged"
+  | "Pending Approval"
+  | "Approved"
+  | "Revise"
+  | "Sent to Finance"
+  | "Confirmed"
+  | "Paid";
+
+export type ItInvoice = {
+  id: string;
+  receiving_id: string;
+  demand_id: string;
+  vendor_id: string | null;
+  site_id: string | null;
+  company_id: string | null;
+  invoice_number: string;
+  invoice_date: string;
+  invoice_quantity: number;
+  invoice_amount: number;
+  tax_amount: number;
+  cost_center: string | null; // javaria_it_0017
+  notes: string | null;
+  status: ItInvoiceStatus;
+  expected_amount: number | null;
+  quantity_mismatch: boolean;
+  amount_mismatch: boolean;
+  verification_notes: string | null;
+  flag_cleared_by: string | null;
+  flag_cleared_at: string | null;
+  flag_clear_note: string | null;
+  submitted_at: string | null;
+  approved_by: string | null;
+  approved_at: string | null;
+  approval_comments: string | null;
+  revision_reason: string | null;
+  sent_to_finance_at: string | null;
+  sent_to_finance_by: string | null;
+  // javaria_it_0015_payments.sql
+  finance_due_on: string | null;
+  finance_reminded_on: string | null;
+  finance_confirmed_at: string | null;
+  finance_confirmed_by: string | null;
+  paid_amount: number;
+  paid_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
+// Procurement Phase 6 — javaria_it_0015_payments.sql
+export type ItPaymentMethod = "Bank Transfer" | "Cheque" | "Online" | "Cash" | "Other";
+
+export type ItPayment = {
+  id: string;
+  payment_number: string;
+  invoice_id: string;
+  demand_id: string;
+  vendor_id: string | null;
+  site_id: string | null;
+  company_id: string | null;
+  payment_reference: string;
+  payment_date: string;
+  paid_amount: number;
+  payment_method: ItPaymentMethod;
+  status: "Recorded" | "Reference Sent to Vendor";
+  remarks: string | null;
+  vendor_notified_at: string | null;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  created_by: string | null;
+  updated_by: string | null;
+};
+
 // Phase 6.4 — javaria_it_0007_closure_audit.sql
 export type ItTicketClosureAudit = {
   id: string;
@@ -577,6 +865,8 @@ export type ItNotification = {
   link: string | null;
   ticket_id: string | null;
   request_id: string | null;
+  demand_id: string | null;
+  invoice_id: string | null;
   read_at: string | null;
   email_status: ItNotificationEmailStatus;
   email_error: string | null;
@@ -1012,6 +1302,80 @@ export type Database = {
         Update: Partial<ItSiteItStaff>;
         Relationships: [];
       };
+      // javaria_it_0009_procurement_masters.sql
+      vendors: {
+        Row: ItVendor;
+        Insert: Partial<ItVendor> & Pick<ItVendor, "vendor_name">;
+        Update: Partial<ItVendor>;
+        Relationships: [];
+      };
+      products: {
+        Row: ItProduct;
+        Insert: Partial<ItProduct> & Pick<ItProduct, "product_name">;
+        Update: Partial<ItProduct>;
+        Relationships: [];
+      };
+      procurement_settings: {
+        Row: ItProcurementSettings;
+        Insert: Partial<ItProcurementSettings>;
+        Update: Partial<ItProcurementSettings>;
+        Relationships: [];
+      };
+      // javaria_it_0010_demands.sql
+      demands: {
+        Row: ItDemand;
+        Insert: Partial<ItDemand> &
+          Pick<ItDemand, "product_id" | "department_id" | "quantity" | "justification">;
+        Update: Partial<ItDemand>;
+        Relationships: [];
+      };
+      demand_updates: {
+        Row: ItDemandUpdate;
+        Insert: Partial<ItDemandUpdate> & Pick<ItDemandUpdate, "demand_id" | "body">;
+        Update: Partial<ItDemandUpdate>;
+        Relationships: [];
+      };
+      // javaria_it_0011_demand_approvals.sql
+      department_approvers: {
+        Row: ItDepartmentApprover;
+        Insert: Partial<ItDepartmentApprover> & Pick<ItDepartmentApprover, "department_id" | "person_id">;
+        Update: Partial<ItDepartmentApprover>;
+        Relationships: [];
+      };
+      demand_approvals: {
+        Row: ItDemandApproval;
+        // Written only by it.decide_demand(); no direct grants.
+        Insert: Partial<ItDemandApproval>;
+        Update: Partial<ItDemandApproval>;
+        Relationships: [];
+      };
+      // javaria_it_0012_receiving_documents.sql — written only through functions.
+      receiving_records: {
+        Row: ItReceivingRecord;
+        Insert: Partial<ItReceivingRecord>;
+        Update: Partial<ItReceivingRecord>;
+        Relationships: [];
+      };
+      documents: {
+        Row: ItDocument;
+        Insert: Partial<ItDocument>;
+        Update: Partial<ItDocument>;
+        Relationships: [];
+      };
+      // javaria_it_0014_invoices.sql — written only through functions.
+      invoices: {
+        Row: ItInvoice;
+        Insert: Partial<ItInvoice>;
+        Update: Partial<ItInvoice>;
+        Relationships: [];
+      };
+      // javaria_it_0015_payments.sql — written only through functions.
+      payments: {
+        Row: ItPayment;
+        Insert: Partial<ItPayment>;
+        Update: Partial<ItPayment>;
+        Relationships: [];
+      };
       // javaria_it_0008_it_roles.sql — roles tagged as IT department roles.
       it_roles: {
         Row: { role_id: string; created_at: string; created_by: string | null };
@@ -1327,6 +1691,224 @@ export type Database = {
       list_org_units: {
         Args: Record<string, never>;
         Returns: { id: string; name: string; type: OrgUnitType }[];
+      };
+      // javaria_it_0018_employee_lookup.sql
+      employee_lookup: {
+        Args: { p_search?: string | null; p_person_id?: string | null };
+        Returns: EmployeeLookup[];
+      };
+      // javaria_it_0010_demands.sql
+      demand_person_names: {
+        Args: { p_person_ids: string[] };
+        Returns: { person_id: string; full_name: string }[];
+      };
+      can_process_demand: {
+        Args: { p_site_id: string };
+        Returns: boolean;
+      };
+      can_see_site_demands: {
+        Args: { p_site_id: string };
+        Returns: boolean;
+      };
+      can_read_procurement_masters: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      // javaria_it_0011_demand_approvals.sql
+      is_demand_approver: {
+        Args: { p_department_id: string };
+        Returns: boolean;
+      };
+      my_approver_departments: {
+        Args: Record<string, never>;
+        Returns: string[];
+      };
+      list_department_approvers: {
+        Args: Record<string, never>;
+        Returns: {
+          department_id: string;
+          person_id: string;
+          full_name: string;
+          designation: string | null;
+          can_approve_demands: boolean;
+          can_approve_invoices: boolean;
+          has_permission: boolean;
+        }[];
+      };
+      search_approver_candidates: {
+        Args: { p_search: string };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+        }[];
+      };
+      // javaria_it_0012_receiving_documents.sql
+      receiving_has_gate_proof: {
+        Args: { p_receiving_id: string };
+        Returns: boolean;
+      };
+      assign_demand_vendor: {
+        Args: {
+          p_demand_id: string;
+          p_vendor_id: string;
+          p_expected_date: string | null;
+          p_agreed_price: number | null;
+          p_note: string | null;
+        };
+        Returns: undefined;
+      };
+      // javaria_it_0015_payments.sql
+      is_finance: {
+        Args: Record<string, never>;
+        Returns: boolean;
+      };
+      confirm_invoice_package: {
+        Args: { p_invoice_id: string; p_note: string | null };
+        Returns: undefined;
+      };
+      return_invoice_package: {
+        Args: { p_invoice_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      record_payment: {
+        Args: {
+          p_invoice_id: string;
+          p_reference: string;
+          p_payment_date: string;
+          p_amount: number;
+          p_method: ItPaymentMethod;
+          p_remarks: string | null;
+          p_notify_vendor: boolean;
+        };
+        Returns: string;
+      };
+      send_payment_reference: {
+        Args: { p_payment_id: string };
+        Returns: undefined;
+      };
+      add_payment_document: {
+        Args: {
+          p_payment_id: string;
+          p_storage_path: string;
+          p_file_name: string;
+          p_content_type: string | null;
+          p_size_bytes: number;
+        };
+        Returns: string;
+      };
+      // javaria_it_0014_invoices.sql
+      can_manage_invoices: {
+        Args: { p_site_id: string };
+        Returns: boolean;
+      };
+      is_invoice_approver: {
+        Args: { p_department_id: string };
+        Returns: boolean;
+      };
+      my_invoice_approver_departments: {
+        Args: Record<string, never>;
+        Returns: string[];
+      };
+      log_invoice: {
+        Args: {
+          p_receiving_id: string;
+          p_invoice_number: string;
+          p_invoice_date: string;
+          p_quantity: number;
+          p_amount: number;
+          p_tax: number;
+          p_cost_center: string | null;
+          p_notes: string | null;
+        };
+        Returns: string;
+      };
+      update_invoice: {
+        Args: {
+          p_invoice_id: string;
+          p_invoice_number: string;
+          p_invoice_date: string;
+          p_quantity: number;
+          p_amount: number;
+          p_tax: number;
+          p_cost_center: string | null;
+          p_notes: string | null;
+        };
+        Returns: undefined;
+      };
+      clear_invoice_flag: {
+        Args: { p_invoice_id: string; p_note: string };
+        Returns: undefined;
+      };
+      submit_invoice_for_approval: {
+        Args: { p_invoice_id: string };
+        Returns: undefined;
+      };
+      decide_invoice: {
+        Args: { p_invoice_id: string; p_decision: "Approved" | "Revise"; p_comments: string | null };
+        Returns: undefined;
+      };
+      send_invoice_to_finance: {
+        Args: { p_invoice_id: string };
+        Returns: undefined;
+      };
+      add_invoice_document: {
+        Args: {
+          p_invoice_id: string;
+          p_doc_type: "Invoice" | "Approval" | "Other";
+          p_storage_path: string;
+          p_file_name: string;
+          p_content_type: string | null;
+          p_size_bytes: number;
+        };
+        Returns: string;
+      };
+      revise_rejected_demand: {
+        Args: { p_demand_id: string; p_quantity: number; p_justification: string; p_note: string };
+        Returns: undefined;
+      };
+      record_receiving: {
+        Args: {
+          p_demand_id: string;
+          p_received_date: string;
+          p_quantity: number;
+          p_accepted_quantity: number | null;
+          p_condition: ItReceivingCondition;
+          p_challan_no: string | null;
+          p_gate_pass_no: string | null;
+          p_remarks: string | null;
+        };
+        Returns: string;
+      };
+      update_receiving_refs: {
+        Args: { p_receiving_id: string; p_challan_no: string | null; p_gate_pass_no: string | null };
+        Returns: undefined;
+      };
+      add_procurement_document: {
+        Args: {
+          p_demand_id: string;
+          p_receiving_id: string | null;
+          p_doc_type: ItDocumentType;
+          p_storage_path: string;
+          p_file_name: string;
+          p_content_type: string | null;
+          p_size_bytes: number;
+        };
+        Returns: string;
+      };
+      submit_demand_for_approval: {
+        Args: { p_demand_id: string };
+        Returns: undefined;
+      };
+      decide_demand: {
+        Args: {
+          p_demand_id: string;
+          p_decision: ItDemandDecision;
+          p_approved_quantity: number | null;
+          p_comments: string | null;
+        };
+        Returns: undefined;
       };
       // javaria_it_0004_ticket_asset_link.sql
       // javaria_it_0005_site_routing.sql

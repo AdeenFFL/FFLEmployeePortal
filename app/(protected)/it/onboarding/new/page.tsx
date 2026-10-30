@@ -3,14 +3,11 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { fetchOrgUnits } from "@/lib/it/ticket-data";
 import { LIFECYCLE_KINDS } from "@/lib/it/onboarding";
-
-// Onboarding/Offboarding is one request (a tab switch between the two); Replacement is a wholly
-// separate request raised from the Asset Register, so it never appears alongside these tabs.
-const ONBOARDING_OFFBOARDING_KINDS: ItLifecycleKind[] = ["Onboarding", "Offboarding"];
 import { TICKET_PRIORITIES } from "@/lib/it/tickets";
 import type { ItLifecycleKind } from "@/types/database";
 import { createLifecycleRequest } from "../actions";
 import { ReportingManagerPicker } from "../_components/reporting-manager-picker";
+import { EmployeePicker } from "../_components/employee-picker";
 import {
   cardClass,
   FormMessage,
@@ -19,6 +16,10 @@ import {
   primaryButtonClass,
   secondaryButtonClass,
 } from "../../_components/ticket-ui";
+
+// Onboarding/Offboarding is one request (a tab switch between the two); Replacement is a wholly
+// separate request raised from the Asset Register, so it never appears alongside these tabs.
+const ONBOARDING_OFFBOARDING_KINDS: ItLifecycleKind[] = ["Onboarding", "Offboarding"];
 
 function Field({
   label,
@@ -43,7 +44,7 @@ function Field({
 export default async function NewLifecycleRequestPage({
   searchParams,
 }: {
-  searchParams: Promise<{ kind?: string; q?: string; error?: string }>;
+  searchParams: Promise<{ kind?: string; error?: string }>;
 }) {
   const params = await searchParams;
   const kind: ItLifecycleKind = LIFECYCLE_KINDS.includes(params.kind as ItLifecycleKind)
@@ -53,12 +54,7 @@ export default async function NewLifecycleRequestPage({
   const isReplacement = kind === "Replacement";
   const supabase = await createClient();
 
-  const [{ sites, departments }, { data: employees }] = await Promise.all([
-    fetchOrgUnits(supabase),
-    !isOnboarding && params.q
-      ? supabase.schema("it").rpc("search_employees", { p_search: params.q })
-      : Promise.resolve({ data: null }),
-  ]);
+  const { sites, departments } = await fetchOrgUnits(supabase);
 
   return (
     <div className="py-6">
@@ -91,58 +87,12 @@ export default async function NewLifecycleRequestPage({
         </div>
       )}
 
-      {!isOnboarding && (
-        <form method="get" className={`${cardClass} mb-4 flex flex-wrap items-end gap-3 p-4`}>
-          <input type="hidden" name="kind" value={kind} />
-          <label className="flex-1">
-            <span className={labelClass}>
-              Find the employee <span className="text-red-500">*</span>
-            </span>
-            <input
-              name="q"
-              defaultValue={params.q ?? ""}
-              placeholder="Name or employee code"
-              className={inputClass}
-            />
-          </label>
-          <button type="submit" className={secondaryButtonClass}>
-            Search
-          </button>
-        </form>
-      )}
-
       <form action={createLifecycleRequest} className={`${cardClass} space-y-6 p-6`}>
         <input type="hidden" name="kind" value={kind} />
 
         {!isOnboarding && (
-          <fieldset>
-            <legend className={labelClass}>Employee</legend>
-            {!params.q ? (
-              <p className="text-sm text-slate-400">Search above to pick the employee.</p>
-            ) : (employees ?? []).length === 0 ? (
-              <p className="text-sm text-slate-400">No employees match “{params.q}”.</p>
-            ) : (
-              <ul className="max-h-64 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200">
-                {(employees ?? []).map((e) => (
-                  <li key={e.person_id}>
-                    <label className="flex cursor-pointer items-center gap-3 px-3 py-2 text-sm hover:bg-slate-50">
-                      <input type="radio" name="personId" value={e.person_id} required />
-                      <span className="font-medium text-slate-800">{e.full_name}</span>
-                      <span className="text-slate-500">
-                        {[e.employee_code, e.designation].filter(Boolean).join(" · ")}
-                      </span>
-                      {e.status !== "Active" && (
-                        <span className="text-xs text-amber-600">{e.status}</span>
-                      )}
-                      {kind === "Offboarding" && !e.onboarding_cleared && (
-                        <span className="text-xs text-red-600">Onboarding not yet completed</span>
-                      )}
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </fieldset>
+          // key resets the picker when switching between Offboarding and Replacement.
+          <EmployeePicker key={kind} kind={kind} sites={sites} inputClass={inputClass} labelClass={labelClass} />
         )}
 
         <section className="grid gap-4 sm:grid-cols-2">
@@ -156,13 +106,15 @@ export default async function NewLifecycleRequestPage({
               </Field>
             </>
           )}
-          <Field label={isOnboarding ? "Designation / job title" : "Designation (if changed)"}>
-            <input name="designation" className={inputClass} />
-          </Field>
           {isOnboarding && (
-            <Field label="Grade">
-              <input name="grade" className={inputClass} />
-            </Field>
+            <>
+              <Field label="Designation / job title">
+                <input name="designation" className={inputClass} />
+              </Field>
+              <Field label="Grade">
+                <input name="grade" className={inputClass} />
+              </Field>
+            </>
           )}
           <Field label="Department">
             <select name="departmentId" defaultValue="" className={inputClass}>
@@ -174,33 +126,32 @@ export default async function NewLifecycleRequestPage({
               ))}
             </select>
           </Field>
-          <Field label={isOnboarding ? "Work location" : "Location (if different)"}>
-            <select name="siteId" defaultValue="" className={inputClass}>
-              <option value="">—</option>
-              {sites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-          </Field>
+          {isOnboarding && (
+            <Field label="Work location">
+              <select name="siteId" defaultValue="" className={inputClass}>
+                <option value="">—</option>
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          )}
           <Field label="Reporting manager">
             <ReportingManagerPicker name="reportingManagerId" />
           </Field>
-          <Field label="Employee category" required={kind === "Offboarding"}>
-            <select
-              name="employeeCategory"
-              defaultValue=""
-              required={kind === "Offboarding"}
-              className={inputClass}
-            >
-              <option value="">—</option>
-              <option value="Permanent">Permanent</option>
-              <option value="Contractual">Contractual</option>
-            </select>
-          </Field>
-          {isOnboarding ? (
+          {/* Offboarding / replacement: designation, location, category and last working date
+              come from the employee card above (javaria_it_0018). */}
+          {isOnboarding && (
             <>
+              <Field label="Employee category">
+                <select name="employeeCategory" defaultValue="" className={inputClass}>
+                  <option value="">—</option>
+                  <option value="Permanent">Permanent</option>
+                  <option value="Contractual">Contractual</option>
+                </select>
+              </Field>
               <Field label="Joining date" required>
                 <input type="date" name="joiningDate" required className={inputClass} />
               </Field>
@@ -213,12 +164,6 @@ export default async function NewLifecycleRequestPage({
                 />
               </Field>
             </>
-          ) : (
-            kind === "Offboarding" && (
-              <Field label="Last working date" required>
-                <input type="date" name="lastWorkingDate" required className={inputClass} />
-              </Field>
-            )
           )}
           <Field label="Priority">
             <select name="priority" defaultValue="Medium" className={inputClass}>

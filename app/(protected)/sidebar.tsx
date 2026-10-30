@@ -179,6 +179,48 @@ export function Sidebar({
       ],
     },
     {
+      // Procurement track (Javaria) — 09-it-procurement-plan.md
+      type: "group",
+      label: "IT Procurement",
+      icon: BuildingIcon,
+      children: [
+        { href: "/it/procurement/demands", label: "Demands", permission: "it.demands.read" },
+        { href: "/it/procurement/demands/new", label: "Raise Demand", permission: "it.demands.create" },
+        {
+          href: "/it/procurement/approvals",
+          label: "Approvals",
+          permission: ["it.demands.approve", "it.invoices.approve"],
+        },
+        { href: "/it/procurement/finance", label: "Finance", permission: "it.payments.update" },
+        {
+          href: "/it/procurement/reports",
+          label: "Procurement Reports",
+          permission: ["it.demands.read", "it.demands.read_all", "it.payments.update"],
+        },
+        // Read-only for procurement staff / approvers (javaria_it_0013).
+        {
+          href: "/it/procurement/vendors",
+          label: "Vendors",
+          permission: ["it.vendors.update", "it.demands.read", "it.demands.read_all", "it.demands.approve"],
+        },
+        {
+          href: "/it/procurement/products",
+          label: "Products",
+          permission: ["it.products.update", "it.demands.read", "it.demands.read_all", "it.demands.approve"],
+        },
+        {
+          href: "/it/procurement/settings",
+          label: "Procurement Settings",
+          permission: "it.procurement_settings.update",
+        },
+        {
+          href: "/it/procurement/settings/approvers",
+          label: "Department Approvers",
+          permission: "it.procurement_settings.update",
+        },
+      ],
+    },
+    {
       type: "group",
       label: "Administration",
       icon: KeyIcon,
