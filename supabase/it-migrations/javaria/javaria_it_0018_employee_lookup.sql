@@ -3,7 +3,7 @@
 -- Feature:     Offboarding / replacement — pick the employee, details fill themselves
 --              (08-it-service-management-plan.md; BRD §5.2.1)
 -- Depends on:  javaria_it_0002_onboarding_offboarding.sql, javaria_it_0005_site_routing.sql
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-10-30 by read-only check)
 --
 -- One read-only lookup for the employee picker (HR's new offboarding / replacement form) and the
 -- employee's own "Request offboarding" page:

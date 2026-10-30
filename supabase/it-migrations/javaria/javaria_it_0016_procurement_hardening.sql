@@ -2,7 +2,7 @@
 -- Branch:      IT/javaria
 -- Feature:     Procurement Phase 8 — RLS hardening (09-it-procurement-plan.md §5 Phase 8)
 -- Depends on:  javaria_it_0014_invoices.sql, javaria_it_0015_payments.sql
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-10-30 by read-only check)
 --
 -- Review findings fixed here
 --   1. Money details were readable by anyone who can see the demand — including the plain

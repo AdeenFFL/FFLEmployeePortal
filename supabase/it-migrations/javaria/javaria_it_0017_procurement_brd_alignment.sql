@@ -3,7 +3,7 @@
 -- Feature:     Procurement — BRD alignment review (09-it-procurement-plan.md "BRD alignment
 --              2026-10-28"; BRD §5.5.2, §5.5.4, §5.5.12, §5.5.14, §5.5.16, scope "audit log")
 -- Depends on:  javaria_it_0010 … javaria_it_0016
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-10-30 by read-only check)
 --
 -- What this does (items 1–6 of the review)
 --   1. Category chosen when raising (BRD §5.5.2 "the requester selects a category … mandatory"):
