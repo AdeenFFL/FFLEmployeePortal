@@ -438,12 +438,10 @@ in Categorized after the approver was missing). "Send for approval" stays for ou
 consumables and for an approver whose role still lacks the permission.
 - [x] Apply `javaria_it_0019` after `0017`.
 
-**Self-approval dropped 2026-11-02**: `javaria_it_0020` (a testing-mode switch letting an approver
-decide their own demands / invoices) was applied, then rejected — `javaria_it_0021_revert_self_approval.sql`
-restores the "nobody approves their own demand or invoice" rule and drops the column. Kept from
-that work: Raise Demand says who the chosen department's demands go to (or that none is set), and
+**Self-approval dropped 2026-11-02**: a testing-mode self-approval switch was tried on the live DB
+and rolled back the same day (net effect nil; its migration files were deleted). Kept from that
+work: Raise Demand says who the chosen department's demands go to (or that none is set), and
 Department Approvers links to Administration → Departments for a missing department (e.g. IT).
-- [ ] Apply `javaria_it_0021` (reverses `0020`).
 
 ## 6. Per-PR checklist
 
