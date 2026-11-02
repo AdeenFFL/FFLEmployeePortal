@@ -429,7 +429,14 @@ Also: timeline entries keep insertion order (`demand_updates.created_at` = `cloc
 Still open: consumable stock movement + automatic asset creation (Talha), Security Guard gate
 pass entry, whether the GL / cost-center sign-off must be mandatory (IT BA).
 Not BRD scope (dropped): quotation comparison / vendor selection, GL postings.
-- [ ] Apply `javaria_it_0017` after `0016`.
+- [x] Apply `javaria_it_0017` after `0016`.
+
+**Follow-up 2026-11-02** (`javaria_it_0019_route_waiting_on_new_approver.sql`): adding a department
+approver — or switching on their demands / invoices scope — routes that department's waiting
+Categorized demands and Verified invoices for approval at once (found in testing: 8 demands sat
+in Categorized after the approver was missing). "Send for approval" stays for out-of-stock
+consumables and for an approver whose role still lacks the permission.
+- [ ] Apply `javaria_it_0019` after `0017`.
 
 ## 6. Per-PR checklist
 

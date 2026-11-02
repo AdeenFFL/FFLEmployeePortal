@@ -530,7 +530,7 @@ export default async function DemandPage({
                 <p className="text-sm text-amber-700">
                   The {orgUnits.nameById.get(demand.department_id) ?? "selected"} department has no
                   demand approver yet. An IT admin adds one under Procurement Settings → Department
-                  Approvers.
+                  Approvers — this demand is then sent for approval automatically.
                 </p>
               )}
             </section>
