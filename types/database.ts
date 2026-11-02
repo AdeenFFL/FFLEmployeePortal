@@ -348,7 +348,6 @@ export type ItProcurementSettings = {
   reminder_interval_days: number;
   invoice_tolerance_pct: number;
   consumable_path_enabled: boolean;
-  allow_self_approval: boolean; // javaria_it_0020 — testing mode
   updated_at: string;
   updated_by: string | null;
 };
@@ -1693,10 +1692,6 @@ export type Database = {
       my_approver_departments: {
         Args: Record<string, never>;
         Returns: string[];
-      };
-      self_approval_allowed: {
-        Args: Record<string, never>;
-        Returns: boolean;
       };
       list_department_approvers: {
         Args: Record<string, never>;

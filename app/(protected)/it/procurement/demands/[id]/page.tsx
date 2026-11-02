@@ -123,7 +123,7 @@ export default async function DemandPage({
         .from("products")
         .select("id, product_name, unit, category, is_active, asset_type_id")
         .order("product_name"),
-      supabase.schema("it").from("procurement_settings").select("consumable_path_enabled, allow_self_approval").eq("id", true).maybeSingle(),
+      supabase.schema("it").from("procurement_settings").select("consumable_path_enabled").eq("id", true).maybeSingle(),
       demand.vendor_id
         ? supabase.schema("it").from("vendors").select("vendor_name, email").eq("id", demand.vendor_id).maybeSingle()
         : Promise.resolve({ data: null }),
@@ -178,8 +178,6 @@ export default async function DemandPage({
   const products = productsRes.data ?? [];
   const product = products.find((p) => p.id === demand.product_id);
   const isOwner = demand.requested_by_person_id === personId;
-  // Testing mode (javaria_it_0020): the requester may decide their own demand / invoice.
-  const selfApproval = Boolean(settingsRes.data?.allow_self_approval);
   const consumablePath = settingsRes.data?.consumable_path_enabled ?? true;
 
   const peopleIds = [
@@ -214,7 +212,7 @@ export default async function DemandPage({
     Boolean(canProcess) && (demand.status === "Assigned to Vendor" || demand.status === "Partially Received");
   const showDelivery =
     Boolean(demand.vendor_id) || receivings.length > 0 || documents.length > 0 || canAssignVendor;
-  const canDecide = Boolean(isApprover) && (!isOwner || selfApproval) && demand.status === "Pending Approval";
+  const canDecide = Boolean(isApprover) && !isOwner && demand.status === "Pending Approval";
   const canRevise = Boolean(canProcess) && demand.status === "Rejected";
   // javaria_it_0013: procurement may cancel up to Assigned to Vendor (and Rejected) while nothing
   // has been accepted.
@@ -412,7 +410,6 @@ export default async function DemandPage({
               invoices={invoices}
               canManageInvoices={Boolean(canManageInvoices)}
               canApproveInvoices={Boolean(isInvoiceApprover)}
-              selfApproval={selfApproval}
               personId={personId ?? null}
               payments={payments}
               isFinance={Boolean(isFinance)}
@@ -547,8 +544,7 @@ export default async function DemandPage({
                 : "With the department head."}
               {isApprover && isOwner && (
                 <p className="mt-2 text-xs text-slate-500">
-                  You raised this demand, so another approver of the department has to decide. (For
-                  testing, an IT admin can turn on self-approval in Procurement Settings.)
+                  You raised this demand, so another approver of the department has to decide.
                 </p>
               )}
             </section>

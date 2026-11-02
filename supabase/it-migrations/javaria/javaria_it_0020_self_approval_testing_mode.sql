@@ -4,7 +4,7 @@
 --              (09-it-procurement-plan.md "Follow-up 2026-11-02")
 -- Depends on:  javaria_it_0011_demand_approvals.sql, javaria_it_0014_invoices.sql,
 --              javaria_it_0017_procurement_brd_alignment.sql
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-11-02 by read-only check) — REVERSED by javaria_it_0021
 --
 -- The BRD rule stays the default: nobody approves a demand they raised or an invoice they
 -- logged. For testing (the IT team raises and approves its own demands), Procurement Settings

@@ -436,15 +436,14 @@ approver — or switching on their demands / invoices scope — routes that depa
 Categorized demands and Verified invoices for approval at once (found in testing: 8 demands sat
 in Categorized after the approver was missing). "Send for approval" stays for out-of-stock
 consumables and for an approver whose role still lacks the permission.
-- [ ] Apply `javaria_it_0019` after `0017`.
+- [x] Apply `javaria_it_0019` after `0017`.
 
-**Testing mode 2026-11-02** (`javaria_it_0020_self_approval_testing_mode.sql`): Procurement Settings
-→ "Testing mode — allow self-approval" (`allow_self_approval`, default off) lets an approver decide
-their own demands / invoices so one person can test end to end; such decisions are marked
-"self-approved — testing mode". Turn off before go-live. Raise Demand now says who the chosen
-department's demands go to (or that none is set); Department Approvers links to Administration →
-Departments for a missing department (e.g. IT).
-- [ ] Apply `javaria_it_0020` after `0019`.
+**Self-approval dropped 2026-11-02**: `javaria_it_0020` (a testing-mode switch letting an approver
+decide their own demands / invoices) was applied, then rejected — `javaria_it_0021_revert_self_approval.sql`
+restores the "nobody approves their own demand or invoice" rule and drops the column. Kept from
+that work: Raise Demand says who the chosen department's demands go to (or that none is set), and
+Department Approvers links to Administration → Departments for a missing department (e.g. IT).
+- [ ] Apply `javaria_it_0021` (reverses `0020`).
 
 ## 6. Per-PR checklist
 

@@ -4,7 +4,7 @@
 --              (09-it-procurement-plan.md "BRD alignment 2026-10-28" item 2 follow-up; BRD §5.5.4, §5.5.14)
 -- Depends on:  javaria_it_0011_demand_approvals.sql, javaria_it_0014_invoices.sql,
 --              javaria_it_0017_procurement_brd_alignment.sql
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed live 2026-11-02 by read-only check)
 --
 -- Before: a demand raised while its department had no approver stayed Categorized ("no demand
 -- approver yet"), and after an approver was added someone had to open each demand and press

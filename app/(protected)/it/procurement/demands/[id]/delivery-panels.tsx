@@ -57,7 +57,6 @@ export function DeliverySection({
   invoices,
   canManageInvoices,
   canApproveInvoices,
-  selfApproval,
   personId,
   payments,
   isFinance,
@@ -74,7 +73,6 @@ export function DeliverySection({
   invoices: ItInvoice[];
   canManageInvoices: boolean;
   canApproveInvoices: boolean;
-  selfApproval: boolean;
   personId: string | null;
   payments: ItPayment[];
   isFinance: boolean;
@@ -203,7 +201,6 @@ export function DeliverySection({
                   hasGateProof={hasGateProof}
                   canManage={canManageInvoices}
                   canApprove={canApproveInvoices}
-                  selfApproval={selfApproval}
                   personId={personId}
                   open={open}
                   payments={payments}

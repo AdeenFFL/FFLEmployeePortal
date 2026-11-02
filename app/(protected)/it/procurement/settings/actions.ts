@@ -37,7 +37,6 @@ export async function updateProcurementSettings(formData: FormData) {
       reminder_interval_days: reminder,
       invoice_tolerance_pct: Math.round(tolerance * 100) / 100,
       consumable_path_enabled: formData.get("consumablePathEnabled") === "on",
-      allow_self_approval: formData.get("allowSelfApproval") === "on",
     })
     .eq("id", true);
   if (error) go("error", error.message);

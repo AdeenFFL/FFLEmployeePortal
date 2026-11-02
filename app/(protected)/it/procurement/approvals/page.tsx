@@ -18,13 +18,11 @@ export default async function ApprovalsPage({
   const { notice, error } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: personId }, { data: departmentIds }, orgUnits, productsRes, { data: selfApproval }] = await Promise.all([
+  const [{ data: personId }, { data: departmentIds }, orgUnits, productsRes] = await Promise.all([
     supabase.rpc("current_person_id"),
     supabase.schema("it").rpc("my_approver_departments"),
     fetchOrgUnits(supabase),
     supabase.schema("it").from("products").select("id, product_name, unit"),
-    // Testing mode (javaria_it_0020): own demands / invoices can be decided too.
-    supabase.schema("it").rpc("self_approval_allowed"),
   ]);
   const departments = departmentIds ?? [];
   const productById = new Map((productsRes.data ?? []).map((p) => [p.id, p]));
@@ -119,7 +117,7 @@ export default async function ApprovalsPage({
                       {vendorName.get(inv.vendor_id ?? "") ?? "vendor"} · {orgUnits.nameById.get(d?.department_id ?? "") ?? ""}
                     </span>
                     <span className="ml-auto font-medium tabular-nums text-slate-900">{formatMoney(inv.invoice_amount)}</span>
-                    {inv.created_by === personId && !selfApproval ? (
+                    {inv.created_by === personId ? (
                       <span className="text-xs text-slate-400">You logged it — another approver decides</span>
                     ) : (
                       <Link
@@ -155,7 +153,7 @@ export default async function ApprovalsPage({
             {pending.map((d) => {
               const product = productById.get(d.product_id);
               const total = d.estimated_unit_price === null ? null : Number(d.estimated_unit_price) * d.quantity;
-              const own = d.requested_by_person_id === personId && !selfApproval;
+              const own = d.requested_by_person_id === personId;
               return (
                 <li key={d.id} className="flex flex-wrap items-start justify-between gap-4 px-6 py-4">
                   <div className="min-w-0 flex-1">
