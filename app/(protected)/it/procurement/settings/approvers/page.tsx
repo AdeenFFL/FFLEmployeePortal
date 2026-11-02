@@ -49,6 +49,14 @@ export default async function DepartmentApproversPage({
         permission on their role (IT Roles &amp; Permissions → Procurement). People without Approve
         Demands are flagged below and won&apos;t receive demand approvals.
       </p>
+      <p className="-mt-4 mb-6 text-sm text-slate-500">
+        Department missing (e.g. IT)? Add it under{" "}
+        <Link href="/admin/departments" className="font-medium text-blue-700 hover:underline">
+          Administration → Departments
+        </Link>{" "}
+        and it appears here. Adding an approver sends that department&apos;s waiting demands for
+        approval automatically.
+      </p>
 
       {departments.length === 0 ? (
         <p className={`${cardClass} p-6 text-sm text-amber-700`}>

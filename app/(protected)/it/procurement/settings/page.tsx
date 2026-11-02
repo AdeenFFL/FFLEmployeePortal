@@ -105,6 +105,22 @@ export default async function ProcurementSettingsPage({
               </span>
             </span>
           </label>
+          <label className="flex items-start gap-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
+            <input
+              type="checkbox"
+              name="allowSelfApproval"
+              defaultChecked={settings.allow_self_approval}
+              className="mt-1 h-4 w-4 rounded border-slate-300"
+            />
+            <span>
+              <span className="block text-sm font-medium text-slate-700">Testing mode — allow self-approval</span>
+              <span className="block text-xs text-slate-500">
+                Lets an approver decide demands they raised and invoices they logged, so one person can
+                test the whole flow. Decisions are marked &ldquo;self-approved — testing mode&rdquo;.
+                Turn this off before go-live.
+              </span>
+            </span>
+          </label>
           <button type="submit" className={primaryButtonClass}>
             Save settings
           </button>

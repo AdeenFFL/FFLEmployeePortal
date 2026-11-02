@@ -87,6 +87,7 @@ export function InvoiceBlock({
   hasGateProof,
   canManage,
   canApprove,
+  selfApproval,
   personId,
   open,
   payments,
@@ -103,6 +104,7 @@ export function InvoiceBlock({
   hasGateProof: boolean;
   canManage: boolean;
   canApprove: boolean;
+  selfApproval: boolean;
   personId: string | null;
   open: boolean;
   payments: ItPayment[];
@@ -140,7 +142,8 @@ export function InvoiceBlock({
   const hasFile = invoiceDocs.some((d) => d.doc_type === "Invoice");
   const editable = ["Logged", "Verified", "Flagged", "Revise"].includes(invoice.status);
   const net = Number(invoice.invoice_amount) - Number(invoice.tax_amount);
-  const canDecide = canApprove && invoice.status === "Pending Approval" && invoice.created_by !== personId;
+  const canDecide =
+    canApprove && invoice.status === "Pending Approval" && (invoice.created_by !== personId || selfApproval);
   const financeBlockers = [
     !hasGateProof && "gate pass number or picture on this delivery",
     !hasFile && "the invoice file",
@@ -252,7 +255,7 @@ export function InvoiceBlock({
           </button>
         </form>
       )}
-      {canApprove && invoice.status === "Pending Approval" && invoice.created_by === personId && (
+      {canApprove && !selfApproval && invoice.status === "Pending Approval" && invoice.created_by === personId && (
         <p className="mt-2 text-xs text-slate-500">You logged this invoice, so another approver decides.</p>
       )}
 

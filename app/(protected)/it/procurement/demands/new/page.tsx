@@ -5,6 +5,7 @@ import { checked, fetchOrgUnits, fetchTicketScope, hasItPermission } from "@/lib
 import { DEMAND_CATEGORIES, formatMoney } from "@/lib/it/procurement";
 import { createDemand } from "../actions";
 import { ProductPicker } from "./product-picker";
+import { DepartmentSelect } from "./department-select";
 import {
   cardClass,
   FormMessage,
@@ -26,7 +27,8 @@ export default async function NewDemandPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [productsRes, { sites, departments }, scope, readAll, personRes, canAddProducts] = await Promise.all([
+  const [productsRes, { sites, departments }, scope, readAll, personRes, canAddProducts, approversRes, canManageApprovers] =
+    await Promise.all([
     supabase
       .schema("it")
       .from("products")
@@ -38,12 +40,21 @@ export default async function NewDemandPage({
     hasItPermission(supabase, "it.demands.read_all"),
     supabase.from("persons").select("site_id").eq("id", personId ?? "").maybeSingle(),
     hasItPermission(supabase, "it.products.update"),
+    supabase.schema("it").rpc("list_department_approvers"),
+    hasItPermission(supabase, "it.procurement_settings.update"),
   ]);
   const products = checked(productsRes).data ?? [];
   const homeSite = personRes.data?.site_id ?? null;
   const allowedSites = readAll
     ? sites
     : sites.filter((s) => s.id === homeSite || scope.siteIds.includes(s.id));
+  // Who each department's demands go to (approvers whose role holds Approve Demands).
+  const approversByDept: Record<string, string[]> = {};
+  for (const a of approversRes.data ?? []) {
+    if (a.can_approve_demands && a.has_permission) {
+      (approversByDept[a.department_id] ??= []).push(a.full_name);
+    }
+  }
   const defaultSite = allowedSites.find((s) => s.id === homeSite)?.id ?? allowedSites[0]?.id ?? "";
 
   return (
@@ -109,21 +120,13 @@ export default async function NewDemandPage({
                 className={inputClass}
               />
             </label>
-            <label className="block">
-              <span className={labelClass}>
-                Department <span className="text-red-500">*</span>
-              </span>
-              <select name="departmentId" required defaultValue="" className={inputClass}>
-                <option value="" disabled>
-                  Choose…
-                </option>
-                {departments.map((d) => (
-                  <option key={d.id} value={d.id}>
-                    {d.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <DepartmentSelect
+              departments={departments}
+              approvers={approversByDept}
+              inputClass={inputClass}
+              labelClass={labelClass}
+              canManageApprovers={canManageApprovers}
+            />
             <label className="block">
               <span className={labelClass}>
                 Site <span className="text-red-500">*</span>

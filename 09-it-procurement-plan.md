@@ -438,6 +438,14 @@ in Categorized after the approver was missing). "Send for approval" stays for ou
 consumables and for an approver whose role still lacks the permission.
 - [ ] Apply `javaria_it_0019` after `0017`.
 
+**Testing mode 2026-11-02** (`javaria_it_0020_self_approval_testing_mode.sql`): Procurement Settings
+→ "Testing mode — allow self-approval" (`allow_self_approval`, default off) lets an approver decide
+their own demands / invoices so one person can test end to end; such decisions are marked
+"self-approved — testing mode". Turn off before go-live. Raise Demand now says who the chosen
+department's demands go to (or that none is set); Department Approvers links to Administration →
+Departments for a missing department (e.g. IT).
+- [ ] Apply `javaria_it_0020` after `0019`.
+
 ## 6. Per-PR checklist
 
 Same as `07-it-inventory-plan.md` §6, with the folder `supabase/it-migrations/javaria/` and file
