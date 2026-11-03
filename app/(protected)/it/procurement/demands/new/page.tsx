@@ -2,15 +2,12 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { checked, fetchOrgUnits, fetchTicketScope, hasItPermission } from "@/lib/it/ticket-data";
-import { DEMAND_CATEGORIES, formatMoney } from "@/lib/it/procurement";
+import { DEMAND_CATEGORIES } from "@/lib/it/procurement";
 import { createDemand } from "../actions";
-import { ProductPicker } from "./product-picker";
-import { DepartmentSelect } from "./department-select";
+import { DemandForm } from "./demand-form";
 import {
   cardClass,
   FormMessage,
-  inputClass,
-  labelClass,
   primaryButtonClass,
   secondaryButtonClass,
 } from "../../../_components/ticket-ui";
@@ -27,7 +24,7 @@ export default async function NewDemandPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [productsRes, { sites, departments }, scope, readAll, personRes, canAddProducts, approversRes, canManageApprovers] =
+  const [productsRes, { sites, departments }, scope, readAll, personRes, canAddProducts, approversRes, canManageApprovers, settingsRes] =
     await Promise.all([
     supabase
       .schema("it")
@@ -42,6 +39,7 @@ export default async function NewDemandPage({
     hasItPermission(supabase, "it.products.update"),
     supabase.schema("it").rpc("list_department_approvers"),
     hasItPermission(supabase, "it.procurement_settings.update"),
+    supabase.schema("it").from("procurement_settings").select("consumable_path_enabled").eq("id", true).maybeSingle(),
   ]);
   const products = checked(productsRes).data ?? [];
   const homeSite = personRes.data?.site_id ?? null;
@@ -61,7 +59,7 @@ export default async function NewDemandPage({
     <div className="py-6">
       <PageHeader
         title="Raise Demand"
-        description="Request an item from the Product Master. Non-consumables go straight to the department head for approval."
+        description="Pick the item, say how many and why — the summary shows what it costs and who approves it."
         action={
           <Link href="/it/procurement/demands" className={secondaryButtonClass}>
             Back to demands
@@ -87,81 +85,26 @@ export default async function NewDemandPage({
           site to raise a demand for. Ask an IT admin to add you on Sites &amp; IT Staff.
         </p>
       ) : (
-        <form action={createDemand} className={`${cardClass} max-w-3xl space-y-5 p-6`}>
-          <ProductPicker
-            inputClass={inputClass}
-            labelClass={labelClass}
-            defaultValue={params.product}
-            categories={DEMAND_CATEGORIES}
-            options={products.map((p) => ({
-              id: p.id,
-              label: `${p.product_name}${p.category ? ` — ${p.category}` : ""} · per ${p.unit} · ${formatMoney(
-                p.current_price ?? p.purchase_price,
-              )}`,
-              search: `${p.product_name} ${p.category ?? ""}`.toLowerCase(),
-              // Fixed-asset products are a purchase; anything else is suggested as a consumable.
-              suggestedCategory: p.asset_type_id ? "Open" : "Consumable",
-            }))}
-          />
-
-          <div className="grid gap-4 md:grid-cols-3">
-            <label className="block">
-              <span className={labelClass}>
-                Quantity <span className="text-red-500">*</span>
-              </span>
-              <input
-                type="number"
-                name="quantity"
-                min={1}
-                max={100000}
-                step={1}
-                required
-                defaultValue={1}
-                className={inputClass}
-              />
-            </label>
-            <DepartmentSelect
-              departments={departments}
-              approvers={approversByDept}
-              inputClass={inputClass}
-              labelClass={labelClass}
-              canManageApprovers={canManageApprovers}
-            />
-            <label className="block">
-              <span className={labelClass}>
-                Site <span className="text-red-500">*</span>
-              </span>
-              <select name="siteId" required defaultValue={defaultSite} className={inputClass}>
-                {allowedSites.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </div>
-
-          <label className="block">
-            <span className={labelClass}>
-              Justification <span className="text-red-500">*</span>
-            </span>
-            <textarea
-              name="justification"
-              rows={4}
-              required
-              placeholder="Why is this needed, for whom, and by when?"
-              className={inputClass}
-            />
-          </label>
-
-          <p className="text-xs text-slate-400">
-            The estimated price is taken from the Product Master when you submit. You&apos;ll get a
-            notification as the demand moves along.
-          </p>
-          <button type="submit" className={primaryButtonClass}>
-            Raise demand
-          </button>
-        </form>
+        <DemandForm
+          action={createDemand}
+          products={products.map((p) => ({
+            id: p.id,
+            name: p.product_name,
+            category: p.category,
+            unit: p.unit,
+            price: p.current_price ?? p.purchase_price,
+            fixedAsset: Boolean(p.asset_type_id),
+          }))}
+          categories={DEMAND_CATEGORIES}
+          departments={departments}
+          sites={allowedSites}
+          defaultSite={defaultSite}
+          defaultProduct={params.product}
+          approvers={approversByDept}
+          consumablePath={settingsRes.data?.consumable_path_enabled ?? true}
+          canManageApprovers={canManageApprovers}
+          canAddProducts={canAddProducts}
+        />
       )}
     </div>
   );

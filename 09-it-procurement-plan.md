@@ -443,6 +443,14 @@ and rolled back the same day (net effect nil; its migration files were deleted).
 work: Raise Demand says who the chosen department's demands go to (or that none is set), and
 Department Approvers links to Administration → Departments for a missing department (e.g. IT).
 
+**Follow-up 2026-11-03** (`javaria_it_0020_demands_without_hq_site.sql`): it/adeen's
+`0053_it_remove_hq_site_routing.sql` (run on the live DB) dropped `it.hq_site_id()`, which
+`it.demands_before_insert` still used as a site fallback — every Raise Demand failed. The fallback
+is now the requester's own site only. Raise Demand redesigned: numbered steps (product cards,
+category tiles, quantity stepper, justification) and a live summary (estimated total, approver,
+what happens next); submit enabled once all four steps are complete.
+- [ ] Apply `javaria_it_0020` (fixes Raise Demand on the live DB).
+
 ## 6. Per-PR checklist
 
 Same as `07-it-inventory-plan.md` §6, with the folder `supabase/it-migrations/javaria/` and file
