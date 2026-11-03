@@ -4,7 +4,7 @@
 --              (09-it-procurement-plan.md "Follow-up 2026-11-03")
 -- Depends on:  javaria_it_0017_procurement_brd_alignment.sql; it/adeen
 --              supabase/migrations/0053_it_remove_hq_site_routing.sql (already run on the live DB)
--- Applied to live DB: NO
+-- Applied to live DB: YES (2026-11-03, by Javaria, via Supabase SQL Editor)
 --
 -- 0053 dropped it.hq_site_id() and it.settings. it.demands_before_insert (javaria_it_0017) still
 -- fell back to it.hq_site_id() when no site was given, so every new demand failed with

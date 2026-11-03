@@ -449,7 +449,7 @@ Department Approvers links to Administration → Departments for a missing depar
 is now the requester's own site only. Raise Demand redesigned: numbered steps (product cards,
 category tiles, quantity stepper, justification) and a live summary (estimated total, approver,
 what happens next); submit enabled once all four steps are complete.
-- [ ] Apply `javaria_it_0020` (fixes Raise Demand on the live DB).
+- [x] Apply `javaria_it_0020` (fixes Raise Demand on the live DB).
 
 ## 6. Per-PR checklist
 
