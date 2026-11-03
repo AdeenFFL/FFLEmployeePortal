@@ -77,6 +77,45 @@ function Steps({ demand }: { demand: Pick<ItDemand, "status" | "demand_category"
   );
 }
 
+// Shown once after Raise Demand (createDemand redirects with ?raised=1).
+function RaisedBanner({
+  number,
+  status,
+  approvers,
+  department,
+}: {
+  number: string;
+  status: ItDemand["status"];
+  approvers: string[];
+  department: string;
+}) {
+  const next =
+    status === "Pending Approval"
+      ? `It's with ${approvers.length ? approvers.join(", ") : "the department head"} for approval — you'll be notified of the decision.`
+      : status === "Categorized"
+        ? `${department} has no approver yet, so it waits and is sent for approval automatically once one is added.`
+        : "Procurement has been notified and will take it from here.";
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-5">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xl text-white shadow-sm">
+        ✓
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-base font-semibold text-slate-900">Demand {number} raised</p>
+        <p className="mt-0.5 text-sm text-slate-600">{next}</p>
+      </div>
+      <div className="flex gap-2">
+        <Link href="/it/procurement/demands/new" className={secondaryButtonClass}>
+          Raise another
+        </Link>
+        <Link href="/it/procurement/demands" className={secondaryButtonClass}>
+          All demands
+        </Link>
+      </div>
+    </div>
+  );
+}
+
 // PRC-05 — one page for everyone involved (requester, site procurement, HQ). What's shown and
 // offered follows the same rules the database enforces (javaria_it_0010_demands.sql).
 export default async function DemandPage({
@@ -84,10 +123,10 @@ export default async function DemandPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ notice?: string; error?: string }>;
+  searchParams: Promise<{ notice?: string; error?: string; raised?: string }>;
 }) {
   const { id } = await params;
-  const { notice, error } = await searchParams;
+  const { notice, error, raised } = await searchParams;
   const supabase = await createClient();
 
   const { data: demand } = checked(
@@ -244,6 +283,14 @@ export default async function DemandPage({
         }
       />
       <FormMessage error={error} notice={notice} />
+      {raised === "1" && isOwner && (
+        <RaisedBanner
+          number={demand.demand_number}
+          status={demand.status}
+          approvers={departmentApprovers.map((a) => a.full_name)}
+          department={orgUnits.nameById.get(demand.department_id) ?? "the department"}
+        />
+      )}
       <Steps demand={demand} />
 
       <div className="grid gap-6 lg:grid-cols-3">
