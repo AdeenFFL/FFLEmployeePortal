@@ -95,7 +95,6 @@ export type TicketScope = {
   hqExecutive: boolean;
   siteIds: string[];
   managedSiteIds: string[];
-  hqSiteId: string | null;
 };
 
 export async function fetchTicketScope(supabase: Client): Promise<TicketScope> {
@@ -106,7 +105,6 @@ export async function fetchTicketScope(supabase: Client): Promise<TicketScope> {
     hqExecutive: Boolean(row?.hq_executive),
     siteIds: row?.site_ids ?? [],
     managedSiteIds: row?.managed_site_ids ?? [],
-    hqSiteId: row?.hq_site_id ?? null,
   };
 }
 

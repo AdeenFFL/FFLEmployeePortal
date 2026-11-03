@@ -147,20 +147,9 @@ export function Sidebar({
         },
         { href: "/it/reports", label: "Reports", permission: "it.tickets.read" },
         {
-          href: "/it/settings/tickets",
-          label: "Ticket Settings",
-          permission: "it.ticket_settings.update",
-        },
-        {
-          href: "/it/settings/sites",
-          label: "Sites & IT Staff",
-          permission: "it.ticket_settings.update",
-        },
-        { href: "/it/settings/owners", label: "Category Owners", permission: "it.tickets.read" },
-        {
-          href: "/it/settings/onboarding-owners",
-          label: "Onboarding Task Owners",
-          permission: "it.onboarding.read",
+          href: "/it/settings",
+          label: "Settings",
+          permission: ["it.ticket_settings.update", "it.onboarding.read"],
         },
         {
           href: "/it/admin/roles",
