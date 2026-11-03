@@ -1,13 +1,13 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
+import { BackLink } from "../../_components/ui";
 import { StatusPill } from "@/components/status-pill";
 import { fetchOrgUnits } from "@/lib/it/ticket-data";
 import { formatDate, formatDateTime } from "@/lib/it/tickets";
 import { DOCUMENT_BUCKET, formatMoney, INVOICE_STATUS_TONE } from "@/lib/it/procurement";
 import type { ItDocument } from "@/types/database";
-import { cardClass, Fact, secondaryButtonClass } from "../../../_components/ticket-ui";
+import { cardClass, Fact } from "../../../_components/ticket-ui";
 import { DocumentLinks } from "../../demands/[id]/document-links";
 
 // Invoice package (BRD §5.5.16): everything Finance needs for one invoice on one page — invoice,
@@ -106,14 +106,7 @@ export default async function InvoicePackagePage({ params }: { params: Promise<{
         title={`Invoice package · ${invoice.invoice_number}`}
         description={`${vendor?.vendor_name ?? "Vendor"} · demand ${demand?.demand_number ?? ""} · ${formatMoney(invoice.invoice_amount)}`}
         action={
-          <div className="flex flex-wrap gap-2">
-            <Link href={`/it/procurement/demands/${invoice.demand_id}`} className={secondaryButtonClass}>
-              Open demand
-            </Link>
-            <Link href="/it/procurement/finance" className={secondaryButtonClass}>
-              Finance
-            </Link>
-          </div>
+          <BackLink href={`/it/procurement/demands/${invoice.demand_id}`} label={`Demand ${demand?.demand_number ?? ""}`} />
         }
       />
 

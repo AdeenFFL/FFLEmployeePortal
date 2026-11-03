@@ -451,6 +451,13 @@ category tiles, quantity stepper, justification) and a live summary (estimated t
 what happens next); submit enabled once all four steps are complete.
 - [x] Apply `javaria_it_0020` (fixes Raise Demand on the live DB).
 
+**Navigation & UI pass 2026-11-03**: procurement is one "Procurement" entry under IT Management in
+the sidebar; its pages share a tab bar (`it/procurement/layout.tsx`: Demands, Approvals, Finance,
+Reports, Vendors, Products, Settings — each shown only with its permission) and a single
+"Raise demand" button. Settings and Department Approvers are sub-tabs. Shared pieces in
+`it/procurement/_components/ui.tsx` (SubTabs, StatTile, EmptyState, BackLink); the demand page
+has a connected progress stepper.
+
 ## 6. Per-PR checklist
 
 Same as `07-it-inventory-plan.md` §6, with the folder `supabase/it-migrations/javaria/` and file

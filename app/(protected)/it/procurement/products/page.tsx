@@ -13,6 +13,7 @@ import {
   labelClass,
   primaryButtonClass,
 } from "../../_components/ticket-ui";
+import { EmptyState } from "../_components/ui";
 
 type AssetTypeOption = { id: string; name: string; is_active: boolean };
 
@@ -192,9 +193,10 @@ export default async function ProductsPage({
 
       <div className={cardClass}>
         {rows.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-slate-400">
-            {filtered ? "No products match." : canEdit ? "No products yet — add the first one above." : "No products yet."}
-          </p>
+          <EmptyState
+            title={filtered ? "No products match" : "No products yet"}
+            text={filtered ? "Try another search or filter." : canEdit ? "Add the first item with the form above — demands are raised against these." : undefined}
+          />
         ) : (
           <ul className="divide-y divide-slate-100">
             {rows.map((p) => (

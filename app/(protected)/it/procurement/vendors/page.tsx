@@ -12,6 +12,7 @@ import {
   labelClass,
   primaryButtonClass,
 } from "../../_components/ticket-ui";
+import { EmptyState } from "../_components/ui";
 
 // One set of fields for both Add and Edit (defaults empty for Add).
 function VendorFields({ vendor }: { vendor?: ItVendor }) {
@@ -122,9 +123,10 @@ export default async function VendorsPage({
 
       <div className={cardClass}>
         {rows.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-slate-400">
-            {q || status !== "active" ? "No vendors match." : canEdit ? "No vendors yet — add the first one above." : "No vendors yet."}
-          </p>
+          <EmptyState
+            title={q || status !== "active" ? "No vendors match" : "No vendors yet"}
+            text={q || status !== "active" ? "Try another search or status." : canEdit ? "Add the first supplier with the form above." : undefined}
+          />
         ) : (
           <ul className="divide-y divide-slate-100">
             {rows.map((v) => (

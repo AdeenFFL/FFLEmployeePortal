@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
+import { EmptyState } from "../_components/ui";
 import { hasItPermission } from "@/lib/it/ticket-data";
 import { parseWindow, toDateInput } from "@/lib/it/ticket-metrics";
 import { formatMoney } from "@/lib/it/procurement";
@@ -142,7 +143,7 @@ export default async function ProcurementReportsPage({
           <p className="text-sm text-slate-500">{PROCUREMENT_REPORTS[kind].description}</p>
         </div>
         {rows.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-slate-400">Nothing to report.</p>
+          <EmptyState title="Nothing to report" text="Try a wider date range." />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">

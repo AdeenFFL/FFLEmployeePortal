@@ -9,8 +9,8 @@ import {
   cardClass,
   FormMessage,
   primaryButtonClass,
-  secondaryButtonClass,
 } from "../../../_components/ticket-ui";
+import { BackLink } from "../../_components/ui";
 
 // PRC-04 Raise demand (BRD §5.5.1). Gated by it.demands.create. The site list is limited to the
 // raiser's own site and the sites whose IT team they're on (all sites with read_all) — the
@@ -60,11 +60,7 @@ export default async function NewDemandPage({
       <PageHeader
         title="Raise Demand"
         description="Pick the item, say how many and why — the summary shows what it costs and who approves it."
-        action={
-          <Link href="/it/procurement/demands" className={secondaryButtonClass}>
-            Back to demands
-          </Link>
-        }
+        action={<BackLink href="/it/procurement/demands" label="All demands" />}
       />
       <FormMessage error={params.error} />
 
