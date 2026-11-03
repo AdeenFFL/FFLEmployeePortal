@@ -59,13 +59,8 @@ export default async function ProcurementReportsPage({
   return (
     <div className="py-6">
       <PageHeader
-        title="Procurement Reports"
+        title="Reports"
         description="Demands, cycle time, spend, receiving shortfalls and invoices at Finance — exportable as CSV."
-        action={
-          <Link href="/it/procurement/demands" className={secondaryButtonClass}>
-            Demand queue
-          </Link>
-        }
       />
 
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">

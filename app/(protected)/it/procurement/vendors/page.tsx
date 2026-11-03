@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -12,7 +11,6 @@ import {
   inputClass,
   labelClass,
   primaryButtonClass,
-  secondaryButtonClass,
 } from "../../_components/ticket-ui";
 
 // One set of fields for both Add and Edit (defaults empty for Add).
@@ -87,13 +85,8 @@ export default async function VendorsPage({
   return (
     <div className="py-6">
       <PageHeader
-        title="Vendor Master"
+        title="Vendors"
         description="Suppliers that demands, receiving, assets and repairs are linked to. Deactivate instead of deleting."
-        action={
-          <Link href="/it/procurement/products" className={secondaryButtonClass}>
-            Product Master
-          </Link>
-        }
       />
       <FormMessage error={params.error} notice={params.notice} />
 

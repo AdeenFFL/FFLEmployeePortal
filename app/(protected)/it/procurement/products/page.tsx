@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -13,7 +12,6 @@ import {
   inputClass,
   labelClass,
   primaryButtonClass,
-  secondaryButtonClass,
 } from "../../_components/ticket-ui";
 
 type AssetTypeOption = { id: string; name: string; is_active: boolean };
@@ -141,13 +139,8 @@ export default async function ProductsPage({
   return (
     <div className="py-6">
       <PageHeader
-        title="Product Master"
+        title="Products"
         description="Items IT buys. Products with an asset type become assets when received; the rest go into stock."
-        action={
-          <Link href="/it/procurement/vendors" className={secondaryButtonClass}>
-            Vendor Master
-          </Link>
-        }
       />
       <FormMessage error={params.error} notice={params.notice} />
 

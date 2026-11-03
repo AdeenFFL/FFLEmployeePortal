@@ -14,7 +14,8 @@ import {
   todayIso,
 } from "@/lib/it/procurement";
 import type { ItDemandCategory, ItDemandStatus } from "@/types/database";
-import { cardClass, FormMessage, inputClass, primaryButtonClass } from "../../_components/ticket-ui";
+import { cardClass, FormMessage, inputClass, primaryButtonClass, secondaryButtonClass } from "../../_components/ticket-ui";
+import { EmptyState, StatTile, SubTabs } from "../_components/ui";
 
 const PAGE_SIZE = 100;
 
@@ -170,21 +171,18 @@ export default async function DemandsPage({
     : { data: [] };
   const nameById = new Map((people ?? []).map((p) => [p.person_id, p.full_name]));
 
+  const base = `/it/procurement/demands?view=${view}`;
   const kpis = [
-    { label: "To categorise / route", value: openRes.count ?? 0 },
-    { label: "Awaiting approval", value: approvalRes.count ?? 0 },
-    { label: "Awaiting delivery", value: deliveryRes.count ?? 0 },
+    { label: "Waiting to be sent", value: openRes.count ?? 0, tone: "slate" as const, href: `${base}&status=Categorized` },
+    { label: "Awaiting approval", value: approvalRes.count ?? 0, tone: "amber" as const, href: `${base}&status=Pending%20Approval` },
+    { label: "Awaiting delivery", value: deliveryRes.count ?? 0, tone: "blue" as const, href: `${base}&status=Assigned%20to%20Vendor` },
   ];
-  const tab = (key: "queue" | "mine" | "action", label: string) => (
-    <Link
-      href={`/it/procurement/demands?view=${key}`}
-      className={`rounded-lg px-3 py-1.5 text-sm font-medium ${
-        view === key ? "bg-blue-600 text-white" : "text-slate-600 hover:bg-slate-100"
-      }`}
-    >
-      {label}
-    </Link>
-  );
+  const views = [
+    ...(canUpdate ? [{ key: "action", label: "Needs action" }] : []),
+    { key: "queue", label: "All demands" },
+    { key: "mine", label: "My demands" },
+  ].map((v) => ({ ...v, href: `/it/procurement/demands?view=${v.key}` }));
+  const filtered = Boolean(q || params.site || category || (params.status && params.status !== "active"));
 
   return (
     <div className="py-6">
@@ -199,44 +197,28 @@ export default async function DemandsPage({
               ? "Purchase demands from every site."
               : "Purchase demands for the sites whose IT team you're on."
         }
-        action={
-          canCreate ? (
-            <Link href="/it/procurement/demands/new" className={primaryButtonClass}>
-              Raise Demand
-            </Link>
-          ) : undefined
-        }
       />
       <FormMessage error={params.error} notice={params.notice} />
 
-      {isStaff && (
-        <div className="mb-4 flex gap-2">
-          {canUpdate && tab("action", "Needs action")}
-          {tab("queue", "Queue")}
-          {tab("mine", "My demands")}
-        </div>
-      )}
+      {isStaff && <SubTabs items={views} active={view} />}
 
       <dl className="mb-6 grid gap-3 sm:grid-cols-3">
         {kpis.map((k) => (
-          <div key={k.label} className={`${cardClass} px-5 py-4`}>
-            <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">{k.label}</dt>
-            <dd className="mt-1 text-2xl font-semibold text-slate-900">{k.value}</dd>
-          </div>
+          <StatTile key={k.label} {...k} />
         ))}
       </dl>
 
-      <form method="get" className={`${cardClass} mb-6 flex flex-wrap items-center gap-3 p-4`}>
+      <form method="get" className="mb-4 flex flex-wrap items-center gap-2">
         <input type="hidden" name="view" value={view} />
         <input
           name="q"
           defaultValue={params.q ?? ""}
-          placeholder="DMD-000123"
+          placeholder="Search DMD-000123"
           aria-label="Search demand number"
-          className={`${inputClass} w-40`}
+          className={`${inputClass} w-48 bg-white`}
         />
         {view !== "action" && (
-          <select name="status" defaultValue={status} aria-label="Status" className={`${inputClass} w-auto`}>
+          <select name="status" defaultValue={status} aria-label="Status" className={`${inputClass} w-auto bg-white`}>
             <option value="active">Active</option>
             <option value="all">All statuses</option>
             {DEMAND_STATUSES.map((s) => (
@@ -246,7 +228,7 @@ export default async function DemandsPage({
             ))}
           </select>
         )}
-        <select name="category" defaultValue={category} aria-label="Category" className={`${inputClass} w-auto`}>
+        <select name="category" defaultValue={category} aria-label="Category" className={`${inputClass} w-auto bg-white`}>
           <option value="">All categories</option>
           <option value="none">Not categorised</option>
           {DEMAND_CATEGORIES.map((c) => (
@@ -256,7 +238,7 @@ export default async function DemandsPage({
           ))}
         </select>
         {view !== "mine" && (
-          <select name="site" defaultValue={params.site ?? ""} aria-label="Site" className={`${inputClass} w-auto`}>
+          <select name="site" defaultValue={params.site ?? ""} aria-label="Site" className={`${inputClass} w-auto bg-white`}>
             <option value="">All my sites</option>
             {orgUnits.sites.map((s) => (
               <option key={s.id} value={s.id}>
@@ -268,21 +250,38 @@ export default async function DemandsPage({
         <button type="submit" className={primaryButtonClass}>
           Filter
         </button>
+        {filtered && (
+          <Link href={`/it/procurement/demands?view=${view}`} className={secondaryButtonClass}>
+            Clear
+          </Link>
+        )}
       </form>
 
       <div className={cardClass}>
         {rows.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-slate-400">
-            {view === "mine"
-              ? "You haven't raised any demands matching this filter."
-              : view === "action"
-                ? "Nothing waiting on procurement right now."
-                : "No demands match."}
-          </p>
+          <EmptyState
+            title={
+              view === "action"
+                ? "All caught up"
+                : filtered
+                  ? "No demands match these filters"
+                  : view === "mine"
+                    ? "You haven't raised any demands yet"
+                    : "No active demands"
+            }
+            text={
+              view === "action"
+                ? "Nothing is waiting on procurement right now."
+                : filtered
+                  ? "Try clearing a filter or searching another number."
+                  : "Demands appear here as soon as they are raised."
+            }
+            action={canCreate && !filtered && view !== "action" ? { href: "/it/procurement/demands/new", label: "Raise a demand" } : undefined}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left text-sm">
-              <thead className="border-b border-slate-200 text-xs uppercase tracking-wide text-slate-400">
+              <thead className="border-b border-slate-200 bg-slate-50/60 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
                   <th className="px-6 py-3 font-medium">Demand</th>
                   <th className="px-6 py-3 font-medium">Product</th>
@@ -301,16 +300,17 @@ export default async function DemandsPage({
                   const product = productById.get(d.product_id);
                   const total = d.estimated_unit_price === null ? null : Number(d.estimated_unit_price) * d.quantity;
                   return (
-                    <tr key={d.id} className="hover:bg-slate-50">
+                    <tr key={d.id} className="group relative hover:bg-blue-50/40">
                       <td className="whitespace-nowrap px-6 py-3">
+                        {/* The whole row opens the demand (stretched link). */}
                         <Link
                           href={`/it/procurement/demands/${d.id}`}
-                          className="font-medium text-blue-700 hover:underline"
+                          className="font-medium text-blue-700 after:absolute after:inset-0 group-hover:underline"
                         >
                           {d.demand_number}
                         </Link>
                       </td>
-                      <td className="px-6 py-3 text-slate-800">{product?.product_name ?? "—"}</td>
+                      <td className="px-6 py-3 font-medium text-slate-800">{product?.product_name ?? "—"}</td>
                       <td className="whitespace-nowrap px-6 py-3 text-right tabular-nums text-slate-700">
                         {d.quantity} {product?.unit ?? ""}
                       </td>
