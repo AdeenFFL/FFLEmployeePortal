@@ -1280,6 +1280,18 @@ export type Database = {
         Args: Record<string, never>;
         Returns: { person_id: string; full_name: string; designation: string | null }[];
       };
+      search_employees_for_my_sites: {
+        Args: { p_search: string };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          site_id: string | null;
+          status: string;
+          onboarding_cleared: boolean;
+        }[];
+      };
       routing_team_for_site: {
         Args: { p_site_id: string | null };
         Returns: string;

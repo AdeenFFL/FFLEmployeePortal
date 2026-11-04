@@ -4,7 +4,8 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { Modal } from "@/components/modal";
 import { createTicket } from "./actions";
-import { cardClass, inputClass, labelClass, primaryButtonClass } from "../../it/_components/ticket-ui";
+import { hasItPermission } from "@/lib/it/ticket-data";
+import { cardClass, inputClass, labelClass, primaryButtonClass, secondaryButtonClass } from "../../it/_components/ticket-ui";
 
 export const HR_STATUS_TONE: Record<string, "positive" | "neutral" | "warning" | "info"> = {
   Open: "info",
@@ -35,7 +36,7 @@ export default async function HrTicketsPage({
     .eq("auth_user_id", user!.id)
     .maybeSingle();
 
-  const [{ data: categories }, { data: tickets }] = await Promise.all([
+  const [{ data: categories }, { data: tickets }, canSelfOffboard, canOffboardSiteUsers] = await Promise.all([
     supabase.schema("hr").from("ticket_categories").select("id, name").eq("is_active", true).order("name"),
     supabase
       .schema("hr")
@@ -43,6 +44,8 @@ export default async function HrTicketsPage({
       .select("id, subject, status, created_at")
       .eq("person_id", account?.person_id ?? "")
       .order("created_at", { ascending: false }),
+    hasItPermission(supabase, "hr.offboarding.create_self"),
+    hasItPermission(supabase, "hr.offboarding.create_for_site_users"),
   ]);
 
   return (
@@ -51,9 +54,21 @@ export default async function HrTicketsPage({
         title="HR Tickets"
         description="Submit a request or complaint to HR and track its progress."
         action={
-          <Link href={`${BASE_PATH}?compose=new`} className={primaryButtonClass}>
-            + Submit Ticket
-          </Link>
+          <div className="flex gap-2">
+            {canOffboardSiteUsers && (
+              <Link href="/it/my-offboarding/new-for-employee" className={secondaryButtonClass}>
+                Submit Offboarding (for an Employee)
+              </Link>
+            )}
+            {canSelfOffboard && (
+              <Link href="/it/my-offboarding/new" className={secondaryButtonClass}>
+                Submit Offboarding Request
+              </Link>
+            )}
+            <Link href={`${BASE_PATH}?compose=new`} className={primaryButtonClass}>
+              + Submit Ticket
+            </Link>
+          </div>
         }
       />
 

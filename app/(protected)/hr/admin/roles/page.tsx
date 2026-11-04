@@ -20,6 +20,10 @@ const HR_PERMISSION_SECTIONS: { label: string; keys: string[] }[] = [
     label: "Anonymous Feedback",
     keys: ["hr.anonymous_feedback.read", "hr.anonymous_feedback.update"],
   },
+  {
+    label: "Offboarding Requests",
+    keys: ["hr.offboarding.create_self", "hr.offboarding.create_for_site_users"],
+  },
   { label: "Administration", keys: ["hr.manage_role_permissions"] },
 ];
 const ALL_HR_PERMISSION_KEYS = HR_PERMISSION_SECTIONS.flatMap((s) => s.keys);

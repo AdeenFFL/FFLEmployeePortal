@@ -18,6 +18,9 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/my-tickets": "module:it",
   "/it/tickets": "it.tickets.read",
   "/it/my-onboarding": "module:it",
+  // More specific prefixes first — permissionKeyForPath returns the first match.
+  "/it/my-offboarding/new-for-employee": "hr.offboarding.create_for_site_users",
+  "/it/my-offboarding/new": "hr.offboarding.create_self",
   "/it/my-offboarding": "module:it",
   // Unified staff queue (tickets + onboarding/offboarding/replacement) — needs either
   // it.tickets.read or it.onboarding.read, which this single-key map can't express as "any of".

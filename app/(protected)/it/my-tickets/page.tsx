@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
-import { checked, fetchCategoryMaps } from "@/lib/it/ticket-data";
+import { checked, fetchCategoryMaps, hasItPermission } from "@/lib/it/ticket-data";
 import { formatDate } from "@/lib/it/tickets";
 import {
   cardClass,
   FormMessage,
   PriorityBadge,
   primaryButtonClass,
+  secondaryButtonClass,
   StatusBadge,
 } from "../_components/ticket-ui";
 
@@ -21,23 +22,26 @@ export default async function MyItTicketsPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [{ data: tickets }, { categoryNameById }, { count: onboardingCount }] = await Promise.all([
-    supabase
-      .schema("it")
-      .from("tickets")
-      .select("id, ticket_number, subject, category_id, priority, status, created_at")
-      .or(`requester_person_id.eq.${personId},requested_for_person_id.eq.${personId}`)
-      .order("created_at", { ascending: false })
-      .then(checked),
-    fetchCategoryMaps(supabase),
-    // New joiners get a pointer to /it/my-onboarding (not a permanent nav item for everyone).
-    supabase
-      .schema("it")
-      .from("onboarding_offboarding")
-      .select("id", { count: "exact", head: true })
-      .eq("kind", "Onboarding")
-      .eq("person_id", personId ?? ""),
-  ]);
+  const [{ data: tickets }, { categoryNameById }, { count: onboardingCount }, canSelfOffboard, canOffboardSiteUsers] =
+    await Promise.all([
+      supabase
+        .schema("it")
+        .from("tickets")
+        .select("id, ticket_number, subject, category_id, priority, status, created_at")
+        .or(`requester_person_id.eq.${personId},requested_for_person_id.eq.${personId}`)
+        .order("created_at", { ascending: false })
+        .then(checked),
+      fetchCategoryMaps(supabase),
+      // New joiners get a pointer to /it/my-onboarding (not a permanent nav item for everyone).
+      supabase
+        .schema("it")
+        .from("onboarding_offboarding")
+        .select("id", { count: "exact", head: true })
+        .eq("kind", "Onboarding")
+        .eq("person_id", personId ?? ""),
+      hasItPermission(supabase, "hr.offboarding.create_self"),
+      hasItPermission(supabase, "hr.offboarding.create_for_site_users"),
+    ]);
 
   const rows = tickets ?? [];
 
@@ -47,9 +51,21 @@ export default async function MyItTicketsPage({
         title="My IT Tickets"
         description="Raise an IT support request and track its progress."
         action={
-          <Link href="/it/my-tickets/new" className={primaryButtonClass}>
-            Raise IT Ticket
-          </Link>
+          <div className="flex gap-2">
+            {canOffboardSiteUsers && (
+              <Link href="/it/my-offboarding/new-for-employee" className={secondaryButtonClass}>
+                Submit Offboarding (for an Employee)
+              </Link>
+            )}
+            {canSelfOffboard && (
+              <Link href="/it/my-offboarding/new" className={secondaryButtonClass}>
+                Submit Offboarding Request
+              </Link>
+            )}
+            <Link href="/it/my-tickets/new" className={primaryButtonClass}>
+              Raise IT Ticket
+            </Link>
+          </div>
         }
       />
       <FormMessage error={error} notice={notice} />
