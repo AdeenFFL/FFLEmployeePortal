@@ -71,8 +71,20 @@ export async function createLifecycleRequest(formData: FormData) {
   const kind = text(formData, "kind") as ItLifecycleKind;
   const back = `/it/onboarding/new?kind=${encodeURIComponent(kind)}`;
   if (!LIFECYCLE_KINDS.includes(kind)) go("/it/onboarding/new", "error", "Choose a request type.");
+  // Offboarding no longer has a form on this screen (new/page.tsx never submits this kind
+  // anymore) — it has its own two dedicated, permission-split screens instead:
+  // /it/my-offboarding/new (self) and /it/my-offboarding/new-for-employee (on someone else's
+  // behalf, site-scoped). Reject it here rather than silently reinterpreting a stale link.
+  if (kind === "Offboarding") {
+    go("/it/onboarding", "error", "Raise offboarding from My Offboarding instead.");
+  }
 
-  const { supabase } = await requirePermission("it.onboarding.create");
+  // Each remaining kind has its own permission (0056_hr_onboarding_replacement_permissions.sql).
+  const kindPermission: Record<Exclude<ItLifecycleKind, "Offboarding">, string> = {
+    Onboarding: "hr.onboarding.create",
+    Replacement: "hr.replacement.create",
+  };
+  const { supabase } = await requirePermission(kindPermission[kind as Exclude<ItLifecycleKind, "Offboarding">]);
 
   const priority = (text(formData, "priority") || "Medium") as ItTicketPriority;
   if (!TICKET_PRIORITIES.includes(priority)) go(back, "error", "Invalid priority.");
@@ -119,10 +131,6 @@ export async function createLifecycleRequest(formData: FormData) {
     }
   } else {
     if (!personId) go(back, "error", "Select the employee.");
-    if (kind === "Offboarding") {
-      if (!text(formData, "lastWorkingDate")) go(back, "error", "Enter the last working date.");
-      if (!category) go(back, "error", "Choose Permanent or Contractual.");
-    }
   }
 
   const { data: created, error } = await supabase
@@ -445,10 +453,12 @@ export async function completeEmailAccountTask(requestId: string, itemId: string
 }
 
 // Powers the reporting-manager combobox on the New request form. Data-returning, not a form
-// action; reuses the same it.search_employees RPC the Offboarding/Replacement employee picker
-// on that page already calls server-side, gated the same way the form itself is.
+// action; reuses the same it.search_employees RPC the Replacement employee picker on that page
+// already calls server-side. Loosely gated (module:it, same as the route) since it's just a
+// read convenience — it.search_employees() has its own permission check, and the real
+// enforcement for actually creating a request is per-kind in createLifecycleRequest + RLS.
 export async function searchReportingManagers(query: string) {
-  const { supabase } = await requirePermission("it.onboarding.create");
+  const { supabase } = await requirePermission("module:it");
   if (!query.trim()) return [];
   const { data } = await supabase.schema("it").rpc("search_employees", { p_search: query });
   return data ?? [];

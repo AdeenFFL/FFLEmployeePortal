@@ -68,7 +68,7 @@ export default async function AssetRegisterPage({
     supabase.from("companies").select("id, name").order("name"),
     fetchOrgUnits(supabase),
     supabase.rpc("has_permission", { p_permission_key: "it.assets.create" }),
-    supabase.rpc("has_permission", { p_permission_key: "it.onboarding.create" }),
+    supabase.rpc("has_permission", { p_permission_key: "hr.replacement.create" }),
   ]);
 
   const hasFilters = Boolean(search || params.type || status || params.site || params.company);
