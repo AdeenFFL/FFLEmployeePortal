@@ -5,7 +5,7 @@ import { PageHeader } from "@/components/page-header";
 import { checked, hasItPermission } from "@/lib/it/ticket-data";
 import { formatMoney } from "@/lib/it/procurement";
 import { cardClass, FormMessage, primaryButtonClass } from "../../_components/ticket-ui";
-import { EmptyState } from "../_components/ui";
+import { EmptyState, FilterChips } from "../_components/ui";
 import { ProductIcon, productKind } from "../_components/product-icon";
 
 const PATH = "/it/procurement/products";
@@ -104,7 +104,7 @@ export default async function ProductsPage({
             className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
           />
         </form>
-        <Chips
+        <FilterChips
           label="Kind"
           items={[
             { label: "All", href: href({ kind: "all" }), active: kind === "all" },
@@ -112,7 +112,7 @@ export default async function ProductsPage({
             { label: "Consumables", href: href({ kind: "consumable" }), active: kind === "consumable" },
           ]}
         />
-        <Chips
+        <FilterChips
           label="Status"
           items={[
             { label: "Active", href: href({ status: "active" }), active: status === "active" },
@@ -221,25 +221,6 @@ export default async function ProductsPage({
           {rows.length} product{rows.length === 1 ? "" : "s"}
         </p>
       )}
-    </div>
-  );
-}
-
-function Chips({ label, items }: { label: string; items: { label: string; href: string; active: boolean }[] }) {
-  return (
-    <div role="group" aria-label={label} className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
-      {items.map((i) => (
-        <Link
-          key={i.label}
-          href={i.href}
-          aria-current={i.active ? "true" : undefined}
-          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
-            i.active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
-          }`}
-        >
-          {i.label}
-        </Link>
-      ))}
     </div>
   );
 }

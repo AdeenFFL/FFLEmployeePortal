@@ -1,6 +1,7 @@
 import { PRODUCT_UNITS } from "@/lib/it/procurement";
 import type { ItProduct } from "@/types/database";
 import { inputClass, labelClass } from "../../_components/ticket-ui";
+import { FormGroup } from "../_components/ui";
 
 export type AssetTypeOption = { id: string; name: string; is_active: boolean };
 
@@ -30,7 +31,7 @@ export function ProductFields({
         ))}
       </datalist>
 
-      <Group title="Details" hint="What people see when they raise a demand.">
+      <FormGroup title="Details" hint="What people see when they raise a demand.">
         <label className="block sm:col-span-2">
           <span className={labelClass}>
             Product name <span className="text-red-500">*</span>
@@ -57,14 +58,14 @@ export function ProductFields({
           <span className={labelClass}>Unit</span>
           <input name="unit" list="product-units" defaultValue={product?.unit ?? "Each"} className={inputClass} />
         </label>
-      </Group>
+      </FormGroup>
 
-      <Group title="Price" hint="Current price is used to estimate a demand's total.">
+      <FormGroup title="Price" hint="Current price is used to estimate a demand's total.">
         <MoneyInput name="purchasePrice" label="Purchase price" value={product?.purchase_price} />
         <MoneyInput name="currentPrice" label="Current price" value={product?.current_price} />
-      </Group>
+      </FormGroup>
 
-      <Group title="Tracking" hint="Pick an asset type if each unit received should be registered as an asset.">
+      <FormGroup title="Tracking" hint="Pick an asset type if each unit received should be registered as an asset.">
         <label className="block sm:col-span-2">
           <span className={labelClass}>Asset type</span>
           <select name="assetTypeId" defaultValue={product?.asset_type_id ?? ""} className={inputClass}>
@@ -77,9 +78,9 @@ export function ProductFields({
             ))}
           </select>
         </label>
-      </Group>
+      </FormGroup>
 
-      <Group title="Specification" hint="Optional — model, size, configuration.">
+      <FormGroup title="Specification" hint="Optional — model, size, configuration.">
         <label className="block sm:col-span-2">
           <span className="sr-only">Description / specification</span>
           <textarea
@@ -90,20 +91,8 @@ export function ProductFields({
             className={inputClass}
           />
         </label>
-      </Group>
+      </FormGroup>
     </div>
-  );
-}
-
-function Group({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
-  return (
-    <section className="grid gap-4 px-6 py-5 md:grid-cols-[14rem_1fr]">
-      <div>
-        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
-        <p className="mt-0.5 text-xs text-slate-500">{hint}</p>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
-    </section>
   );
 }
 

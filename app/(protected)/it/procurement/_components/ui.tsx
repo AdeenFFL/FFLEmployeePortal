@@ -101,6 +101,51 @@ export function BackLink({ href, label }: { href: string; label: string }) {
   );
 }
 
+// One section of a master-data form: title + hint on the left, fields on the right.
+export function FormGroup({ title, hint, children }: { title: string; hint: string; children: React.ReactNode }) {
+  return (
+    <section className="grid gap-4 px-6 py-5 md:grid-cols-[14rem_1fr]">
+      <div>
+        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+        <p className="mt-0.5 text-xs text-slate-500">{hint}</p>
+      </div>
+      <div className="grid gap-4 sm:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+// Segmented filter links (e.g. Active | Inactive | All) for list pages.
+export function FilterChips({ label, items }: { label: string; items: { label: string; href: string; active: boolean }[] }) {
+  return (
+    <div role="group" aria-label={label} className="inline-flex rounded-lg border border-slate-200 bg-white p-0.5">
+      {items.map((i) => (
+        <Link
+          key={i.label}
+          href={i.href}
+          aria-current={i.active ? "true" : undefined}
+          className={`rounded-md px-3 py-1.5 text-xs font-medium transition ${
+            i.active ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100"
+          }`}
+        >
+          {i.label}
+        </Link>
+      ))}
+    </div>
+  );
+}
+
+// Two-letter avatar text for a name.
+export function initials(name: string) {
+  return (
+    name
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((w) => w[0]!.toUpperCase())
+      .join("") || "?"
+  );
+}
+
 export const SETTINGS_TABS = [
   { key: "rules", href: "/it/procurement/settings", label: "Rules" },
   { key: "approvers", href: "/it/procurement/settings/approvers", label: "Department approvers" },

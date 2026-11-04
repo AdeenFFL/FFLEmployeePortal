@@ -10,8 +10,8 @@ import { requirePermission } from "@/lib/auth/require-permission";
 
 const PATH = "/it/procurement/vendors";
 
-function go(kind: "error" | "notice", message: string): never {
-  redirect(`${PATH}?${kind}=${encodeURIComponent(message)}`);
+function go(path: string, kind: "error" | "notice", message: string): never {
+  redirect(`${path}?${kind}=${encodeURIComponent(message)}`);
 }
 
 function text(formData: FormData, key: string) {
@@ -39,26 +39,29 @@ function friendly(error: { code?: string; message: string }, name: string) {
 
 export async function createVendor(formData: FormData) {
   const { supabase } = await requirePermission("it.vendors.update");
+  const back = `${PATH}/new`;
   const fields = vendorFields(formData);
-  if (!fields.vendor_name) go("error", "Vendor name is required.");
+  if (!fields.vendor_name) go(back, "error", "Vendor name is required.");
 
-  const { error } = await supabase.schema("it").from("vendors").insert(fields);
-  if (error) go("error", friendly(error, fields.vendor_name));
+  const { data, error } = await supabase.schema("it").from("vendors").insert(fields).select("id").single();
+  if (error || !data) go(back, "error", error ? friendly(error, fields.vendor_name) : "Vendor was not saved.");
 
   revalidatePath(PATH);
-  go("notice", `Vendor "${fields.vendor_name}" added.`);
+  go(`${PATH}/${data.id}`, "notice", `Vendor "${fields.vendor_name}" added.`);
 }
 
 export async function updateVendor(id: string, formData: FormData) {
   const { supabase } = await requirePermission("it.vendors.update");
+  const back = `${PATH}/${id}`;
   const fields = vendorFields(formData);
-  if (!fields.vendor_name) go("error", "Vendor name is required.");
+  if (!fields.vendor_name) go(back, "error", "Vendor name is required.");
 
   const { error } = await supabase.schema("it").from("vendors").update(fields).eq("id", id);
-  if (error) go("error", friendly(error, fields.vendor_name));
+  if (error) go(back, "error", friendly(error, fields.vendor_name));
 
   revalidatePath(PATH);
-  go("notice", `Vendor "${fields.vendor_name}" saved.`);
+  revalidatePath(back);
+  go(back, "notice", "Changes saved.");
 }
 
 // Vendors are never deleted (demands, assets and repairs keep pointing at them).
@@ -70,8 +73,10 @@ export async function setVendorActive(id: string, active: boolean) {
     .from("vendors")
     .update({ is_active: active })
     .eq("id", id);
-  if (error) go("error", error.message);
+  const back = `${PATH}/${id}`;
+  if (error) go(back, "error", error.message);
 
   revalidatePath(PATH);
-  go("notice", active ? "Vendor reactivated." : "Vendor deactivated — it can't be picked for new demands.");
+  revalidatePath(back);
+  go(back, "notice", active ? "Vendor reactivated." : "Vendor deactivated — it can't be picked for new demands.");
 }
