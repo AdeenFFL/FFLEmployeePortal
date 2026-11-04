@@ -10,19 +10,19 @@ import { parseMoney } from "@/lib/it/procurement";
 
 const PATH = "/it/procurement/products";
 
-function go(kind: "error" | "notice", message: string): never {
-  redirect(`${PATH}?${kind}=${encodeURIComponent(message)}`);
+function go(path: string, kind: "error" | "notice", message: string): never {
+  redirect(`${path}?${kind}=${encodeURIComponent(message)}`);
 }
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
-function productFields(formData: FormData) {
+function productFields(formData: FormData, back: string) {
   const purchase = parseMoney(formData.get("purchasePrice"));
   const current = parseMoney(formData.get("currentPrice"));
   if (purchase === undefined || current === undefined) {
-    go("error", "Prices must be positive numbers (e.g. 125000 or 125,000.50).");
+    go(back, "error", "Prices must be positive numbers (e.g. 125000 or 125,000.50).");
   }
   return {
     product_name: text(formData, "productName"),
@@ -44,26 +44,29 @@ function friendly(error: { code?: string; message: string }, name: string) {
 
 export async function createProduct(formData: FormData) {
   const { supabase } = await requirePermission("it.products.update");
-  const fields = productFields(formData);
-  if (!fields.product_name) go("error", "Product name is required.");
+  const back = `${PATH}/new`;
+  const fields = productFields(formData, back);
+  if (!fields.product_name) go(back, "error", "Product name is required.");
 
-  const { error } = await supabase.schema("it").from("products").insert(fields);
-  if (error) go("error", friendly(error, fields.product_name));
+  const { data, error } = await supabase.schema("it").from("products").insert(fields).select("id").single();
+  if (error || !data) go(back, "error", error ? friendly(error, fields.product_name) : "Product was not saved.");
 
   revalidatePath(PATH);
-  go("notice", `Product "${fields.product_name}" added.`);
+  go(`${PATH}/${data.id}`, "notice", `Product "${fields.product_name}" added.`);
 }
 
 export async function updateProduct(id: string, formData: FormData) {
   const { supabase } = await requirePermission("it.products.update");
-  const fields = productFields(formData);
-  if (!fields.product_name) go("error", "Product name is required.");
+  const back = `${PATH}/${id}`;
+  const fields = productFields(formData, back);
+  if (!fields.product_name) go(back, "error", "Product name is required.");
 
   const { error } = await supabase.schema("it").from("products").update(fields).eq("id", id);
-  if (error) go("error", friendly(error, fields.product_name));
+  if (error) go(back, "error", friendly(error, fields.product_name));
 
   revalidatePath(PATH);
-  go("notice", `Product "${fields.product_name}" saved.`);
+  revalidatePath(back);
+  go(back, "notice", "Changes saved.");
 }
 
 // Products are never deleted (demands and stock movements keep pointing at them).
@@ -75,8 +78,10 @@ export async function setProductActive(id: string, active: boolean) {
     .from("products")
     .update({ is_active: active })
     .eq("id", id);
-  if (error) go("error", error.message);
+  const back = `${PATH}/${id}`;
+  if (error) go(back, "error", error.message);
 
   revalidatePath(PATH);
-  go("notice", active ? "Product reactivated." : "Product deactivated — it can't be picked for new demands.");
+  revalidatePath(back);
+  go(back, "notice", active ? "Product reactivated." : "Product deactivated — it can't be picked for new demands.");
 }
