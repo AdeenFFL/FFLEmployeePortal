@@ -18,6 +18,9 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/my-tickets": "module:it",
   "/it/tickets": "it.tickets.read",
   "/it/my-onboarding": "module:it",
+  // More specific prefixes first — permissionKeyForPath returns the first match.
+  "/it/my-offboarding/new-for-employee": "hr.offboarding.create_for_site_users",
+  "/it/my-offboarding/new": "hr.offboarding.create_self",
   "/it/my-offboarding": "module:it",
   // Unified staff queue (tickets + onboarding/offboarding/replacement) — needs either
   // it.tickets.read or it.onboarding.read, which this single-key map can't express as "any of".
@@ -32,15 +35,12 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // Inventory track: every employee sees the assets they hold (RLS limits rows to their own).
   "/it/my-assets": "module:it",
   "/it/admin/roles": "it.manage_role_permissions",
-  "/it/settings/tickets": "it.ticket_settings.update",
-  "/it/settings/sites": "it.ticket_settings.update",
-  // Category owners: settings admins edit any site, site IT managers their own; other IT staff
-  // see it read-only — so the route only needs queue access (javaria_it_0006).
-  "/it/settings/owners": "it.tickets.read",
-  // Same "read gates the route, RLS gates the write" shape as category owners above — anyone who
-  // can see the onboarding queue can view task-type owners; only it.onboarding.assign holders
-  // (enforced by it.task_type_owners' RLS) can actually change them.
-  "/it/settings/onboarding-owners": "it.onboarding.read",
+  // Unified IT Settings (tickets, onboarding task owners, sites & IT staff — IT Settings
+  // redesign). Old /it/settings/tickets, /it/settings/sites, /it/settings/owners now just
+  // redirect here. Gated loosely like /it/requests — the route needs module:it, and the page
+  // itself only shows/enables each tab for the permission it actually requires
+  // (it.ticket_settings.update for Tickets/Sites, it.onboarding.assign for Onboarding Tasks).
+  "/it/settings": "module:it",
   // SCR-06: the IT Dashboard is for IT team members who handle tickets, not every employee with
   // module:it — reconciled per Javaria's own note anticipating this conflict (she built the real
   // dashboard; it.tickets.read replaces the earlier module:it placeholder gate).

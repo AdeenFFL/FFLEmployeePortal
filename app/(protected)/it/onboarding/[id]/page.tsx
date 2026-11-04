@@ -20,11 +20,11 @@ import {
   addChecklistItem,
   addLifecycleUpdate,
   assignChecklistItem,
-  assignRoleForOnboardingTask,
   cancelRequest,
   closeRequest,
   completeEmailAccountTask,
   completeHandoverTask,
+  completePortalAccountTask,
   deactivatePortalAccess,
   linkOnboardingPerson,
   signOffboarding,
@@ -137,8 +137,8 @@ export default async function LifecycleRequestPage({
     .map((i) => i.assignment_id)
     .filter((aid): aid is string => Boolean(aid));
 
-  const hasOpenRoleTask = checklist.some(
-    (i) => i.task_type === "role_assignment" && i.status !== "Completed",
+  const hasOpenPortalAccountTask = checklist.some(
+    (i) => i.task_type === "portal_account" && i.status !== "Completed",
   );
 
   const [names, { data: candidates }, { data: assignedAssets }, { data: leaverAccount }, { data: roles }] =
@@ -168,7 +168,7 @@ export default async function LifecycleRequestPage({
     request.kind === "Offboarding" && request.person_id && canAssign
       ? createAdminClient().from("persons").select("status").eq("id", request.person_id).maybeSingle()
       : Promise.resolve({ data: null }),
-    hasOpenRoleTask && canAssign
+    hasOpenPortalAccountTask && canAssign
       ? supabase.from("roles").select("id, name").order("name")
       : Promise.resolve({ data: null }),
   ]);
@@ -438,7 +438,7 @@ export default async function LifecycleRequestPage({
                           </button>
                         </form>
                       )
-                    ) : item.task_type === "role_assignment" ? (
+                    ) : item.task_type === "portal_account" ? (
                       canAssign &&
                       !isFinished &&
                       item.status !== "Completed" && (
@@ -446,7 +446,7 @@ export default async function LifecycleRequestPage({
                           href={`${basePath}?updateTask=${item.id}`}
                           className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
                         >
-                          Assign a role
+                          Create portal account
                         </Link>
                       )
                     ) : (
@@ -476,14 +476,19 @@ export default async function LifecycleRequestPage({
                 );
               }
 
-              if (item.task_type === "role_assignment") {
+              if (item.task_type === "portal_account") {
                 if (!canAssign || isFinished) return null;
+                const defaultRoleId = (roles ?? []).find((r) => r.name === "Employee")?.id ?? "";
                 return (
-                  <Modal key={Date.now()} closeHref={basePath} title="Assign a role">
-                    <form action={assignRoleForOnboardingTask.bind(null, request.id, item.id)} className="space-y-3">
+                  <Modal key={Date.now()} closeHref={basePath} title="Create portal account">
+                    <form action={completePortalAccountTask.bind(null, request.id, item.id)} className="space-y-3">
+                      <p className="text-xs text-slate-500">
+                        Pick the role to create or upgrade their portal account with. Defaults to
+                        the baseline Employee role — change it if they need something else.
+                      </p>
                       <div>
                         <label className={labelClass}>Role *</label>
-                        <select name="roleId" required defaultValue="" className={inputClass}>
+                        <select name="roleId" required defaultValue={defaultRoleId} className={inputClass}>
                           <option value="" disabled>
                             Select…
                           </option>
@@ -495,7 +500,7 @@ export default async function LifecycleRequestPage({
                         </select>
                       </div>
                       <button type="submit" className={primaryButtonClass}>
-                        Assign role
+                        Create account
                       </button>
                     </form>
                   </Modal>

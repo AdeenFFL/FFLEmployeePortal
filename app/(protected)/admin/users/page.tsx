@@ -34,6 +34,13 @@ export default async function AdminUsersPage({
   const { data: roles } = await supabase.from("roles").select("*").order("name");
   const roleNameById = new Map((roles ?? []).map((r) => [r.id, r.name]));
 
+  const { data: departments } = await supabase
+    .from("org_units")
+    .select("id, name")
+    .eq("type", "Department")
+    .eq("is_active", true)
+    .order("name");
+
   // Existing (provisioned) login emails, to anti-join pending invitations. Login email now
   // lives on user_accounts, not persons.
   const { data: allAccounts } = await supabase.from("user_accounts").select("email");
@@ -85,6 +92,7 @@ export default async function AdminUsersPage({
       email: string;
       display_name: string | null;
       role_id: string | null;
+      department_id: string | null;
       status: UserStatus;
       notes: string | null;
       employee_code: string | null;
@@ -103,6 +111,7 @@ export default async function AdminUsersPage({
         email: "",
         display_name: null,
         role_id: null,
+        department_id: null,
         status: "Active",
         notes: null,
         employee_code: null,
@@ -134,6 +143,7 @@ export default async function AdminUsersPage({
           email: existingAccount.email,
           display_name: existingAccount.persons.full_name,
           role_id: roleRow?.role_id ?? null,
+          department_id: existingAccount.persons.department_id,
           status: existingAccount.persons.status,
           notes: existingAccount.persons.notes,
           employee_code: existingAccount.persons.employee_code,
@@ -159,6 +169,7 @@ export default async function AdminUsersPage({
             email: invitation.email,
             display_name: invitation.display_name,
             role_id: invitation.role_id,
+            department_id: invitation.department_id,
             status: invitation.status,
             notes: invitation.notes,
             employee_code: invitation.employee_code,
@@ -382,6 +393,7 @@ export default async function AdminUsersPage({
           key={Date.now()}
           mode={panel.mode}
           roles={roles ?? []}
+          departments={departments ?? []}
           initialValues={panel.initialValues}
         />
       )}

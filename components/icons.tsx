@@ -262,6 +262,33 @@ export function CheckIcon(props: IconProps) {
   );
 }
 
+// Doesn't use the shared `Icon` wrapper — it's the one icon that needs a solid-fill variant
+// (primary owner) alongside the usual outline (not-yet-primary).
+export function StarIcon({ className, filled }: IconProps & { filled?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 3.5l2.6 5.5 6 .8-4.4 4.1 1.1 6-5.3-2.9-5.3 2.9 1.1-6-4.4-4.1 6-.8L12 3.5Z" />
+    </svg>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </Icon>
+  );
+}
+
 // Microsoft's mark is fixed four-color, unlike every other icon here — doesn't use the shared
 // monochrome `Icon` wrapper.
 export function MicrosoftLogoIcon({ className }: IconProps) {

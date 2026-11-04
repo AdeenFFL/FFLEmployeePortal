@@ -222,7 +222,11 @@ export async function createLifecycleRequest(formData: FormData) {
     } else if (authUser.user) {
       const { data: newPerson, error: personError } = await admin
         .from("persons")
-        .insert({ full_name: employeeName, status: "Active" })
+        .insert({
+          full_name: employeeName,
+          status: "Active",
+          department_id: optional(formData, "departmentId"),
+        })
         .select("id")
         .single();
 
@@ -422,8 +426,7 @@ export async function completeEmailAccountTask(requestId: string, itemId: string
           email: emailAddress,
           display_name: request?.employee_name ?? null,
           role_id: pendingRole.id,
-          department: null,
-          site: null,
+          department_id: request?.department_id ?? null,
           employee_code: request?.employee_code ?? null,
           designation: request?.designation ?? null,
           onboarding_request_id: requestId,
@@ -578,10 +581,19 @@ export async function completeHandoverTask(requestId: string, itemId: string) {
   go(path, "notice", "Handover confirmed.");
 }
 
-// Assigns a real role, not free text — two cases depending on whether the new hire has a real
-// persons row yet. The Microsoft path (completeEmailAccountTask) defers real account creation to
-// their first actual sign-in, so there may only be a staged invited_users row to update instead.
-export async function assignRoleForOnboardingTask(requestId: string, itemId: string, formData: FormData) {
+// The single "create the employee's portal account" step (merged from the earlier separate
+// Portal Role Assignment + Employee Portal Account Creation tasks — IT Module Onboarding Overhaul
+// Phase 1, decision 3). Owner picks a real role (editable, defaults to "Employee" in the UI) and
+// confirms; this does whichever of the two things actually makes that real, depending on which
+// path the new hire's account is on:
+//   * Already has a real persons row (createLifecycleRequest's personal-email branch already
+//     created one on "Onboarding Pending") — upgrade user_roles to the chosen role.
+//   * Only has a staged Microsoft invite (completeEmailAccountTask staged one) — upgrade its
+//     role_id; real account creation still waits for their first actual sign-in
+//     (app/auth/callback/route.ts).
+//   * Neither exists yet — the Email Account task hasn't been completed, so there's nothing to
+//     attach a role to.
+export async function completePortalAccountTask(requestId: string, itemId: string, formData: FormData) {
   const path = `/it/onboarding/${requestId}`;
   const { supabase, personId: actorId, actorLabel } = await requirePermission("it.onboarding.assign");
 
@@ -603,7 +615,7 @@ export async function assignRoleForOnboardingTask(requestId: string, itemId: str
       .eq("id", requestId)
       .maybeSingle(),
   ]);
-  if (!item || item.task_type !== "role_assignment") go(path, "error", "Task not found.");
+  if (!item || item.task_type !== "portal_account") go(path, "error", "Task not found.");
 
   const admin = createAdminClient();
 
@@ -650,11 +662,11 @@ export async function assignRoleForOnboardingTask(requestId: string, itemId: str
     actorLabel,
     module: "it",
     action: "MODIFIED",
-    details: `Assigned role for onboarding request ${requestId}`,
+    details: `Created/upgraded portal account for onboarding request ${requestId}`,
   });
 
   refresh(requestId);
-  go(path, "notice", "Role assigned.");
+  go(path, "notice", "Portal account created.");
 }
 
 export async function addChecklistItem(requestId: string, formData: FormData) {

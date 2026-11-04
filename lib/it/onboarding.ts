@@ -86,9 +86,8 @@ export function suggestEmailAccount(employeeName: string) {
 }
 
 // Human-readable label per task type, for the task-type owners settings screen
-// (/it/settings/onboarding-owners) — matches the task_name wording the seeding trigger uses.
+// (/it/settings/owners?track=tasks) — matches the task_name wording the seeding trigger uses.
 export const TASK_TYPE_LABELS: Record<ItChecklistTaskType, string> = {
-  role_assignment: "Portal Role Assignment",
   email_account: "Email Account Creation",
   license_assignment: "Software License Assignment",
   access_provisioning: "User Access Provisioning",
@@ -105,9 +104,6 @@ export const TASK_TYPE_LABELS: Record<ItChecklistTaskType, string> = {
 };
 
 export const TASK_DETAIL_FIELDS: Record<ItChecklistTaskType, DetailField[]> = {
-  // No free-text fields — the role picker is a real dropdown in its own dedicated form
-  // (assignRoleForOnboardingTask), not a generic detail field.
-  role_assignment: [],
   email_account: [
     { key: "email_address", label: "Company email address", placeholder: `name@${COMPANY_EMAIL_DOMAIN}` },
     { key: "username", label: "Username" },
@@ -141,7 +137,9 @@ export const TASK_DETAIL_FIELDS: Record<ItChecklistTaskType, DetailField[]> = {
   // asset_assignments row (it.acknowledge_assignment, "My Assets"), not typed-in details. See
   // app/(protected)/it/onboarding/actions.ts's completeHandoverTask.
   asset_handover: [],
-  portal_account: [{ key: "username", label: "Portal username" }],
+  // No free-text fields — the role picker is a real dropdown in its own dedicated form
+  // (completePortalAccountTask), not a generic detail field.
+  portal_account: [],
   email_backup_closure: [
     { key: "backup_date", label: "Mailbox backup date", placeholder: "YYYY-MM-DD" },
     { key: "mailbox_status", label: "Mailbox status", placeholder: "Backed up / Closed" },

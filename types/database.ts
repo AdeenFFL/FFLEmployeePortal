@@ -82,6 +82,7 @@ export type Person = {
   designation: string | null;
   company_id: string | null;
   site_id: string | null;
+  department_id: string | null; // 0054_it_department_based_staff
   employment_type: EmploymentType | null;
   contract_start_date: string | null;
   contract_end_date: string | null;
@@ -128,6 +129,7 @@ export type InvitedUser = {
   role_id: string;
   department: string | null;
   site: string | null;
+  department_id: string | null; // 0054_it_department_based_staff
   status: UserStatus;
   notes: string | null;
   employee_code: string | null;
@@ -258,23 +260,13 @@ export type ItRequestType = {
   applies_to: ItRequestTypeAppliesTo;
   description: string | null;
   is_active: boolean;
-  handled_at: ItHandledAt; // javaria_it_0005
   created_at: string;
   updated_at: string;
   created_by: string | null;
   updated_by: string | null;
 };
 
-// Phase 6.1 site routing — mirrors javaria_it_0005_site_routing.sql.
-export type ItHandledAt = "site" | "hq";
 export type ItSiteRole = "manager" | "member";
-
-export type ItSettings = {
-  id: boolean;
-  hq_site_id: string | null;
-  updated_at: string;
-  updated_by: string | null;
-};
 
 export type ItSiteItStaff = {
   site_id: string;
@@ -296,6 +288,7 @@ export type ItCategoryOwner = {
 
 export type ItTaskTypeOwner = {
   task_type: string;
+  site_id: string;
   person_id: string;
   is_primary: boolean;
   created_at: string;
@@ -642,7 +635,6 @@ export type ItTicketCategory = {
   description: string | null;
   is_active: boolean;
   sort_order: number;
-  handled_at: ItHandledAt; // javaria_it_0005
   needs_access_field: boolean; // 0044_it_category_access_field
   created_at: string;
   updated_at: string;
@@ -750,7 +742,6 @@ export type ItLifecycleStatus =
   | "Cancelled";
 export type ItChecklistStatus = "Pending" | "In Progress" | "Completed" | "Not Applicable";
 export type ItChecklistTaskType =
-  | "role_assignment"
   | "email_account"
   | "license_assignment"
   | "access_provisioning"
@@ -1290,12 +1281,6 @@ export type Database = {
           },
         ];
       };
-      settings: {
-        Row: ItSettings;
-        Insert: Partial<ItSettings>;
-        Update: Partial<ItSettings>;
-        Relationships: [];
-      };
       site_it_staff: {
         Row: ItSiteItStaff;
         Insert: Partial<ItSiteItStaff> & Pick<ItSiteItStaff, "site_id" | "person_id">;
@@ -1392,7 +1377,7 @@ export type Database = {
       };
       task_type_owners: {
         Row: ItTaskTypeOwner;
-        Insert: Partial<ItTaskTypeOwner> & Pick<ItTaskTypeOwner, "task_type" | "person_id">;
+        Insert: Partial<ItTaskTypeOwner> & Pick<ItTaskTypeOwner, "task_type" | "site_id" | "person_id">;
         Update: Partial<ItTaskTypeOwner>;
         Relationships: [];
       };
@@ -1659,6 +1644,18 @@ export type Database = {
         Args: Record<string, never>;
         Returns: { person_id: string; full_name: string; designation: string | null }[];
       };
+      search_employees_for_my_sites: {
+        Args: { p_search: string };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          site_id: string | null;
+          status: string;
+          onboarding_cleared: boolean;
+        }[];
+      };
       routing_team_for_site: {
         Args: { p_site_id: string | null };
         Returns: string;
@@ -1919,12 +1916,7 @@ export type Database = {
           hq_executive: boolean;
           site_ids: string[];
           managed_site_ids: string[];
-          hq_site_id: string | null;
         }[];
-      };
-      transfer_ticket_to_hq: {
-        Args: { p_ticket_id: string; p_reason: string };
-        Returns: undefined;
       };
       list_ticket_assignees: {
         Args: { p_ticket_id: string };
@@ -1963,6 +1955,7 @@ export type Database = {
         Args: Record<string, never>;
         Returns: {
           task_type: string;
+          site_id: string;
           person_id: string;
           full_name: string;
           is_primary: boolean;
@@ -1977,6 +1970,15 @@ export type Database = {
           designation: string | null;
           role: ItSiteRole;
         }[];
+      };
+      // 0054_it_department_based_staff.sql
+      is_it_department: {
+        Args: { p_person_id: string };
+        Returns: boolean;
+      };
+      list_it_department_staff: {
+        Args: Record<string, never>;
+        Returns: { person_id: string; full_name: string; designation: string | null }[];
       };
       search_assets_for_ticket: {
         Args: { p_search: string };
