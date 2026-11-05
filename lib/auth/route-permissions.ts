@@ -28,8 +28,13 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // holds the specific permission for (same permissive-then-filter shape as the "/it" catch-all
   // below), same as sidebar.tsx's "Requests" nav entry decides visibility the same way.
   "/it/requests": "module:it",
-  // More specific prefix first — permissionKeyForPath returns the first match.
-  "/it/onboarding/new": "it.onboarding.create",
+  // More specific prefix first — permissionKeyForPath returns the first match. The two kinds
+  // left on this route (Onboarding, Replacement — Offboarding moved to its own dedicated,
+  // permission-split screens under /it/my-offboarding/) each have their own permission,
+  // hr.onboarding.create / hr.replacement.create, which this single-key map can't express as
+  // "any of"; gated loosely at module:it here, same shape as /it/settings, and the page itself
+  // enforces the per-kind permission on submit.
+  "/it/onboarding/new": "module:it",
   "/it/onboarding": "it.onboarding.read",
   "/it/inventory": "it.assets.read",
   // Inventory track: every employee sees the assets they hold (RLS limits rows to their own).
