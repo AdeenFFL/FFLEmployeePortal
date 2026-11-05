@@ -19,7 +19,9 @@ import {
 import { ProductIcon, productKind } from "../../procurement/_components/product-icon";
 import { AssetAssignForm } from "../_components/asset-assign-form";
 import { AssetReturnForm } from "../_components/asset-return-form";
-import { changeAssetStatus, closeMaintenance, deleteAsset, openMaintenance } from "../actions";
+import { changeAssetStatus, closeMaintenance, deleteAsset, openMaintenance, setAssetValue } from "../actions";
+import { FormDrawer } from "../_components/drawer";
+import { bookValue, formatPkr } from "../valuation";
 import {
   ASSET_STATUS_TONES,
   formatCost,
@@ -72,6 +74,7 @@ export default async function AssetDetailPage({
     return?: string;
     repair?: string;
     status?: string;
+    value?: string;
   }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
@@ -171,6 +174,24 @@ export default async function AssetDetailPage({
         .eq("linked_asset_id", asset.id)
         .order("created_at", { ascending: false })
     : { data: null };
+
+  // Valuation (Phase 6): history of it.asset_values rows, newest first; the latest drives the
+  // book value. Values are readable by it.assets.read holders, written with it.valuation.update.
+  const [{ data: valueRows }, { data: valueTypes }, canValue] = await Promise.all([
+    supabase
+      .schema("it")
+      .from("asset_values")
+      .select("id, value_type_id, purchase_value, salvage_value, valuation_date, remarks, created_at")
+      .eq("asset_id", asset.id)
+      .order("valuation_date", { ascending: false })
+      .order("created_at", { ascending: false }),
+    supabase.schema("it").from("asset_value_types").select("*"),
+    hasItPermission(supabase, "it.valuation.update"),
+  ]);
+  const valuations = valueRows ?? [];
+  const latestValue = valuations[0] ?? null;
+  const valueRule = latestValue ? (valueTypes ?? []).find((v) => v.id === latestValue.value_type_id) : undefined;
+  const book = latestValue && valueRule ? bookValue(latestValue, valueRule, new Date()) : null;
 
   const isSystemManaged = SYSTEM_MANAGED_STATUSES.includes(asset.status);
   const statusChoices = MANUAL_STATUSES.filter((s) => s !== asset.status);
@@ -361,6 +382,70 @@ export default async function AssetDetailPage({
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Notes</p>
                 <p className="mt-1 whitespace-pre-wrap text-sm text-slate-800">{asset.notes}</p>
               </div>
+            )}
+          </Panel>
+
+          <Panel
+            title="Value"
+            aside={
+              canValue ? (
+                <Link href={`${basePath}?value=1`} className="text-sm font-medium text-blue-700 hover:underline">
+                  {latestValue ? "Revalue" : "Set value"}
+                </Link>
+              ) : undefined
+            }
+          >
+            {book && valueRule && latestValue ? (
+              <>
+                <div className="flex flex-wrap items-end gap-x-8 gap-y-3">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-slate-400">Book value today</p>
+                    <p className="text-2xl font-semibold tabular-nums text-slate-900">{formatPkr(book.current)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400">Bought for</p>
+                    <p className="text-sm tabular-nums text-slate-700">{formatPkr(book.purchase)}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-slate-400">Depreciated</p>
+                    <p className="text-sm tabular-nums text-slate-700">{formatPkr(book.depreciated)}</p>
+                  </div>
+                </div>
+                <div
+                  className="mt-4 h-1.5 w-full rounded-full bg-slate-100"
+                  role="progressbar"
+                  aria-label="Depreciation used"
+                  aria-valuenow={Math.round(book.used * 100)}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div className="h-1.5 rounded-full bg-blue-500" style={{ width: `${Math.round(book.used * 100)}%` }} />
+                </div>
+                <p className="mt-2 text-xs text-slate-500">
+                  {valueRule.name} asset · {valueRule.depreciation_method}, {valueRule.depreciation_percentage}% a year
+                  {valueRule.useful_life_years ? ` over ${valueRule.useful_life_years} years` : ""} · since{" "}
+                  {formatDate(latestValue.valuation_date)}
+                  {book.fullyDepreciated && " · fully depreciated"}
+                </p>
+                {valuations.length > 1 && (
+                  <details className="mt-3 text-xs text-slate-500">
+                    <summary className="cursor-pointer font-medium text-slate-600">Earlier values ({valuations.length - 1})</summary>
+                    <ul className="mt-2 space-y-1">
+                      {valuations.slice(1).map((v) => (
+                        <li key={v.id}>
+                          {formatDate(v.valuation_date)} · {formatPkr(Number(v.purchase_value))}
+                          {v.remarks && ` · ${v.remarks}`}
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+              </>
+            ) : (
+              <p className="text-sm text-slate-500">
+                No value recorded yet.
+                {canValue ? " Set what it cost and whether it was bought New or Old to track its depreciation." : ""}
+              </p>
             )}
           </Panel>
 
@@ -642,6 +727,79 @@ export default async function AssetDetailPage({
             </button>
           </form>
         </Modal>
+      )}
+      {canValue && sp.value === "1" && (
+        <FormDrawer
+          closeHref={basePath}
+          title={latestValue ? "Revalue asset" : "Set asset value"}
+          description="Book value is worked out from this and the New / Old rules in Inventory settings."
+          action={setAssetValue.bind(null, asset.id)}
+          submitLabel="Save value"
+        >
+          <fieldset>
+            <legend className={labelClass}>Bought as</legend>
+            <div className="grid grid-cols-2 gap-2">
+              {(valueTypes ?? []).map((v) => (
+                <label
+                  key={v.id}
+                  className="flex cursor-pointer flex-col rounded-xl border border-slate-200 px-3 py-2.5 hover:border-slate-300 has-[:checked]:border-blue-600 has-[:checked]:bg-blue-50/50"
+                >
+                  <input
+                    type="radio"
+                    name="value_type_id"
+                    value={v.id}
+                    required
+                    defaultChecked={(latestValue?.value_type_id ?? (valueTypes ?? []).find((t) => t.name === "New")?.id) === v.id}
+                    className="sr-only"
+                  />
+                  <span className="text-sm font-medium text-slate-900">{v.name}</span>
+                  <span className="text-xs text-slate-500">
+                    {v.depreciation_percentage}% a year{v.useful_life_years ? ` · ${v.useful_life_years} yrs` : ""}
+                  </span>
+                </label>
+              ))}
+            </div>
+          </fieldset>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className={labelClass}>Purchase value (Rs)</span>
+              <input
+                name="purchase_value"
+                inputMode="decimal"
+                required
+                defaultValue={latestValue?.purchase_value ?? ""}
+                className={`${inputClass} tabular-nums`}
+              />
+            </label>
+            <label className="block">
+              <span className={labelClass}>Salvage value (Rs)</span>
+              <input
+                name="salvage_value"
+                inputMode="decimal"
+                defaultValue={latestValue?.salvage_value ?? ""}
+                placeholder="0"
+                className={`${inputClass} tabular-nums`}
+              />
+            </label>
+          </div>
+          <label className="block">
+            <span className={labelClass}>Value starts from</span>
+            <input
+              name="valuation_date"
+              type="date"
+              required
+              defaultValue={latestValue?.valuation_date ?? asset.purchase_date ?? asset.created_at.slice(0, 10)}
+              className={inputClass}
+            />
+            <span className="mt-1 block text-xs text-slate-400">Usually the purchase date. Depreciation counts from here.</span>
+          </label>
+          <label className="block">
+            <span className={labelClass}>
+              Note <span className="font-normal text-slate-400">(optional)</span>
+            </span>
+            <input name="remarks" placeholder="e.g. Invoice INV-2291" className={inputClass} />
+          </label>
+        </FormDrawer>
       )}
       {canUpdate && !isSystemManaged && sp.status && (sp.status === "1" || presetStatus) && (
         <Modal key={Date.now()} closeHref={basePath} title="Change status">

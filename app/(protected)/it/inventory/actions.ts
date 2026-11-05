@@ -581,3 +581,49 @@ export async function closeMaintenance(assetId: string, maintenanceId: string, f
   revalidatePath("/it/my-assets");
   redirect(detailUrl(assetId, "notice", `Repair closed on ${asset.asset_tag}.`));
 }
+
+// Phase 6 — record an asset's value (talha_it_0006 it.asset_values; RLS needs it.valuation.update).
+// Rows are history: a revaluation adds a row, and the latest one drives the book value shown on
+// the asset page (valuation.ts). Stored current_value is the value on valuation_date (= purchase).
+export async function setAssetValue(assetId: string, formData: FormData) {
+  const { supabase, personId, actorLabel } = await requirePermission("it.valuation.update");
+  const fail = (message: string): never => redirect(detailUrl(assetId, "error", message));
+
+  const valueTypeId = text(formData, "value_type_id");
+  if (!valueTypeId) fail("Choose New or Old.");
+  const purchase = Number(text(formData, "purchase_value").replace(/,/g, ""));
+  if (!Number.isFinite(purchase) || purchase < 0) fail("Enter the purchase value in rupees.");
+  const salvageText = text(formData, "salvage_value").replace(/,/g, "");
+  const salvage = salvageText === "" ? 0 : Number(salvageText);
+  if (!Number.isFinite(salvage) || salvage < 0 || salvage > purchase) {
+    fail("Salvage value must be between 0 and the purchase value.");
+  }
+  const valuationDate = text(formData, "valuation_date");
+  if (!valuationDate || valuationDate > latestAllowedDate()) fail("Choose the date the value starts from.");
+
+  const { error } = await supabase.schema("it").from("asset_values").insert({
+    asset_id: assetId,
+    value_type_id: valueTypeId,
+    purchase_value: purchase,
+    current_value: purchase,
+    accumulated_depreciation: 0,
+    salvage_value: salvage,
+    valuation_date: valuationDate,
+    remarks: optionalText(formData, "remarks"),
+    created_by: personId,
+    updated_by: personId,
+  });
+  if (error) fail(error.message);
+
+  await logAuditEvent({
+    supabase,
+    actorId: personId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details: `Set asset value: ${purchase} from ${valuationDate}`,
+  });
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/inventory");
+  redirect(detailUrl(assetId, "notice", "Value saved."));
+}

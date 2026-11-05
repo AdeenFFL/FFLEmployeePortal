@@ -5,6 +5,7 @@ import { StatusPill } from "@/components/status-pill";
 import { fetchAssetPersonNames, fetchOrgUnits } from "@/lib/it/ticket-data";
 import { ProductIcon, productKind } from "../procurement/_components/product-icon";
 import { ASSET_STATUSES, ASSET_STATUS_TONES, formatDate, type AssetStatus } from "./asset-status";
+import { bookValue, formatPkr } from "./valuation";
 
 // Hard cap until the register gets pagination — well above any one filtered view today.
 const MAX_ROWS = 500;
@@ -102,6 +103,28 @@ export default async function AssetRegisterPage({
     : { data: [] as { asset_id: string; person_id: string }[] };
   const holderNames = await fetchAssetPersonNames(supabase, (openAssignments ?? []).map((a) => a.person_id));
   const holderOf = new Map((openAssignments ?? []).map((a) => [a.asset_id, holderNames.get(a.person_id) ?? "—"]));
+
+  // Book value per listed asset from its latest it.asset_values row (Phase 6, valuation.ts).
+  const [{ data: valueRows }, { data: valueTypes }] = rows.length
+    ? await Promise.all([
+        supabase
+          .schema("it")
+          .from("asset_values")
+          .select("asset_id, value_type_id, purchase_value, salvage_value, valuation_date, created_at")
+          .in("asset_id", rows.map((a) => a.id))
+          .order("valuation_date", { ascending: false })
+          .order("created_at", { ascending: false }),
+        supabase.schema("it").from("asset_value_types").select("*"),
+      ])
+    : [{ data: [] }, { data: [] }];
+  const ruleById = new Map((valueTypes ?? []).map((v) => [v.id, v]));
+  const now = new Date();
+  const valueOf = new Map<string, number>();
+  for (const v of valueRows ?? []) {
+    const rule = ruleById.get(v.value_type_id);
+    if (!valueOf.has(v.asset_id) && rule) valueOf.set(v.asset_id, bookValue(v, rule, now).current);
+  }
+  const totalValue = [...valueOf.values()].reduce((n, v) => n + v, 0);
 
   // Receiving → assets: accepted fixed-asset deliveries not yet fully registered. RLS on
   // receiving_records may hide them from inventory-only staff — then the banner simply doesn't show.
@@ -268,6 +291,7 @@ export default async function AssetRegisterPage({
               <th className="px-4 py-3 font-medium">Serial number</th>
               <th className="px-4 py-3 font-medium">Status</th>
               <th className="px-4 py-3 font-medium">With</th>
+              <th className="px-4 py-3 text-right font-medium">Book value</th>
               <th className="px-4 py-3 font-medium">Site</th>
               <th className="px-5 py-3 text-right font-medium">Updated</th>
             </tr>
@@ -302,6 +326,9 @@ export default async function AssetRegisterPage({
                   <StatusPill label={asset.status} tone={ASSET_STATUS_TONES[asset.status]} />
                 </td>
                 <td className="px-4 py-3 text-slate-700">{holderOf.get(asset.id) ?? <span className="text-slate-300">—</span>}</td>
+                <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">
+                  {valueOf.has(asset.id) ? formatPkr(valueOf.get(asset.id)!) : <span className="text-slate-300">—</span>}
+                </td>
                 <td className="px-4 py-3 text-slate-600">{(asset.site_id && siteNameById.get(asset.site_id)) ?? "—"}</td>
                 <td className="whitespace-nowrap px-5 py-3 text-right text-xs text-slate-500">
                   {formatDate(asset.updated_at)}
@@ -321,6 +348,7 @@ export default async function AssetRegisterPage({
         {rows.length === MAX_ROWS
           ? `Showing the ${MAX_ROWS} most recently updated assets. Narrow the search to see others.`
           : `${rows.length} of ${total} asset${total === 1 ? "" : "s"}`}
+        {valueOf.size > 0 && ` · book value of these: ${formatPkr(totalValue)}`}
       </p>
     </div>
   );

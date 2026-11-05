@@ -351,6 +351,19 @@ stepper, a "Next step" card, a "Where it came from" section and one combined His
 tabs (Asset types / Value & depreciation), a slide-over form, and actions that redirect with
 ?notice / ?error instead of throwing. Still open here: `asset_maintenance.vendor_id` FK.
 
+✅ Phase 5 built by Javaria (2026-11-05), `javaria_it_0022_consumable_stock.sql` (Applied: NO):
+`it.stock_movements` ledger (Opening / Received / Issued / Adjustment, signed qty, never below 0),
+`it.stock_levels` view, `it.record_stock_movement()`, receiving trigger (consumable deliveries add
+stock), `it.issue_demand_from_stock()` for the consumable demand path, `products.reorder_level`,
+and `it.product_is_fixed_asset()` — **fixed asset = asset type classified Fixed**, used by
+procurement and inventory alike. Screen INV-07 `/it/inventory/stock`. Deviation from the ERD: no
+`asset_id` on stock_movements (asset moves are assignments).
+
+✅ Phase 6 built by Javaria (2026-11-05), no migration: book value is calculated in the app
+(`inventory/valuation.ts`) from the latest `it.asset_values` row + the New / Old rule; "Set value /
+Revalue" on INV-03 adds a row (`it.valuation.update`); INV-02 shows book value per asset. Assets
+registered from a delivery get their first value (New, demand price) in `javaria_it_0021`.
+
 ### Phase 8 — Dashboard and reports
 **Screens**: `<InventoryKpis>` for SCR-06 (total, in use, unassigned, in repair, retired,
 warranty expiring in 30/60/90 days), INV-08 reports with CSV export (same pattern as

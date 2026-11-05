@@ -3,9 +3,12 @@
 -- Feature:     Receiving → assets (09 §2 "registerAssetsFromReceipt", 07 Phase 7). After a delivery of
 --              a fixed-asset product is recorded, IT registers each accepted unit as an asset from the
 --              demand page: only tag + serial are typed; product, type, vendor, site, company,
---              purchase date and the receipt link are filled in here. Done on IT/javaria with
---              Talha's agreement (2026-11-05).
+--              purchase date and the receipt link are filled in here. Each new asset also gets its
+--              first valuation (it.asset_values, value type New) at the demand's agreed — or else
+--              estimated — unit price, so depreciation starts from the delivery date. Done on
+--              IT/javaria with Talha's agreement (2026-11-05).
 -- Depends on:  talha_it_0003_assets.sql, talha_it_0007_asset_tag_manual.sql (it.assets),
+--              talha_it_0006_asset_values.sql (it.asset_values, it.asset_value_types "New"),
 --              javaria_it_0012/0013 (it.receiving_records, it.record_receiving),
 --              javaria_it_0010 (it.demand_updates).
 -- Applied to live DB: NO
@@ -55,6 +58,9 @@ declare
   v_serial text;
   v_tags text[] := '{}';
   v_serials text[] := '{}';
+  v_asset_id uuid;
+  v_price numeric(12, 2);
+  v_new_type uuid;
 begin
   if v_actor is null or not has_permission('it.assets.create') then
     raise exception 'You need permission to register assets';
@@ -92,6 +98,9 @@ begin
     raise exception 'Choose the company that owns these assets';
   end if;
 
+  v_price := coalesce(v_demand.agreed_unit_price, v_demand.estimated_unit_price);
+  select id into v_new_type from it.asset_value_types where name = 'New';
+
   for v_item in select * from jsonb_array_elements(p_items) loop
     v_tag := btrim(coalesce(v_item->>'asset_tag', ''));
     v_serial := btrim(coalesce(v_item->>'serial_number', ''));
@@ -118,10 +127,21 @@ begin
         v_company, v_rec.site_id, v_rec.received_date, v_rec.vendor_id, v_rec.id, 'Unassigned',
         case when v_rec.condition = 'Good' then 'New' else v_rec.condition end,
         nullif(v_item->>'warranty_expiry', '')::date, nullif(btrim(v_item->>'notes'), ''),
-        v_actor, v_actor);
+        v_actor, v_actor)
+      returning id into v_asset_id;
     exception when unique_violation then
       raise exception 'Asset tag % or serial number % is already used by another asset', v_tag, v_serial;
     end;
+
+    -- First valuation: bought new at the demand's price; depreciation runs from the delivery date.
+    if v_price is not null and v_new_type is not null then
+      insert into it.asset_values (
+        asset_id, value_type_id, purchase_value, current_value, accumulated_depreciation,
+        valuation_date, remarks, created_by, updated_by)
+      values (
+        v_asset_id, v_new_type, v_price, v_price, 0, v_rec.received_date,
+        'From ' || v_rec.receiving_number || ' at the demand price', v_actor, v_actor);
+    end if;
   end loop;
 
   insert into it.demand_updates (demand_id, author_person_id, update_type, body)
