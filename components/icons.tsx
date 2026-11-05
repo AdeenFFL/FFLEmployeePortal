@@ -148,6 +148,40 @@ export function TicketIcon(props: IconProps) {
   );
 }
 
+// "Employee Campsite" branding (lib/constants.ts's APP_NAME) — the campfire is the loading/error
+// motif. Both use the same source image (public/icons/campfire.png, a flat black silhouette on
+// a transparent background) rather than two separate hand-drawn icons: loading gets it
+// full-strength and animated (flicker + rising ash, see components/loading-campfire.tsx),
+// error gets it dimmed and desaturated to read as "burnt out" (components/error-campfire.tsx).
+// This is a plain <img>, not the stroke-based <Icon> wrapper every other icon in this file
+// uses — those are single-color line icons sized by `currentColor`; this one is a raster
+// silhouette image sized by its own width/height.
+export function CampfireIcon({ className }: IconProps) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/icons/campfire.png" alt="" className={className} />;
+}
+
+export function BurntCampfireIcon({ className }: IconProps) {
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/icons/campfire.png"
+      alt=""
+      className={`${className ?? ""} opacity-30 grayscale brightness-150`}
+    />
+  );
+}
+
+export function LaptopIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <rect x="4" y="4" width="16" height="11" rx="1.5" />
+      <path d="M2 19h20" />
+      <path d="M9 19 8.5 20.5M15 19l.5 1.5" />
+    </Icon>
+  );
+}
+
 export function ShoppingBagIcon(props: IconProps) {
   return (
     <Icon {...props}>
@@ -224,6 +258,33 @@ export function CheckIcon(props: IconProps) {
   return (
     <Icon {...props}>
       <path d="M5 12.5 9.5 17 19 7" />
+    </Icon>
+  );
+}
+
+// Doesn't use the shared `Icon` wrapper — it's the one icon that needs a solid-fill variant
+// (primary owner) alongside the usual outline (not-yet-primary).
+export function StarIcon({ className, filled }: IconProps & { filled?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M12 3.5l2.6 5.5 6 .8-4.4 4.1 1.1 6-5.3-2.9-5.3 2.9 1.1-6-4.4-4.1 6-.8L12 3.5Z" />
+    </svg>
+  );
+}
+
+export function PlusIcon(props: IconProps) {
+  return (
+    <Icon {...props}>
+      <path d="M12 5v14M5 12h14" />
     </Icon>
   );
 }

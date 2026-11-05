@@ -142,7 +142,7 @@ export default async function ItTicketQueuePage({
         title="IT Ticket Queue"
         description={
           scope.readAll
-            ? "Every site's IT tickets (HQ view)."
+            ? "Every site's IT tickets."
             : siteOptions.length > 0
               ? `Tickets handled at ${siteOptions.map((s) => s.name).join(", ")}.`
               : "Tickets assigned to you."
@@ -222,7 +222,7 @@ export default async function ItTicketQueuePage({
                 {s.name}
               </option>
             ))}
-            {scope.readAll && <option value="unrouted">HQ / unrouted</option>}
+            {scope.readAll && <option value="unrouted">Unrouted</option>}
           </select>
         )}
         <select name="assignee" defaultValue={assignee} aria-label="Assignee" className={inputClass}>
@@ -301,7 +301,7 @@ export default async function ItTicketQueuePage({
                     <td className="max-w-xs truncate px-4 py-3 text-slate-800">{t.subject}</td>
                     <td className="whitespace-nowrap px-4 py-3 text-slate-600">
                       {(t.handling_site_id && orgUnits.nameById.get(t.handling_site_id)) ??
-                        "HQ / unrouted"}
+                        "Unrouted"}
                     </td>
                     <td className="px-4 py-3 text-slate-600">
                       {(t.category_id && maps.categoryNameById.get(t.category_id)) ?? "—"}

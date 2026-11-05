@@ -9,15 +9,14 @@ import type { UserStatus, AuthMethod, EmploymentType } from "@/types/database";
 
 const MIN_PASSWORD_LENGTH = 6; // Supabase's own GoTrue default minimum
 
-// Known gap (flagged, not silently dropped): profiles.department/site were free text with no
-// destination on `persons` — persons.company_id/site_id are proper FKs that this pass doesn't
-// wire a picker for yet (see 0008_org_hierarchy_fix_and_identity_split.sql step B.4 comment, and
-// 04-claude-code-refactor-instructions.md Section 6 — full FK-based org pickers are an explicit
-// fast-follow once a module needs them, not required for this base-identity pass).
+// persons.company_id/site_id are proper FKs this pass doesn't wire a picker for yet (see
+// 0008_org_hierarchy_fix_and_identity_split.sql step B.4 comment) — department_id now has one
+// (0054_it_department_based_staff.sql), since the IT module needs it to determine IT staff.
 function readUserFormFields(formData: FormData) {
   return {
     full_name: String(formData.get("display_name") ?? "").trim() || null,
     role_id: String(formData.get("role_id") ?? ""),
+    department_id: String(formData.get("department_id") ?? "").trim() || null,
     status: (String(formData.get("status") ?? "Active") as UserStatus) ?? "Active",
     notes: String(formData.get("notes") ?? "").trim() || null,
     employee_code: String(formData.get("employee_code") ?? "").trim() || null,
@@ -135,6 +134,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
         designation: fields.designation,
         date_of_joining: fields.date_of_joining,
         employment_type: fields.employment_type,
+        department_id: fields.department_id,
       })
       .select("id")
       .single();
@@ -205,6 +205,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
       email,
       display_name: fields.full_name,
       role_id: fields.role_id,
+      department_id: fields.department_id,
       status: fields.status,
       notes: fields.notes,
       employee_code: fields.employee_code,

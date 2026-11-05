@@ -131,6 +131,52 @@ replicated-from note, same as batch 1.
 nothing` or an explicit `not exists`/`where` guard), so re-running the full sequence on a fresh
 environment is safe.
 
+## Reconciled into the main sequence — 2026-10-30 (batch 3)
+
+All 10 remaining staged `javaria/` files (0009–0018, the whole Procurement track plus the
+employee-lookup picker) were already headered `Applied to live DB: YES` — unlike the earlier two
+batches, nothing had drifted, so no live-database re-verification was needed before replicating.
+Talha has nothing pending (her 0000–0009 were all folded in by batch 2), so this batch is a
+straight linear run of Javaria's own numbering — no cross-author interleaving was required.
+
+| Staged file | Replicated as |
+|---|---|
+| `javaria/javaria_it_0009_procurement_masters.sql` | `supabase/migrations/0052_it_procurement_masters.sql` |
+| `javaria/javaria_it_0010_demands.sql` | `supabase/migrations/0053_it_demands.sql` |
+| `javaria/javaria_it_0011_demand_approvals.sql` | `supabase/migrations/0054_it_demand_approvals.sql` |
+| `javaria/javaria_it_0012_receiving_documents.sql` | `supabase/migrations/0055_it_receiving_documents.sql` |
+| `javaria/javaria_it_0013_procurement_improvements.sql` | `supabase/migrations/0056_it_procurement_improvements.sql` |
+| `javaria/javaria_it_0014_invoices.sql` | `supabase/migrations/0057_it_invoices.sql` |
+| `javaria/javaria_it_0015_payments.sql` | `supabase/migrations/0058_it_payments.sql` |
+| `javaria/javaria_it_0016_procurement_hardening.sql` | `supabase/migrations/0059_it_procurement_hardening.sql` |
+| `javaria/javaria_it_0017_procurement_brd_alignment.sql` | `supabase/migrations/0060_it_procurement_brd_alignment.sql` |
+| `javaria/javaria_it_0018_employee_lookup.sql` | `supabase/migrations/0061_it_employee_lookup.sql` |
+
+Same dual-copy policy as batches 1 and 2: the staged originals stay in `javaria/` as the
+historical record of that branch; the `supabase/migrations/` files are the authoritative ones
+`supabase db push` actually runs on a fresh environment. Bodies are byte-for-byte identical to
+their staged source (diffed programmatically after generation); only the header comment block
+(Author/Branch/Feature/Depends on/Applied-to-live-DB) was replaced with a short replicated-from
+note, same as prior batches.
+
+## Reconciled into the main sequence — 2026-11-05 (batch 4)
+
+The 2 remaining staged `javaria/` files (0019-0020, both already headered `Applied to live DB:
+YES` with a specific date and verifier — no live re-verification needed) were replicated the same
+way as batch 3, continuing straight on from `0066_it_employee_lookup.sql` (the renumbered end of
+batch 3) rather than reusing `0052`/`0053`, which this reconciliation now also knows are taken by
+IT/adeen's own sequence.
+
+| Staged file | Replicated as |
+|---|---|
+| `javaria/javaria_it_0019_route_waiting_on_new_approver.sql` | `supabase/migrations/0067_it_route_waiting_on_new_approver.sql` |
+| `javaria/javaria_it_0020_demands_without_hq_site.sql` | `supabase/migrations/0068_it_demands_without_hq_site.sql` |
+
+Same dual-copy policy as earlier batches: the staged originals stay in `javaria/`; the
+`supabase/migrations/` files are the authoritative ones `supabase db push` actually runs on a
+fresh environment. Bodies are byte-for-byte identical to their staged source; only the header
+comment block was replaced with a short replicated-from note.
+
 ## Applied log
 
 | File | Applied on | By | Notes |
@@ -150,3 +196,16 @@ environment is safe.
 | `talha/talha_it_0008_people_lookup.sql` | 2026-10-15 | Talha | Phase 3: people lookup for inventory staff (`it.search_people`, `it.asset_person_names`); Javaria's `person_names()` untouched. Not yet in the main sequence |
 | `javaria/javaria_it_0005_site_routing.sql` | 2026-10-16 | Javaria | Phase 6.1: ticket site isolation + HQ routing (`it.settings`, `it.site_it_staff`, `handling_site_id`, site-scoped RLS, Transfer to HQ, new `it.tickets.read_all` → Admin). **Replaces** several functions/policies from `javaria_it_0001`/`0003` (listed in its header). Not yet in the main sequence |
 | `talha/talha_it_0009_inventory_role_grants.sql` | 2026-10-19 | Talha | Inventory permissions for HOD IT, IT Admin, IT Executive (HQ), IT Site Manager, IT Team Member: the inventory half of the bundles. The roles and their ticket/onboarding bundles come from javaria_it_0008 (main-sequence 0040). Admin and IT untouched; IT Admin's inventory grants overlap 0008's and are skipped as duplicates. |
+| `javaria/javaria_it_0009_procurement_masters.sql` | 2026-10-23 (verified live) | Javaria | Procurement Phase 1: vendors, products, procurement settings. Replicated as `0057_it_procurement_masters.sql` |
+| `javaria/javaria_it_0010_demands.sql` | 2026-10-23 (verified live) | Javaria | Procurement Phase 2: demands, categorisation, consumable path. Replicated as `0058_it_demands.sql` |
+| `javaria/javaria_it_0011_demand_approvals.sql` | 2026-10-28 (verified live) | Javaria | Procurement Phase 3: department-head approval. Replicated as `0059_it_demand_approvals.sql` |
+| `javaria/javaria_it_0012_receiving_documents.sql` | 2026-10-28 (verified live) | Javaria | Procurement Phase 4: vendor assignment, receiving, documents. Replicated as `0060_it_receiving_documents.sql` |
+| `javaria/javaria_it_0013_procurement_improvements.sql` | 2026-10-28 (verified live) | Javaria | Improvements to Procurement Phases 1-4 ahead of invoices. Replicated as `0061_it_procurement_improvements.sql` |
+| `javaria/javaria_it_0014_invoices.sql` | 2026-10-28 (verified live) | Javaria | Procurement Phase 5: invoices. Replicated as `0062_it_invoices.sql` |
+| `javaria/javaria_it_0015_payments.sql` | 2026-10-28 (verified live) | Javaria | Procurement Phase 6: Finance processing and payments. Replicated as `0063_it_payments.sql` |
+| `javaria/javaria_it_0016_procurement_hardening.sql` | 2026-10-30 (verified live) | Javaria | Procurement Phase 8: RLS hardening. Replicated as `0064_it_procurement_hardening.sql` |
+| `javaria/javaria_it_0017_procurement_brd_alignment.sql` | 2026-10-30 (verified live) | Javaria | Procurement BRD alignment review. Replicated as `0065_it_procurement_brd_alignment.sql` |
+| `javaria/javaria_it_0018_employee_lookup.sql` | 2026-10-30 (verified live) | Javaria | Employee lookup for the offboarding/replacement picker. Replicated as `0066_it_employee_lookup.sql` |
+| — | 2026-11-04 | Adeen | Renumbered 0052–0061 → 0057–0066: IT/adeen's own `0052_it_onboarding_site_scoping.sql`…`0056_hr_onboarding_replacement_permissions.sql` sequence collided with this one at merge time (both branches started numbering fresh at 0052 off an older common ancestor). Adeen's files were already applied live under 0052–0054 by the time of the merge, so Javaria's sequence was shifted instead, preserving its internal order. **Unresolved before any further `db push`:** confirm which Supabase project Javaria's "verified live" checks above actually ran against — it push-applied cleanly through 0052–0054 with no schema collisions from Javaria's procurement tables, suggesting the currently-linked project may never have received her procurement migrations at all. |
+| `javaria/javaria_it_0019_route_waiting_on_new_approver.sql` | 2026-11-02 (confirmed live by read-only check) | Javaria | Adding a department approver (or flipping their approve-demands/approve-invoices switch on) routes that department's waiting Categorized demands / Verified invoices straight to Pending Approval, instead of needing a manual "Send for approval" per item. Replicated as `0067_it_route_waiting_on_new_approver.sql` |
+| `javaria/javaria_it_0020_demands_without_hq_site.sql` | 2026-11-03 (applied by Javaria via Supabase SQL Editor) | Javaria | Fixes `it.demands_before_insert`, broken by 0053's removal of `it.hq_site_id()`/`it.settings` (HQ-site routing removal) — the no-site fallback is now the requester's own site. Replicated as `0068_it_demands_without_hq_site.sql` |

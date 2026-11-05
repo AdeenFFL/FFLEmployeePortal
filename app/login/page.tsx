@@ -39,8 +39,11 @@ export default function LoginPage() {
   async function signInWithMicrosoft() {
     setIsRedirecting(true);
     const supabase = createClient();
-    const siteUrl =
-      process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+    // window.location.origin is always the actual origin the browser is on (localhost in dev,
+    // the real deployed domain in prod/preview) — it must win over NEXT_PUBLIC_SITE_URL, which
+    // is a static build-time env var that's easy to leave pointed at localhost after deploying
+    // elsewhere (that mismatch previously sent every Microsoft sign-in back to localhost).
+    const siteUrl = window.location.origin;
 
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "azure",

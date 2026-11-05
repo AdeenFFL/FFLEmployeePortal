@@ -214,6 +214,21 @@ permissions. Emits `it.employee_offboarded` (direct call to Talha's `listOpenAss
 portal account); the asset allocation / return items plug in once his forms exist.
 **Open dependency**: who writes employment status on offboarding, HR or IT (`context.md` §6).
 
+**Improvement 2026-10-29 — pick the employee, details fill themselves** (`javaria_it_0018_employee_lookup.sql`):
+- `it.employee_lookup(p_search | p_person_id)` (security definer): code, name, designation,
+  company, location, category, joining date, contract end, status. HR / onboarding staff can look
+  anyone up; anyone can look up themselves. Category is mapped from `persons.employment_type`
+  (`permanent` → Permanent; `contractual_with_email` / `contractual_no_email` /
+  `third_party_vendor` → Contractual; empty → HR chooses).
+- HR form (Offboarding / Replacement): type-ahead (300 ms, no Search button), picking shows a
+  read-only card with "Change" on designation, location and category; last working date
+  pre-filled with the contract end for contractual staff. Unchanged fields are left empty so
+  `it.lifecycle_before_insert()` copies them from `persons` as before.
+- Employee's own "Request offboarding" (`/it/my-offboarding/new`, senior dev's screen): shows
+  their record as a read-only card; category taken from the record (asked only if unknown); last
+  working date pre-filled from the contract end.
+- [ ] Apply `javaria_it_0018`. Cards show "—" until HR fills persons (site, company, joining date).
+
 ### Phase 5 — Notifications and hardening *(notifications built, migration not applied; hardening pass still to do)*
 **As built** (`javaria_it_0003_notifications.sql` + `lib/it/notifications.ts`): `it.notifications`
 inbox written only by security-definer triggers (ticket created / assigned / resolved / closed /
@@ -338,7 +353,7 @@ names `javaria_it_<NNNN>_<description>.sql`.
 
 | # | Question | Status |
 |---|---|---|
-| 1 | Who owns Procurement (ERD section D: vendors, products, demands, receiving, invoices, payments)? | **Open — conflict.** Javaria: not this track. Talha's `07` §2 / §8 #1 says Javaria. Talha + senior dev to settle and update `07`; his Phases 4–5 depend on `it.vendors` / `it.products` existing |
+| 1 | Who owns Procurement (ERD section D: vendors, products, demands, receiving, invoices, payments)? | **Taken on by Javaria (2026-10-21)** — planned separately in `09-it-procurement-plan.md`, which mirrors Talha's `07` §2.1 contracts (vendors + products first, to unblock his Phases 5 and 7) |
 | 2 | IT staff access: `it.staff_roles` or `it.*` permissions? | **Permissions** (both plans). Drop of `staff_roles` still open, Talha §8 #4a, senior dev |
 | 3 | `module:it` grants | **Decided by senior dev** (`develop` 0021): registered, granted to no role. Talha's foundation also inserts `module:it` and grants it to Employee/Admin, which contradicts that; Talha to drop that part |
 | 4 | SLA targets per priority (response / resolution hours) | Open: placeholders Critical 1/4, High 2/8, Medium 4/24, Low 8/72 (wall-clock); IT BA |

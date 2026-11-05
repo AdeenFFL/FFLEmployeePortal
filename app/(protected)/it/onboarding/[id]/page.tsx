@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { Modal } from "@/components/modal";
@@ -21,6 +22,10 @@ import {
   assignChecklistItem,
   cancelRequest,
   closeRequest,
+  completeEmailAccountTask,
+  completeHandoverTask,
+  completePortalAccountTask,
+  deactivatePortalAccess,
   linkOnboardingPerson,
   signOffboarding,
   takeOwnership,
@@ -132,7 +137,12 @@ export default async function LifecycleRequestPage({
     .map((i) => i.assignment_id)
     .filter((aid): aid is string => Boolean(aid));
 
-  const [names, { data: candidates }, { data: assignedAssets }] = await Promise.all([
+  const hasOpenPortalAccountTask = checklist.some(
+    (i) => i.task_type === "portal_account" && i.status !== "Completed",
+  );
+
+  const [names, { data: candidates }, { data: assignedAssets }, { data: leaverAccount }, { data: roles }] =
+    await Promise.all([
     fetchPersonNames(supabase, [
       request.person_id,
       request.requested_by,
@@ -149,13 +159,26 @@ export default async function LifecycleRequestPage({
       ? supabase
           .schema("it")
           .from("asset_assignments")
-          .select("id, assets(asset_tag, asset_name)")
+          .select("id, acknowledged_at, assets(asset_tag, asset_name)")
           .in("id", assignmentIds)
+      : Promise.resolve({ data: null }),
+    // persons is admin-only under RLS ("persons select own or admin") — an IT Executive
+    // viewing someone else's offboarding can't read their status via their own session, so
+    // this one read uses the admin client, same justification as deactivatePortalAccess.
+    request.kind === "Offboarding" && request.person_id && canAssign
+      ? createAdminClient().from("persons").select("status").eq("id", request.person_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    hasOpenPortalAccountTask && canAssign
+      ? supabase.from("roles").select("id, name").order("name")
       : Promise.resolve({ data: null }),
   ]);
   const assetByAssignmentId = new Map(
     (assignedAssets ?? []).map((a) => [a.id, a.assets as unknown as { asset_tag: string; asset_name: string } | null]),
   );
+  const acknowledgedAtByAssignmentId = new Map(
+    (assignedAssets ?? []).map((a) => [a.id, a.acknowledged_at as string | null]),
+  );
+  const allocationAssignmentId = checklist.find((i) => i.task_type === "asset_allocation")?.assignment_id ?? null;
 
   const nameOf = (pid: string | null) => (pid ? (names.get(pid) ?? "—") : "—");
   const done = checklist.filter((i) => i.status === "Completed" || i.status === "Not Applicable");
@@ -289,6 +312,16 @@ export default async function LifecycleRequestPage({
                       </p>
                     )}
 
+                    {item.task_type === "asset_handover" && (
+                      <p className="mt-2 text-xs text-slate-500">
+                        {!allocationAssignmentId
+                          ? "No asset assigned yet."
+                          : acknowledgedAtByAssignmentId.get(allocationAssignmentId)
+                            ? `Acknowledged by the employee on ${formatDateTime(acknowledgedAtByAssignmentId.get(allocationAssignmentId)!)}.`
+                            : "Awaiting the employee's acknowledgement (My Assets)."}
+                      </p>
+                    )}
+
                     {(recorded.length > 0 || item.notes) && (
                       <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
                         {recorded.map((f) => (
@@ -393,6 +426,29 @@ export default async function LifecycleRequestPage({
                           Assign an asset
                         </Link>
                       )
+                    ) : item.task_type === "asset_handover" ? (
+                      canAssign &&
+                      !isFinished &&
+                      item.status !== "Completed" &&
+                      allocationAssignmentId &&
+                      acknowledgedAtByAssignmentId.get(allocationAssignmentId) && (
+                        <form action={completeHandoverTask.bind(null, request.id, item.id)} className="mt-3">
+                          <button type="submit" className="text-sm font-medium text-blue-700 hover:underline">
+                            Mark handover confirmed
+                          </button>
+                        </form>
+                      )
+                    ) : item.task_type === "portal_account" ? (
+                      canAssign &&
+                      !isFinished &&
+                      item.status !== "Completed" && (
+                        <Link
+                          href={`${basePath}?updateTask=${item.id}`}
+                          className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
+                        >
+                          Create portal account
+                        </Link>
+                      )
                     ) : (
                       canWork && (
                         <Link
@@ -420,16 +476,51 @@ export default async function LifecycleRequestPage({
                 );
               }
 
+              if (item.task_type === "portal_account") {
+                if (!canAssign || isFinished) return null;
+                const defaultRoleId = (roles ?? []).find((r) => r.name === "Employee")?.id ?? "";
+                return (
+                  <Modal key={Date.now()} closeHref={basePath} title="Create portal account">
+                    <form action={completePortalAccountTask.bind(null, request.id, item.id)} className="space-y-3">
+                      <p className="text-xs text-slate-500">
+                        Pick the role to create or upgrade their portal account with. Defaults to
+                        the baseline Employee role — change it if they need something else.
+                      </p>
+                      <div>
+                        <label className={labelClass}>Role *</label>
+                        <select name="roleId" required defaultValue={defaultRoleId} className={inputClass}>
+                          <option value="" disabled>
+                            Select…
+                          </option>
+                          {(roles ?? []).map((r) => (
+                            <option key={r.id} value={r.id}>
+                              {r.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                      <button type="submit" className={primaryButtonClass}>
+                        Create account
+                      </button>
+                    </form>
+                  </Modal>
+                );
+              }
+
               const isMine = Boolean(personId) && item.assigned_to_person_id === personId;
               const canWork = !isFinished && (canAssign || (canUpdate && isMine));
               const fields = TASK_DETAIL_FIELDS[item.task_type];
               if (!canWork) return null;
+              // Completing this with a real address also stages the new hire's portal invite
+              // (completeEmailAccountTask) — same fields, different action, so the fallback
+              // generic form below is reused rather than duplicated.
+              const action =
+                item.task_type === "email_account"
+                  ? completeEmailAccountTask.bind(null, request.id, item.id)
+                  : updateChecklistItem.bind(null, request.id, item.id);
               return (
                 <Modal key={Date.now()} closeHref={basePath} title={`Update: ${item.task_name}`}>
-                  <form
-                    action={updateChecklistItem.bind(null, request.id, item.id)}
-                    className="space-y-3"
-                  >
+                  <form action={action} className="space-y-3">
                     {fields.map((f) => (
                       <label key={f.key} className="block">
                         <span className={labelClass}>{f.label}</span>
@@ -661,6 +752,28 @@ export default async function LifecycleRequestPage({
                     <p className="text-xs text-slate-500">Waiting for the IT Executive to sign.</p>
                   )}
                 </div>
+              )}
+            </Panel>
+          )}
+
+          {request.kind === "Offboarding" && request.person_id && canAssign && (
+            <Panel title="Portal access">
+              <p className="mb-3 text-sm text-slate-700">
+                {leaverAccount?.status === "Inactive" ? (
+                  <span className="font-medium text-red-600">Deactivated</span>
+                ) : (
+                  "Still active — the employee can still log in."
+                )}
+              </p>
+              {leaverAccount?.status !== "Inactive" && (
+                <form action={deactivatePortalAccess.bind(null, request.id)}>
+                  <button
+                    type="submit"
+                    className="rounded-lg border border-red-200 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+                  >
+                    Deactivate portal access
+                  </button>
+                </form>
               )}
             </Panel>
           )}

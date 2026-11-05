@@ -1,13 +1,16 @@
-import Link from "next/link";
-import { BellIcon, HelpCircleIcon } from "@/components/icons";
+import { HelpCircleIcon } from "@/components/icons";
+import { NotificationBell } from "@/components/notification-bell";
 import { SUPPORT_EMAIL } from "@/lib/constants";
+import type { RecentNotification } from "./notification-actions";
 
 export function TopBar({
   displayName,
   unreadCount = 0,
+  notifications = [],
 }: {
   displayName: string;
   unreadCount?: number;
+  notifications?: RecentNotification[];
 }) {
   const initials =
     displayName
@@ -28,18 +31,7 @@ export function TopBar({
         <HelpCircleIcon className="h-5 w-5" />
       </a>
       {/* Inbox lives in the IT module for now (it.notifications) — the only module with one. */}
-      <Link
-        href="/it/notifications"
-        aria-label={unreadCount ? `Notifications, ${unreadCount} unread` : "Notifications"}
-        className="relative rounded-full p-2 text-slate-400 hover:bg-slate-100 hover:text-slate-600"
-      >
-        <BellIcon className="h-5 w-5" />
-        {unreadCount > 0 && (
-          <span className="absolute -right-0.5 -top-0.5 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-semibold text-white">
-            {unreadCount > 99 ? "99+" : unreadCount}
-          </span>
-        )}
-      </Link>
+      <NotificationBell initialUnreadCount={unreadCount} initialNotifications={notifications} />
       <div
         className="flex h-9 w-9 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700"
         title={displayName}

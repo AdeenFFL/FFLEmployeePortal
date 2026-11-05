@@ -23,8 +23,12 @@ type IconComponent = (props: { className?: string }) => React.ReactElement;
 // see regardless of role — everything else is shown only if the viewer's resolved permission set
 // (computed in app/(protected)/current-user.ts, keyed off role_permissions, never a role
 // *name*) actually contains it, so a brand-new custom role sees exactly what it was granted.
-type NavChild = { href: string; label: string; permission?: string };
-type NavLeaf = { type: "link"; href: string; label: string; icon: IconComponent; permission?: string };
+// A permission can be a single key, or an array meaning "granted if any of these are held" —
+// used for nav entries that front more than one underlying permission-gated resource (e.g. the
+// unified Requests queue, which needs it.tickets.read OR it.onboarding.read).
+type Permission = string | string[];
+type NavChild = { href: string; label: string; permission?: Permission };
+type NavLeaf = { type: "link"; href: string; label: string; icon: IconComponent; permission?: Permission };
 type NavGroup = {
   type: "group";
   label: string;
@@ -47,7 +51,9 @@ export function Sidebar({
   homePath: string;
 }) {
   const granted = new Set(permissions);
-  const has = (permission?: string) => !permission || granted.has(permission);
+  const has = (permission?: Permission) =>
+    !permission ||
+    (Array.isArray(permission) ? permission.some((p) => granted.has(p)) : granted.has(permission));
   const pathname = usePathname();
   const [expandedByHover, setExpandedByHover] = useState(false);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -83,22 +89,8 @@ export function Sidebar({
     },
     {
       type: "link",
-      href: "/it/my-tickets",
-      label: "IT Tickets",
-      icon: TicketIcon,
-      permission: "module:it",
-    },
-    {
-      type: "link",
       href: "/it/my-assets",
       label: "My Assets",
-      icon: TicketIcon,
-      permission: "module:it",
-    },
-    {
-      type: "link",
-      href: "/it/my-offboarding",
-      label: "Resignation / Offboarding",
       icon: TicketIcon,
       permission: "module:it",
     },
@@ -118,6 +110,11 @@ export function Sidebar({
       children: [
         { href: "/hr/dashboard", label: "Dashboard", permission: "module:hr" },
         { href: "/hr/feedback", label: "Ticket Queue", permission: "hr.tickets.read" },
+        {
+          href: "/it/onboarding/new?kind=Onboarding",
+          label: "Onboarding",
+          permission: "hr.onboarding.create",
+        },
         {
           href: "/hr/feedback/anonymous",
           label: "Anonymous Feedback",
@@ -141,25 +138,19 @@ export function Sidebar({
       icon: BuildingIcon,
       children: [
         { href: "/it/dashboard", label: "Dashboard", permission: "it.tickets.read" },
-        // Service management track (Javaria)
-        { href: "/it/tickets", label: "Ticket Queue", permission: "it.tickets.read" },
+        // Unified queue: tickets + onboarding/offboarding/replacement in one list, filterable by
+        // type (replaces the separate Ticket Queue / Onboarding / Offboarding entries).
         {
-          href: "/it/onboarding",
-          label: "Onboarding / Offboarding",
-          permission: "it.onboarding.read",
+          href: "/it/requests",
+          label: "Requests",
+          permission: ["it.tickets.read", "it.onboarding.read"],
         },
         { href: "/it/reports", label: "Reports", permission: "it.tickets.read" },
         {
-          href: "/it/settings/tickets",
-          label: "Ticket Settings",
-          permission: "it.ticket_settings.update",
+          href: "/it/settings",
+          label: "Settings",
+          permission: ["it.ticket_settings.update", "it.onboarding.read"],
         },
-        {
-          href: "/it/settings/sites",
-          label: "Sites & IT Staff",
-          permission: "it.ticket_settings.update",
-        },
-        { href: "/it/settings/owners", label: "Category Owners", permission: "it.tickets.read" },
         {
           href: "/it/admin/roles",
           label: "IT Roles & Permissions",
@@ -172,6 +163,23 @@ export function Sidebar({
           href: "/it/inventory/settings",
           label: "Inventory Settings",
           permission: "it.inventory_settings.update",
+        },
+        // Procurement track (Javaria) — 09-it-procurement-plan.md. One entry; the procurement
+        // pages have their own tab bar (it/procurement/layout.tsx).
+        {
+          href: "/it/procurement",
+          label: "Procurement",
+          permission: [
+            "it.demands.create",
+            "it.demands.read",
+            "it.demands.read_all",
+            "it.demands.approve",
+            "it.invoices.approve",
+            "it.payments.update",
+            "it.vendors.update",
+            "it.products.update",
+            "it.procurement_settings.update",
+          ],
         },
         // (IT Roles & Permissions is listed once, above — shared by both IT tracks.)
       ],
