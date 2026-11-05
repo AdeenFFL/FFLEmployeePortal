@@ -14,7 +14,7 @@ import {
   DOCUMENT_BUCKET,
   formatMoney,
 } from "@/lib/it/procurement";
-import { DeliverySection, ReceivingPanel, VendorPanel } from "./delivery-panels";
+import { DeliverySection, ReceivingPanel, VendorPanel, type ReceiptAsset } from "./delivery-panels";
 import type { ItDemand } from "@/types/database";
 import {
   addDemandComment,
@@ -217,6 +217,34 @@ export default async function DemandPage({
   ]);
   const payments = paymentsRes.data ?? [];
   const documents = documentsRes.data ?? [];
+
+  // Receiving → assets (javaria_it_0021): fixed-asset products get a "Register assets" step per
+  // delivery. Assets are RLS-limited to it.assets.read holders; others just don't see the list.
+  const fixedTypeId = productsRes.data?.find((p) => p.id === demand.product_id)?.asset_type_id ?? null;
+  const [assetTypeRes, assetsRes, { data: canRegisterAssets }, companiesRes] = await Promise.all([
+    fixedTypeId
+      ? supabase.schema("it").from("asset_types").select("classification").eq("id", fixedTypeId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    fixedTypeId && receivings.length
+      ? supabase
+          .schema("it")
+          .from("assets")
+          .select("id, asset_tag, serial_number, status, receiving_id")
+          .in("receiving_id", receivings.map((r) => r.id))
+          .is("deleted_at", null)
+          .order("asset_tag")
+      : Promise.resolve({ data: [] as ReceiptAsset[] }),
+    supabase.rpc("has_permission", { p_permission_key: "it.assets.create" }),
+    supabase.from("companies").select("id, name").eq("is_active", true).order("name"),
+  ]);
+  const assetRegistration =
+    assetTypeRes.data?.classification === "Fixed"
+      ? {
+          assets: (assetsRes.data ?? []) as ReceiptAsset[],
+          canRegister: Boolean(canRegisterAssets),
+          companies: companiesRes.data ?? [],
+        }
+      : null;
   const docPaths = documents.map((d) => d.storage_path);
   const { data: signed } = docPaths.length
     ? await supabase.storage.from(DOCUMENT_BUCKET).createSignedUrls(docPaths, 600)
@@ -476,6 +504,8 @@ export default async function DemandPage({
               payments={payments}
               isFinance={Boolean(isFinance)}
               vendorHasEmail={Boolean(vendorRes.data?.email)}
+              productName={product?.product_name ?? "Item"}
+              assetRegistration={assetRegistration}
             />
           )}
 
@@ -694,7 +724,7 @@ export default async function DemandPage({
           {canAssignVendor && <VendorPanel demand={demand} vendors={vendorsRes.data ?? []} />}
 
           {canReceive && (
-            <ReceivingPanel demand={demand} unit={product?.unit ?? ""} isFixedAsset={Boolean(product?.asset_type_id)} />
+            <ReceivingPanel demand={demand} unit={product?.unit ?? ""} isFixedAsset={Boolean(assetRegistration)} />
           )}
 
           {canClose && (

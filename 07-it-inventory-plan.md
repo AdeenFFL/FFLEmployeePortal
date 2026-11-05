@@ -342,6 +342,15 @@ current value / accumulated depreciation from the value type (straight-line and 
 **Code**: `registerAssetsFromReceipt()` for her receiving step; INV-03 Origin tab (receipt →
 demand trail, read-only).
 
+✅ Receiving → assets built by Javaria on `IT/javaria` with Talha's agreement (2026-11-05):
+`javaria_it_0021_register_assets_from_receipt.sql` adds the `assets.vendor_id` / `assets.receiving_id`
+FKs and `it.register_assets_from_receipt(receiving, company, items)` (needs `it.assets.create`; only
+tag + serial typed per item; Fixed-classified types only). Register step on each delivery of the
+demand page; INV-02 shows "delivered items waiting to be registered"; INV-03 now has a lifecycle
+stepper, a "Next step" card, a "Where it came from" section and one combined History. INV-01 got
+tabs (Asset types / Value & depreciation), a slide-over form, and actions that redirect with
+?notice / ?error instead of throwing. Still open here: `asset_maintenance.vendor_id` FK.
+
 ### Phase 8 — Dashboard and reports
 **Screens**: `<InventoryKpis>` for SCR-06 (total, in use, unassigned, in repair, retired,
 warranty expiring in 30/60/90 days), INV-08 reports with CSV export (same pattern as

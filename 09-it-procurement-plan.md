@@ -478,6 +478,11 @@ names `javaria_it_<NNNN>_<description>.sql`; plus:
 
 ---
 
+**2026-11-05 — Receiving → assets** (`javaria_it_0021`, Applied: NO): a delivery of a Fixed
+asset product shows "N of M registered" and a Register form (tag + serial per item, tag prefix
+auto-fill, paste serials); the rest comes from the receipt. Replaces the "serials in remarks"
+interim from §2. See `07` Phase 7.
+
 ## 8. Decisions needed before Phase 1–3
 
 | # | Question | Proposed answer | Decide with |

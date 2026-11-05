@@ -2,9 +2,11 @@ import { StatusPill } from "@/components/status-pill";
 import { formatDate } from "@/lib/it/tickets";
 import { DOCUMENT_ACCEPT, formatMoney, RECEIVING_CONDITIONS, todayIso } from "@/lib/it/procurement";
 import type { ItDemand, ItDocument, ItInvoice, ItPayment, ItReceivingRecord } from "@/types/database";
+import Link from "next/link";
 import { DocumentLinks } from "./document-links";
+import { RegisterAssetsForm } from "./register-assets-form";
 import { InvoiceBlock } from "./invoice-panel";
-import { assignVendor, recordReceiving, updateReceivingRefs, uploadDemandDocuments } from "../actions";
+import { assignVendor, recordReceiving, registerAssets, updateReceivingRefs, uploadDemandDocuments } from "../actions";
 import { cardClass, inputClass, labelClass, primaryButtonClass, secondaryButtonClass } from "../../../_components/ticket-ui";
 
 // Phase 4 panels for the demand page (javaria_it_0012): vendor, deliveries, documents.
@@ -61,6 +63,8 @@ export function DeliverySection({
   payments,
   isFinance,
   vendorHasEmail,
+  productName,
+  assetRegistration,
 }: {
   demand: ItDemand;
   unit: string;
@@ -77,6 +81,9 @@ export function DeliverySection({
   payments: ItPayment[];
   isFinance: boolean;
   vendorHasEmail: boolean;
+  productName: string;
+  // Set only for fixed-asset products (asset type classified Fixed).
+  assetRegistration: { assets: ReceiptAsset[]; canRegister: boolean; companies: { id: string; name: string }[] } | null;
 }) {
   const unitPrice = demand.agreed_unit_price ?? demand.estimated_unit_price;
   const target = demand.approved_quantity ?? demand.quantity;
@@ -160,6 +167,10 @@ export function DeliverySection({
                 {r.remarks && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{r.remarks}</p>}
                 <DocumentLinks documents={docs} urls={urls} />
 
+                {assetRegistration && r.accepted_quantity > 0 && (
+                  <ReceiptAssets demandId={demand.id} receiving={r} productName={productName} {...assetRegistration} />
+                )}
+
                 {canProcess && open && (
                   <details className="mt-2">
                     <summary className="cursor-pointer text-sm font-medium text-blue-700">
@@ -232,6 +243,84 @@ export function DeliverySection({
         </div>
       )}
     </section>
+  );
+}
+
+export type ReceiptAsset = {
+  id: string;
+  asset_tag: string;
+  serial_number: string;
+  status: string;
+  receiving_id: string | null;
+};
+
+// Receiving → assets (javaria_it_0021): which accepted items of this delivery are already in the
+// Asset Register, and the form to register the rest.
+function ReceiptAssets({
+  demandId,
+  receiving,
+  productName,
+  assets,
+  canRegister,
+  companies,
+}: {
+  demandId: string;
+  receiving: ItReceivingRecord;
+  productName: string;
+  assets: ReceiptAsset[];
+  canRegister: boolean;
+  companies: { id: string; name: string }[];
+}) {
+  const mine = assets.filter((a) => a.receiving_id === receiving.id);
+  const remaining = Math.max(0, receiving.accepted_quantity - mine.length);
+  return (
+    <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium text-slate-800">
+          Assets{" "}
+          <span className="font-normal text-slate-500">
+            · {mine.length} of {receiving.accepted_quantity} registered
+          </span>
+        </p>
+        {remaining === 0 ? (
+          <StatusPill label="All registered" tone="positive" />
+        ) : (
+          <StatusPill label={`${remaining} to register`} tone="warning" />
+        )}
+      </div>
+      {mine.length > 0 && (
+        <ul className="mt-2 flex flex-wrap gap-1.5">
+          {mine.map((a) => (
+            <li key={a.id}>
+              <Link
+                href={`/it/inventory/${a.id}`}
+                title={`Serial ${a.serial_number} · ${a.status}`}
+                className="inline-block rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs text-slate-700 hover:border-blue-300 hover:text-blue-700"
+              >
+                {a.asset_tag}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      {remaining > 0 &&
+        (canRegister ? (
+          <details className="mt-2" open={mine.length === 0}>
+            <summary className="cursor-pointer text-sm font-medium text-blue-700">
+              Register {remaining} asset{remaining === 1 ? "" : "s"}
+            </summary>
+            <RegisterAssetsForm
+              key={remaining}
+              action={registerAssets.bind(null, demandId, receiving.id)}
+              remaining={remaining}
+              productName={productName}
+              companies={companies}
+            />
+          </details>
+        ) : (
+          <p className="mt-1 text-xs text-slate-500">IT inventory staff register these in the Asset Register.</p>
+        ))}
+    </div>
   );
 }
 
@@ -389,13 +478,13 @@ export function ReceivingPanel({
             name="remarks"
             rows={3}
             className={inputClass}
-            placeholder={isFixedAsset ? "Serial numbers of the items received, one per line" : "Anything to note"}
+            placeholder="Anything to note"
           />
         </label>
         {isFixedAsset && (
           <p className="text-xs text-slate-500">
-            Fixed-asset product: note the serial numbers above, then register the items on the Asset
-            Register (automatic registration comes with the inventory module).
+            Fixed-asset product: after saving, register each accepted item as an asset (tag + serial)
+            on the delivery.
           </p>
         )}
         <p className="text-xs text-slate-400">

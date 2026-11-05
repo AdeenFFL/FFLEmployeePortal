@@ -447,3 +447,36 @@ export async function addDemandComment(demandId: string, formData: FormData) {
   queueItEmails();
   redirect(path);
 }
+
+// Receiving → assets (javaria_it_0021): one asset per accepted fixed-asset item. Only tag and
+// serial are typed; the database fills product, type, vendor, site, purchase date and the
+// receipt link, and checks it.assets.create.
+export async function registerAssets(demandId: string, receivingId: string, formData: FormData) {
+  const path = `${LIST}/${demandId}`;
+  const { supabase } = await requirePermission("it.assets.create");
+
+  const tags = formData.getAll("assetTag").map((v) => String(v).trim());
+  const serials = formData.getAll("serialNumber").map((v) => String(v).trim());
+  const common = {
+    manufacturer: text(formData, "manufacturer") || null,
+    model_number: text(formData, "modelNumber") || null,
+    warranty_expiry: text(formData, "warrantyExpiry") || null,
+  };
+  // Rows left completely empty are skipped, so part of a delivery can be registered now.
+  const items = tags
+    .map((tag, i) => ({ asset_tag: tag, serial_number: serials[i] ?? "", ...common }))
+    .filter((item) => item.asset_tag || item.serial_number);
+  if (items.length === 0) fail(path, "Enter an asset tag and serial number for at least one item.");
+  if (items.some((item) => !item.asset_tag || !item.serial_number)) {
+    fail(path, "Each item needs both an asset tag and a serial number.");
+  }
+
+  const { data: count, error } = await supabase.schema("it").rpc("register_assets_from_receipt", {
+    p_receiving_id: receivingId,
+    p_company_id: text(formData, "companyId") || null,
+    p_items: items,
+  });
+  if (error) fail(path, error.message);
+  revalidatePath("/it/inventory");
+  done(path, `${count} asset${count === 1 ? "" : "s"} registered — they are now in the Asset Register as Unassigned.`);
+}

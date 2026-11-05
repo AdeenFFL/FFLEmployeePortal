@@ -1851,6 +1851,21 @@ export type Database = {
         };
         Returns: string;
       };
+      // javaria_it_0021: register a receipt's accepted fixed-asset items as it.assets rows.
+      register_assets_from_receipt: {
+        Args: {
+          p_receiving_id: string;
+          p_company_id: string | null;
+          p_items: {
+            asset_tag: string;
+            serial_number: string;
+            manufacturer?: string | null;
+            model_number?: string | null;
+            warranty_expiry?: string | null;
+          }[];
+        };
+        Returns: number;
+      };
       update_receiving_refs: {
         Args: { p_receiving_id: string; p_challan_no: string | null; p_gate_pass_no: string | null };
         Returns: undefined;
