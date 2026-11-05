@@ -57,7 +57,17 @@ function stageOf(status: AssetStatus) {
   return 4;
 }
 
-type HistoryEvent = { at: string; tone: "blue" | "emerald" | "amber" | "slate"; title: string; lines: string[] };
+// `at` is the business date shown; `seq` is when the row was written, which orders events that
+// share a date (assign / return / repair dates are plain dates without a time).
+type HistoryEvent = {
+  at: string;
+  seq: string;
+  tone: "blue" | "emerald" | "amber" | "slate";
+  title: string;
+  lines: string[];
+};
+
+const HISTORY_SHOWN = 6;
 
 // INV-03 — one asset: where it came from, where it is in its life, the one thing to do next,
 // and everything that happened to it. Assign / return / repair / status changes still go
@@ -117,7 +127,7 @@ export default async function AssetDetailPage({
     supabase
       .schema("it")
       .from("asset_maintenance")
-      .select("id, issue_type, description, service_date, returned_date, status, resolution, cost, remarks, created_at")
+      .select("id, issue_type, description, service_date, returned_date, status, resolution, cost, remarks, created_at, updated_at")
       .eq("asset_id", id)
       .order("service_date", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -144,7 +154,7 @@ export default async function AssetDetailPage({
     .schema("it")
     .from("asset_assignments")
     .select(
-      "id, person_id, assigned_by_person_id, returned_to_person_id, assigned_date, return_date, assigned_condition, returned_condition, acknowledged_at, remarks",
+      "id, person_id, assigned_by_person_id, returned_to_person_id, assigned_date, return_date, assigned_condition, returned_condition, acknowledged_at, remarks, created_at, updated_at",
     )
     .eq("asset_id", asset.id)
     .order("assigned_date", { ascending: false })
@@ -210,6 +220,7 @@ export default async function AssetDetailPage({
   const events: HistoryEvent[] = [
     {
       at: asset.created_at,
+      seq: asset.created_at,
       tone: "slate" as const,
       title: receipt ? `Registered from delivery ${receipt.receiving_number}` : "Registered",
       lines: [
@@ -224,6 +235,7 @@ export default async function AssetDetailPage({
     ...history.flatMap((a): HistoryEvent[] => [
       {
         at: a.assigned_date,
+        seq: a.created_at,
         tone: "emerald",
         title: `Assigned to ${nameOf(a.person_id)}`,
         lines: [
@@ -238,6 +250,7 @@ export default async function AssetDetailPage({
         ? [
             {
               at: a.return_date,
+              seq: a.updated_at,
               tone: "blue" as const,
               title: `Returned by ${nameOf(a.person_id)}`,
               lines: [
@@ -253,6 +266,7 @@ export default async function AssetDetailPage({
     ...repairs.flatMap((r): HistoryEvent[] => [
       {
         at: r.service_date,
+        seq: r.created_at,
         tone: "amber",
         title: `Sent for repair — ${r.issue_type}`,
         lines: r.description ? [r.description] : [],
@@ -261,6 +275,7 @@ export default async function AssetDetailPage({
         ? [
             {
               at: r.returned_date,
+              seq: r.updated_at,
               tone: "blue" as const,
               title: "Back from repair",
               lines: [
@@ -271,7 +286,7 @@ export default async function AssetDetailPage({
           ]
         : []),
     ]),
-  ].sort((a, b) => new Date(b.at).getTime() - new Date(a.at).getTime());
+  ].sort((a, b) => b.at.slice(0, 10).localeCompare(a.at.slice(0, 10)) || b.seq.localeCompare(a.seq));
 
   return (
     <div className="py-6">
@@ -450,32 +465,43 @@ export default async function AssetDetailPage({
           </Panel>
 
           <Panel title="Where it came from">
-            <dl className="grid gap-4 sm:grid-cols-3">
-              <Fact label="Vendor">{vendor?.vendor_name ?? "—"}</Fact>
-              <Fact label="Purchase date">{formatDate(asset.purchase_date)}</Fact>
-              <Fact label="Delivery / demand">
-                {receipt ? (
-                  <>
-                    {receipt.receiving_number}
-                    {demandNumber && (
-                      <>
-                        {" · "}
-                        <Link
-                          href={`/it/procurement/demands/${receipt.demand_id}`}
-                          className="font-medium text-blue-700 hover:underline"
-                        >
-                          {demandNumber}
-                        </Link>
-                      </>
-                    )}
-                  </>
-                ) : asset.receiving_id ? (
-                  "Procurement record"
-                ) : (
-                  <span className="text-slate-400">Added by hand</span>
+            {!vendor && !asset.purchase_date && !asset.receiving_id ? (
+              <p className="text-sm text-slate-500">
+                Added by hand — no vendor or purchase date recorded.{" "}
+                {canUpdate && (
+                  <Link href={`/it/inventory/${asset.id}/edit`} className="font-medium text-blue-700 hover:underline">
+                    Add them
+                  </Link>
                 )}
-              </Fact>
-            </dl>
+              </p>
+            ) : (
+              <dl className="grid gap-4 sm:grid-cols-3">
+                <Fact label="Vendor">{vendor?.vendor_name ?? "—"}</Fact>
+                <Fact label="Purchase date">{formatDate(asset.purchase_date)}</Fact>
+                <Fact label="Delivery / demand">
+                  {receipt ? (
+                    <>
+                      {receipt.receiving_number}
+                      {demandNumber && (
+                        <>
+                          {" · "}
+                          <Link
+                            href={`/it/procurement/demands/${receipt.demand_id}`}
+                            className="font-medium text-blue-700 hover:underline"
+                          >
+                            {demandNumber}
+                          </Link>
+                        </>
+                      )}
+                    </>
+                  ) : asset.receiving_id ? (
+                    "Procurement record"
+                  ) : (
+                    <span className="text-slate-400">Added by hand</span>
+                  )}
+                </Fact>
+              </dl>
+            )}
           </Panel>
 
           <Panel title="History" aside={<span className="text-xs text-slate-400">Newest first</span>}>
@@ -484,25 +510,17 @@ export default async function AssetDetailPage({
                 Part of the history couldn&apos;t be loaded: {(historyError ?? maintenanceError)?.message}
               </p>
             ) : null}
-            <ol className="relative space-y-4 border-l border-slate-200 pl-5">
-              {events.map((e, i) => (
-                <li key={i} className="relative">
-                  <span
-                    aria-hidden
-                    className={`absolute -left-[1.6rem] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-white ${
-                      { blue: "bg-blue-500", emerald: "bg-emerald-500", amber: "bg-amber-500", slate: "bg-slate-400" }[e.tone]
-                    }`}
-                  />
-                  <p className="text-sm font-medium text-slate-900">{e.title}</p>
-                  <p className="text-xs text-slate-400">{formatDate(e.at)}</p>
-                  {e.lines.map((l, j) => (
-                    <p key={j} className="text-xs text-slate-600">
-                      {l}
-                    </p>
-                  ))}
-                </li>
-              ))}
-            </ol>
+            <HistoryList events={events.slice(0, HISTORY_SHOWN)} />
+            {events.length > HISTORY_SHOWN && (
+              <details className="mt-4">
+                <summary className="cursor-pointer text-sm font-medium text-blue-700">
+                  Show {events.length - HISTORY_SHOWN} older event{events.length - HISTORY_SHOWN === 1 ? "" : "s"}
+                </summary>
+                <div className="mt-4">
+                  <HistoryList events={events.slice(HISTORY_SHOWN)} />
+                </div>
+              </details>
+            )}
           </Panel>
 
           {canReadTickets && (
@@ -635,13 +653,6 @@ export default async function AssetDetailPage({
                 <p className="text-xs text-slate-400">
                   A repair keeps it assigned to {nameOf(openAssignment.person_id)}; it returns to In Use when the repair
                   is closed.
-                </p>
-              )}
-              {canUpdate && isSystemManaged && (
-                <p className="text-xs text-slate-400">
-                  {asset.status === "In Use"
-                    ? "Status changes after the return is recorded."
-                    : "Status changes when the repair is closed."}
                 </p>
               )}
             </div>
@@ -828,5 +839,29 @@ export default async function AssetDetailPage({
         </Modal>
       )}
     </div>
+  );
+}
+
+function HistoryList({ events }: { events: HistoryEvent[] }) {
+  return (
+    <ol className="relative space-y-4 border-l border-slate-200 pl-5">
+      {events.map((e, i) => (
+        <li key={i} className="relative">
+          <span
+            aria-hidden
+            className={`absolute -left-[1.6rem] top-1 h-2.5 w-2.5 rounded-full ring-4 ring-white ${
+              { blue: "bg-blue-500", emerald: "bg-emerald-500", amber: "bg-amber-500", slate: "bg-slate-400" }[e.tone]
+            }`}
+          />
+          <p className="text-sm font-medium text-slate-900">{e.title}</p>
+          <p className="text-xs text-slate-400">{formatDate(e.at)}</p>
+          {e.lines.map((l, j) => (
+            <p key={j} className="text-xs text-slate-600">
+              {l}
+            </p>
+          ))}
+        </li>
+      ))}
+    </ol>
   );
 }
