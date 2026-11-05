@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { fixedAssetTypeIds, isFixedAsset } from "@/lib/it/stock";
 import { PageHeader } from "@/components/page-header";
 import { checked, fetchOrgUnits, fetchTicketScope, hasItPermission } from "@/lib/it/ticket-data";
 import { DEMAND_CATEGORIES } from "@/lib/it/procurement";
@@ -24,7 +25,7 @@ export default async function NewDemandPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [productsRes, { sites, departments }, scope, readAll, personRes, canAddProducts, approversRes, canManageApprovers, settingsRes] =
+  const [productsRes, { sites, departments }, scope, readAll, personRes, canAddProducts, approversRes, canManageApprovers, settingsRes, fixedTypes] =
     await Promise.all([
     supabase
       .schema("it")
@@ -40,6 +41,7 @@ export default async function NewDemandPage({
     supabase.schema("it").rpc("list_department_approvers"),
     hasItPermission(supabase, "it.procurement_settings.update"),
     supabase.schema("it").from("procurement_settings").select("consumable_path_enabled").eq("id", true).maybeSingle(),
+    fixedAssetTypeIds(supabase),
   ]);
   const products = checked(productsRes).data ?? [];
   const homeSite = personRes.data?.site_id ?? null;
@@ -89,7 +91,7 @@ export default async function NewDemandPage({
             category: p.category,
             unit: p.unit,
             price: p.current_price ?? p.purchase_price,
-            fixedAsset: Boolean(p.asset_type_id),
+            fixedAsset: isFixedAsset(p, fixedTypes),
           }))}
           categories={DEMAND_CATEGORIES}
           departments={departments}

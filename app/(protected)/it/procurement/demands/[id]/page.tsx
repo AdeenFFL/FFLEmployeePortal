@@ -14,6 +14,7 @@ import {
   DOCUMENT_BUCKET,
   formatMoney,
 } from "@/lib/it/procurement";
+import { stockAtSite } from "@/lib/it/stock";
 import { DeliverySection, ReceivingPanel, VendorPanel, type ReceiptAsset } from "./delivery-panels";
 import type { ItDemand } from "@/types/database";
 import {
@@ -245,6 +246,13 @@ export default async function DemandPage({
           companies: companiesRes.data ?? [],
         }
       : null;
+
+  // Consumable path (javaria_it_0022): what the demand's site has on hand. null = the viewer can't
+  // read stock (no it.stock.read) — the issue form then just tries and reports a shortage.
+  const onHand =
+    demand.demand_category === "Consumable" && demand.status === "Categorized"
+      ? ((await stockAtSite(supabase, demand.site_id, [demand.product_id]))?.get(demand.product_id) ?? null)
+      : null;
   const docPaths = documents.map((d) => d.storage_path);
   const { data: signed } = docPaths.length
     ? await supabase.storage.from(DOCUMENT_BUCKET).createSignedUrls(docPaths, 600)
@@ -346,7 +354,7 @@ export default async function DemandPage({
                 tone={demand.demand_category ? "info" : "neutral"}
               />
               {product && (
-                <StatusPill label={product.asset_type_id ? "Fixed asset" : "Consumable / service"} tone="neutral" />
+                <StatusPill label={assetRegistration ? "Fixed asset" : "Consumable / service"} tone="neutral" />
               )}
             </div>
             <dl className="grid gap-4 sm:grid-cols-2">
@@ -579,20 +587,33 @@ export default async function DemandPage({
             <section className={`${cardClass} p-6`}>
               <h2 className="mb-1 text-base font-semibold text-slate-900">Issue from stock</h2>
               <p className="mb-4 text-xs text-slate-500">
-                Consumable — no approval or vendor needed. Record what was issued; the stock register
-                link arrives with the inventory module.
+                Consumable — no approval or vendor needed. {demand.quantity} {product?.unit ?? ""} are taken out of
+                stock at this site and issued to the requester.
               </p>
+              {onHand !== null && (
+                <p
+                  className={`mb-3 rounded-lg px-3 py-2 text-sm ${
+                    onHand >= demand.quantity ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"
+                  }`}
+                >
+                  {onHand} in stock at this site
+                  {onHand < demand.quantity && " — not enough. Add stock first, or send it for approval to buy."}
+                </p>
+              )}
               <form action={markStockUpdated.bind(null, demand.id)} className="space-y-3">
                 <textarea
                   name="stockNote"
-                  rows={3}
-                  required
-                  placeholder="e.g. 2 toner cartridges issued from the Bhalwal store"
+                  rows={2}
+                  placeholder="Note (optional) — e.g. handed over at the IT store"
                   aria-label="Stock note"
                   className={inputClass}
                 />
-                <button type="submit" className={primaryButtonClass}>
-                  Record stock issue
+                <button
+                  type="submit"
+                  disabled={onHand !== null && onHand < demand.quantity}
+                  className={`${primaryButtonClass} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  Issue {demand.quantity} from stock
                 </button>
               </form>
             </section>

@@ -487,6 +487,11 @@ export function ReceivingPanel({
             on the delivery.
           </p>
         )}
+        {!isFixedAsset && (
+          <p className="text-xs text-slate-500">
+            Consumable: the accepted quantity is added to stock at this site automatically.
+          </p>
+        )}
         <p className="text-xs text-slate-400">
           Gate pass number or picture can also be added later. One of them is needed before the invoice
           goes to Finance.

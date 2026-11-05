@@ -48,14 +48,14 @@ function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
 }
 
-// A fixed-asset product (linked to an asset type) is bought and registered as an asset — it
-// can't take the consumable "issue from stock" path.
+// A fixed-asset product (asset type classified Fixed) is bought and registered as an asset — it
+// can't take the consumable "issue from stock" path (javaria_it_0022 it.product_is_fixed_asset).
 const FIXED_ASSET_NOT_CONSUMABLE =
-  "This product is a fixed asset (it has an asset type), so it can't be a Consumable — choose General purchase, Repair, Maintenance or Fix.";
+  "This product is a fixed asset, so it can't be a Consumable — choose General purchase, Repair, Maintenance or Fix.";
 
 async function isFixedAssetProduct(supabase: Awaited<ReturnType<typeof requirePermission>>["supabase"], productId: string) {
-  const { data } = await supabase.schema("it").from("products").select("asset_type_id").eq("id", productId).maybeSingle();
-  return Boolean(data?.asset_type_id);
+  const { data } = await supabase.schema("it").rpc("product_is_fixed_asset", { p_product_id: productId });
+  return Boolean(data);
 }
 
 function quantity(formData: FormData, path: string) {
@@ -167,23 +167,20 @@ export async function cancelDemand(demandId: string, formData: FormData) {
   done(path, "Demand cancelled.");
 }
 
-// BRD §5.5.3 consumable path. Interim until Talha's recordStockMovement() ships (plan §2):
-// the stock issue is recorded as a note.
+// BRD §5.5.3 consumable path (javaria_it_0022): takes the demand's quantity out of stock at its
+// site, issued to the requester, then moves the demand to Stock Updated. Refused when the site
+// doesn't have enough.
 export async function markStockUpdated(demandId: string, formData: FormData) {
   const path = `${LIST}/${demandId}`;
   const { supabase } = await requirePermission("it.demands.update");
 
-  const note = text(formData, "stockNote");
-  if (!note) fail(path, "Please note what was issued from stock.");
-
   const { error } = await supabase
     .schema("it")
-    .from("demands")
-    .update({ status: "Stock Updated", stock_note: note })
-    .eq("id", demandId);
+    .rpc("issue_demand_from_stock", { p_demand_id: demandId, p_note: text(formData, "stockNote") || null });
   if (error) fail(path, error.message);
 
-  done(path, "Stock entry recorded.");
+  revalidatePath("/it/inventory/stock");
+  done(path, "Issued from stock.");
 }
 
 export async function closeDemand(demandId: string) {

@@ -171,6 +171,7 @@ export function Sidebar({
         // Inventory track (Talha)
         { href: "/it/inventory", label: "Asset Register", permission: "it.assets.read" },
         { href: "/it/inventory/maintenance", label: "Repair Log", permission: "it.assets.read" },
+        { href: "/it/inventory/stock", label: "Stock", permission: "it.stock.read" },
         {
           href: "/it/inventory/settings",
           label: "Inventory Settings",

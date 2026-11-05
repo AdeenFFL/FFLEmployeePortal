@@ -22,6 +22,8 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // More specific prefix first — permissionKeyForPath returns the first match.
   "/it/onboarding/new": "it.onboarding.create",
   "/it/onboarding": "it.onboarding.read",
+  // Consumable stock (javaria_it_0022) — before the /it/inventory prefix.
+  "/it/inventory/stock": "it.stock.read",
   "/it/inventory": "it.assets.read",
   // Inventory track: every employee sees the assets they hold (RLS limits rows to their own).
   "/it/my-assets": "module:it",

@@ -336,10 +336,37 @@ export type ItProduct = {
   description: string | null;
   asset_type_id: string | null;
   is_active: boolean;
+  // javaria_it_0022: low-stock warning threshold (null = none).
+  reorder_level: number | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
   updated_by: string | null;
+};
+
+// it.stock_movements (javaria_it_0022): append-only ledger, signed quantity (+ in, - out).
+export type ItStockMovementType = "Opening" | "Received" | "Issued" | "Adjustment";
+export type ItStockMovement = {
+  id: string;
+  product_id: string;
+  site_id: string;
+  company_id: string | null;
+  movement_type: ItStockMovementType;
+  quantity: number;
+  movement_date: string;
+  receiving_id: string | null;
+  demand_id: string | null;
+  issued_to_person_id: string | null;
+  reason: string | null;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type ItStockLevel = {
+  product_id: string;
+  site_id: string;
+  on_hand: number;
+  last_movement_at: string;
 };
 
 export type ItProcurementSettings = {
@@ -1327,6 +1354,12 @@ export type Database = {
         Relationships: [];
       };
       // javaria_it_0012_receiving_documents.sql — written only through functions.
+      stock_movements: {
+        Row: ItStockMovement;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       receiving_records: {
         Row: ItReceivingRecord;
         Insert: Partial<ItReceivingRecord>;
@@ -1593,7 +1626,12 @@ export type Database = {
         ];
       };
     };
-    Views: Record<string, never>;
+    Views: {
+      stock_levels: {
+        Row: ItStockLevel;
+        Relationships: [];
+      };
+    };
     Functions: {
       confirm_onboarding: {
         Args: {
@@ -1850,6 +1888,27 @@ export type Database = {
           p_remarks: string | null;
         };
         Returns: string;
+      };
+      // javaria_it_0022: consumable stock.
+      record_stock_movement: {
+        Args: {
+          p_product_id: string;
+          p_site_id: string;
+          p_type: ItStockMovementType;
+          p_quantity: number;
+          p_issued_to: string | null;
+          p_reason: string | null;
+          p_date: string | null;
+        };
+        Returns: string;
+      };
+      issue_demand_from_stock: {
+        Args: { p_demand_id: string; p_note: string | null };
+        Returns: undefined;
+      };
+      product_is_fixed_asset: {
+        Args: { p_product_id: string };
+        Returns: boolean;
       };
       // javaria_it_0021: register a receipt's accepted fixed-asset items as it.assets rows.
       register_assets_from_receipt: {

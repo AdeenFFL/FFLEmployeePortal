@@ -35,22 +35,26 @@ export default async function ProductsPage({
   ]);
   if (!canRead) notFound();
 
+  // Fixed asset = asset type classified Fixed (javaria_it_0022); everything else is stock.
+  const { data: typeRows } = await supabase.schema("it").from("asset_types").select("id, name, classification");
+  const types = typeRows ?? [];
+  const fixedIds = types.filter((t) => t.classification === "Fixed").map((t) => t.id);
+
   let query = supabase.schema("it").from("products").select("*").order("product_name");
   if (status === "active") query = query.eq("is_active", true);
   if (status === "inactive") query = query.eq("is_active", false);
-  if (kind === "asset") query = query.not("asset_type_id", "is", null);
-  if (kind === "consumable") query = query.is("asset_type_id", null);
+  if (kind === "asset") query = query.in("asset_type_id", fixedIds.length ? fixedIds : ["00000000-0000-0000-0000-000000000000"]);
+  if (kind === "consumable" && fixedIds.length) {
+    query = query.or(`asset_type_id.is.null,asset_type_id.not.in.(${fixedIds.join(",")})`);
+  }
   const q = (params.q ?? "").replace(/[,()*%]/g, " ").trim();
   if (q) {
     query = query.or(`product_name.ilike.%${q}%,category.ilike.%${q}%,description.ilike.%${q}%`);
   }
 
-  const [productsRes, typesRes] = await Promise.all([
-    query,
-    supabase.schema("it").from("asset_types").select("id, name"),
-  ]);
-  const rows = checked(productsRes).data ?? [];
-  const typeName = new Map((checked(typesRes).data ?? []).map((t) => [t.id, t.name as string]));
+  const rows = checked(await query).data ?? [];
+  const typeName = new Map(types.map((t) => [t.id, t.name]));
+  const fixed = new Set(fixedIds);
   const filtered = Boolean(q) || status !== "active" || kind !== "all";
 
   // Filter chips keep the other filters (and the search) when clicked.
@@ -173,13 +177,13 @@ export default async function ProductsPage({
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        {p.asset_type_id ? (
+                        {p.asset_type_id && fixed.has(p.asset_type_id) ? (
                           <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
-                            Asset · {typeName.get(p.asset_type_id) ?? "type"}
+                            Fixed asset · {typeName.get(p.asset_type_id)}
                           </span>
                         ) : (
-                          <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                            Consumable
+                          <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                            Consumable{p.asset_type_id ? ` · ${typeName.get(p.asset_type_id) ?? ""}` : ""}
                           </span>
                         )}
                       </td>
