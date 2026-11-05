@@ -8,20 +8,19 @@ import { createAssetType, deleteAssetType, saveAssetValueType, toggleAssetTypeAc
 
 const VALUE_TYPE_NAMES: AssetValueTypeName[] = ["New", "Old"];
 const BASE_PATH = "/it/inventory/settings";
-const VALUES_PATH = `${BASE_PATH}?tab=values`;
+const MAX_YEARS_SHOWN = 6;
 
 const VALUE_HINTS: Record<AssetValueTypeName, string> = {
   New: "Bought new from a vendor.",
   Old: "Second-hand, transferred or re-used.",
 };
 
-// INV-01 Inventory settings (talha_it_0002): asset types and the New / Old value rules.
-// Two tabs; adding / editing happens in a slide-over (?compose=new, ?editType=…, ?editValue=…).
+// INV-01 Inventory settings (talha_it_0002): asset types, then the New / Old value rules, on one
+// page. Adding / editing happens in a slide-over (?compose=new, ?editType=…, ?editValue=…).
 export default async function InventorySettingsPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    tab?: string;
     q?: string;
     kind?: string;
     compose?: string;
@@ -32,7 +31,6 @@ export default async function InventorySettingsPage({
   }>;
 }) {
   const sp = await searchParams;
-  const tab = sp.tab === "values" ? "values" : "types";
   const kind = sp.kind === "Fixed" || sp.kind === "Consumable" ? sp.kind : "all";
   const q = (sp.q ?? "").trim().toLowerCase();
   const supabase = await createClient();
@@ -64,7 +62,6 @@ export default async function InventorySettingsPage({
   );
 
   const valueTypeByName = new Map<string, AssetValueType>((valueTypes ?? []).map((v) => [v.name, v]));
-  const configured = VALUE_TYPE_NAMES.filter((n) => valueTypeByName.has(n)).length;
   const editingType = canEdit ? types.find((t) => t.id === sp.editType) : undefined;
   const editingValue =
     canEdit && VALUE_TYPE_NAMES.includes(sp.editValue as AssetValueTypeName)
@@ -86,7 +83,7 @@ export default async function InventorySettingsPage({
         title="Inventory settings"
         description="Asset types used across the register, and how assets lose value over time."
         action={
-          canEdit && tab === "types" ? (
+          canEdit ? (
             <Link href={`${BASE_PATH}?compose=new`} className={primaryButtonClass}>
               + Add asset type
             </Link>
@@ -94,15 +91,14 @@ export default async function InventorySettingsPage({
         }
       />
 
-      <nav aria-label="Inventory settings" className="-mt-2 mb-6 flex gap-6 border-b border-slate-200">
-        <TabLink href={BASE_PATH} active={tab === "types"} label="Asset types" count={counts.all} />
-        <TabLink href={VALUES_PATH} active={tab === "values"} label="Value & depreciation" count={configured} />
-      </nav>
 
       <FormMessage error={sp.error} notice={sp.notice} />
 
-      {tab === "types" ? (
-        <>
+      <section aria-labelledby="asset-types">
+          <h2 id="asset-types" className="mb-4 flex items-center gap-2 text-lg font-semibold text-slate-900">
+            Asset types
+            <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">{counts.all}</span>
+          </h2>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <form method="get" className="relative w-full max-w-sm">
               {kind !== "all" && <input type="hidden" name="kind" value={kind} />}
@@ -247,59 +243,85 @@ export default async function InventorySettingsPage({
           <p className="mt-3 text-xs text-slate-500">
             Fixed assets are tracked one by one with a tag and serial number. Consumables are counted by quantity.
           </p>
-        </>
-      ) : (
-        <>
-          <div className="grid gap-4 md:grid-cols-2">
-            {VALUE_TYPE_NAMES.map((name) => {
-              const v = valueTypeByName.get(name);
-              return (
-                <section key={name} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h2 className="text-base font-semibold text-slate-900">{name} assets</h2>
-                      <p className="text-sm text-slate-500">{VALUE_HINTS[name]}</p>
-                    </div>
-                    {!v && (
-                      <span className="rounded-full bg-amber-50 px-2.5 py-1 text-xs font-medium text-amber-700">
-                        Not set up
-                      </span>
+      </section>
+
+      <section id="values" aria-labelledby="values-title" className="mt-10 border-t border-slate-200 pt-8">
+        <h2 id="values-title" className="text-lg font-semibold text-slate-900">
+          Value &amp; depreciation
+        </h2>
+        <p className="mb-4 text-sm text-slate-500">
+          Every asset is valued as New or Old. These rules set its depreciation and current value.
+        </p>
+        <div className="grid gap-4 md:grid-cols-2">
+          {VALUE_TYPE_NAMES.map((name) => {
+            const v = valueTypeByName.get(name);
+            return (
+              <article key={name} className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm text-slate-500">{name} assets</p>
+                    {v ? (
+                      <p className="mt-0.5 text-3xl font-semibold tabular-nums text-slate-900">
+                        {Number(v.depreciation_percentage)}%
+                        <span className="ml-1.5 text-base font-normal text-slate-500">per year</span>
+                      </p>
+                    ) : (
+                      <p className="mt-1 text-sm font-medium text-amber-700">Not set up yet</p>
                     )}
                   </div>
-                  {v ? (
-                    <>
-                      <p className="mt-5 text-3xl font-semibold tabular-nums text-slate-900">
-                        {v.depreciation_percentage}%
-                        <span className="ml-1 text-sm font-normal text-slate-500">per year</span>
-                      </p>
-                      <p className="mt-1 text-sm text-slate-600">
-                        {v.depreciation_method}
-                        {v.useful_life_years ? ` · ${v.useful_life_years}-year useful life` : ""}
-                      </p>
-                      {v.description && <p className="mt-2 text-xs text-slate-500">{v.description}</p>}
-                    </>
-                  ) : (
-                    <p className="mt-5 text-sm text-slate-500">
-                      Set the yearly depreciation so {name.toLowerCase()} assets get a current value.
-                    </p>
-                  )}
                   {canEdit && (
                     <Link
-                      href={`${VALUES_PATH}&editValue=${name}`}
-                      className="mt-5 inline-block text-sm font-medium text-blue-700 hover:underline"
+                      href={`${BASE_PATH}?editValue=${name}`}
+                      className="rounded-lg border border-slate-200 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
                     >
-                      {v ? "Edit rules" : "Set up"} →
+                      {v ? "Edit" : "Set up"}
                     </Link>
                   )}
-                </section>
-              );
-            })}
-          </div>
-          <p className="mt-3 text-xs text-slate-500">
-            Straight line takes the same amount off every year; reducing balance takes the percentage off what is left.
-          </p>
-        </>
-      )}
+                </div>
+
+                {v ? (
+                  <>
+                    <dl className="mt-5 grid grid-cols-2 gap-4 text-sm">
+                      <div>
+                        <dt className="text-slate-500">Method</dt>
+                        <dd className="font-medium text-slate-900">
+                          {v.depreciation_method === "Straight Line" ? "Straight line" : "Reducing balance"}
+                        </dd>
+                      </div>
+                      <div>
+                        <dt className="text-slate-500">Useful life</dt>
+                        <dd className="font-medium text-slate-900">
+                          {v.useful_life_years ? `${v.useful_life_years} year${v.useful_life_years === 1 ? "" : "s"}` : "—"}
+                        </dd>
+                      </div>
+                    </dl>
+                    <p className="mt-5 text-sm text-slate-500">Value left at the end of each year</p>
+                    <ul className="mt-2 space-y-1.5">
+                      {valueLeft(v).map(({ year, left }) => (
+                        <li key={year} className="grid grid-cols-[3.5rem_1fr_3.5rem] items-center gap-3 text-sm">
+                          <span className="text-slate-600">Year {year}</span>
+                          <span className="h-1.5 rounded-full bg-slate-100">
+                            <span
+                              className="block h-1.5 rounded-full bg-blue-600"
+                              style={{ width: `${Math.max(0, Math.min(100, left))}%` }}
+                            />
+                          </span>
+                          <span className="text-right tabular-nums text-slate-700">{formatPercent(left)}</span>
+                        </li>
+                      ))}
+                    </ul>
+                    {v.description && <p className="mt-3 text-xs text-slate-500">{v.description}</p>}
+                  </>
+                ) : (
+                  <p className="mt-4 text-sm text-slate-500">
+                    {VALUE_HINTS[name]} Set the yearly rate so these assets get a current value.
+                  </p>
+                )}
+              </article>
+            );
+          })}
+        </div>
+      </section>
 
       {canEdit && (sp.compose === "new" || editingType) && (
         <FormDrawer
@@ -317,7 +339,7 @@ export default async function InventorySettingsPage({
       {editingValue && (
         <FormDrawer
           key={editingValue}
-          closeHref={VALUES_PATH}
+          closeHref={`${BASE_PATH}#values`}
           title={`${editingValue} assets`}
           description={VALUE_HINTS[editingValue]}
           action={saveAssetValueType.bind(null, editingValue)}
@@ -330,19 +352,23 @@ export default async function InventorySettingsPage({
   );
 }
 
-function TabLink({ href, active, label, count }: { href: string; active: boolean; label: string; count: number }) {
-  return (
-    <Link
-      href={href}
-      aria-current={active ? "page" : undefined}
-      className={`-mb-px flex items-center gap-2 border-b-2 px-1 pb-3 text-sm font-medium ${
-        active ? "border-blue-600 text-slate-900" : "border-transparent text-slate-500 hover:text-slate-800"
-      }`}
-    >
-      {label}
-      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">{count}</span>
-    </Link>
-  );
+// Share of the purchase value left at the end of each year (salvage ignored): straight line takes
+// the same share off every year, reducing balance takes the rate off what is left.
+function valueLeft(v: AssetValueType) {
+  const rate = Number(v.depreciation_percentage) / 100;
+  const years = Math.min(v.useful_life_years ?? MAX_YEARS_SHOWN, MAX_YEARS_SHOWN);
+  return Array.from({ length: years }, (_, i) => {
+    const year = i + 1;
+    let left =
+      v.depreciation_method === "Reducing Balance" ? 100 * Math.pow(1 - rate, year) : 100 - rate * 100 * year;
+    // A straight-line rate that doesn't divide evenly (33.33% × 3) still ends at 0 after the useful life.
+    if (v.useful_life_years && year >= v.useful_life_years && v.depreciation_method === "Straight Line") left = 0;
+    return { year, left: Math.max(0, left) };
+  });
+}
+
+function formatPercent(value: number) {
+  return `${Math.round(value * 100) / 100}%`;
 }
 
 function AssetTypeFields({

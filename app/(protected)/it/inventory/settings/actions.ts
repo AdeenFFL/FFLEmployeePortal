@@ -20,8 +20,7 @@ const DEPRECIATION_METHODS: DepreciationMethod[] = ["Straight Line", "Reducing B
 // Every action ends on the settings page with a ?notice= / ?error= banner (and closes the drawer)
 // instead of throwing to the error boundary.
 function go(tab: "types" | "values", kind: "notice" | "error", message: string): never {
-  const base = tab === "values" ? `${PATH}?tab=values&` : `${PATH}?`;
-  redirect(`${base}${kind}=${encodeURIComponent(message)}`);
+  redirect(`${PATH}?${kind}=${encodeURIComponent(message)}${tab === "values" ? "#values" : ""}`);
 }
 
 function parseClassification(value: FormDataEntryValue | null): AssetClassification {

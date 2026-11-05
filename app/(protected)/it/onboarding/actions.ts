@@ -213,7 +213,7 @@ export async function updateChecklistItem(requestId: string, itemId: string, for
   if (!item) go(path, "error", "Task not found.");
 
   const details: Record<string, string> = { ...(item.details ?? {}) };
-  for (const field of TASK_DETAIL_FIELDS[item.task_type]) {
+  for (const field of TASK_DETAIL_FIELDS[item.task_type] ?? []) {
     const value = text(formData, `detail_${field.key}`);
     if (value) details[field.key] = value;
     else delete details[field.key];

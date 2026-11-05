@@ -271,7 +271,7 @@ export default async function LifecycleRequestPage({
               {checklist.map((item) => {
                 const isMine = Boolean(personId) && item.assigned_to_person_id === personId;
                 const canWork = !isFinished && (canAssign || (canUpdate && isMine));
-                const fields = TASK_DETAIL_FIELDS[item.task_type];
+                const fields = TASK_DETAIL_FIELDS[item.task_type] ?? [];
                 const recorded = fields.filter((f) => item.details?.[f.key]);
                 return (
                   <li key={item.id} className="rounded-lg border border-slate-200 p-4">
@@ -430,7 +430,7 @@ export default async function LifecycleRequestPage({
 
               const isMine = Boolean(personId) && item.assigned_to_person_id === personId;
               const canWork = !isFinished && (canAssign || (canUpdate && isMine));
-              const fields = TASK_DETAIL_FIELDS[item.task_type];
+              const fields = TASK_DETAIL_FIELDS[item.task_type] ?? [];
               if (!canWork) return null;
               return (
                 <Modal key={Date.now()} closeHref={basePath} title={`Update: ${item.task_name}`}>

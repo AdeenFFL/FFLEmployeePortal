@@ -85,6 +85,8 @@ export function suggestEmailAccount(employeeName: string) {
   };
 }
 
+// The live DB can hold task types this branch doesn't know yet (develop's 0047 added
+// license_assignment / asset_handover), so callers read this with `?? []`.
 export const TASK_DETAIL_FIELDS: Record<ItChecklistTaskType, DetailField[]> = {
   email_account: [
     { key: "email_address", label: "Company email address", placeholder: `name@${COMPANY_EMAIL_DOMAIN}` },
