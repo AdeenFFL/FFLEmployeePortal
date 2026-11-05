@@ -429,7 +429,34 @@ Also: timeline entries keep insertion order (`demand_updates.created_at` = `cloc
 Still open: consumable stock movement + automatic asset creation (Talha), Security Guard gate
 pass entry, whether the GL / cost-center sign-off must be mandatory (IT BA).
 Not BRD scope (dropped): quotation comparison / vendor selection, GL postings.
-- [ ] Apply `javaria_it_0017` after `0016`.
+- [x] Apply `javaria_it_0017` after `0016`.
+
+**Follow-up 2026-11-02** (`javaria_it_0019_route_waiting_on_new_approver.sql`): adding a department
+approver — or switching on their demands / invoices scope — routes that department's waiting
+Categorized demands and Verified invoices for approval at once (found in testing: 8 demands sat
+in Categorized after the approver was missing). "Send for approval" stays for out-of-stock
+consumables and for an approver whose role still lacks the permission.
+- [x] Apply `javaria_it_0019` after `0017`.
+
+**Self-approval dropped 2026-11-02**: a testing-mode self-approval switch was tried on the live DB
+and rolled back the same day (net effect nil; its migration files were deleted). Kept from that
+work: Raise Demand says who the chosen department's demands go to (or that none is set), and
+Department Approvers links to Administration → Departments for a missing department (e.g. IT).
+
+**Follow-up 2026-11-03** (`javaria_it_0020_demands_without_hq_site.sql`): it/adeen's
+`0053_it_remove_hq_site_routing.sql` (run on the live DB) dropped `it.hq_site_id()`, which
+`it.demands_before_insert` still used as a site fallback — every Raise Demand failed. The fallback
+is now the requester's own site only. Raise Demand redesigned: numbered steps (product cards,
+category tiles, quantity stepper, justification) and a live summary (estimated total, approver,
+what happens next); submit enabled once all four steps are complete.
+- [x] Apply `javaria_it_0020` (fixes Raise Demand on the live DB).
+
+**Navigation & UI pass 2026-11-03**: procurement is one "Procurement" entry under IT Management in
+the sidebar; its pages share a tab bar (`it/procurement/layout.tsx`: Demands, Approvals, Finance,
+Reports, Vendors, Products, Settings — each shown only with its permission) and a single
+"Raise demand" button. Settings and Department Approvers are sub-tabs. Shared pieces in
+`it/procurement/_components/ui.tsx` (SubTabs, StatTile, EmptyState, BackLink); the demand page
+has a connected progress stepper.
 
 ## 6. Per-PR checklist
 

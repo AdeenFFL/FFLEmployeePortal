@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { checked } from "@/lib/it/ticket-data";
@@ -9,8 +8,8 @@ import {
   inputClass,
   labelClass,
   primaryButtonClass,
-  secondaryButtonClass,
 } from "../../_components/ticket-ui";
+import { SETTINGS_TABS, SubTabs } from "../_components/ui";
 
 // Procurement settings (09 addition P4). Values are stored now and used by later phases:
 // finance SLA + reminders (Phase 6 payments), invoice tolerance (Phase 5 invoices), consumable
@@ -29,14 +28,10 @@ export default async function ProcurementSettingsPage({
   return (
     <div className="py-6">
       <PageHeader
-        title="Procurement Settings"
-        description="Rules the demand, invoice and payment steps follow."
-        action={
-          <Link href="/it/procurement/settings/approvers" className={secondaryButtonClass}>
-            Department Approvers
-          </Link>
-        }
+        title="Settings"
+        description="Rules the demand, invoice and payment steps follow, and who approves each department."
       />
+      <SubTabs items={SETTINGS_TABS} active="rules" />
       <FormMessage error={params.error} notice={params.notice} />
 
       {!settings ? (

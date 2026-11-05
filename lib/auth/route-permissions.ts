@@ -68,6 +68,8 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // Invoice package (javaria_it_0017): RLS on it.invoices limits it to procurement staff,
   // invoice approvers and Finance; the page 404s for anyone else.
   "/it/procurement/invoices": "module:it",
+  // Procurement landing (redirects to Demands) — after the specific /it/procurement/* entries.
+  "/it/procurement": "module:it",
   // Catch-all fallback for any /it/* page not explicitly listed above — must stay last among
   // the /it/* entries so the more specific ones above win first (permissionKeyForPath returns
   // the first match in insertion order).

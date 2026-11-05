@@ -7,6 +7,7 @@ import { formatDate } from "@/lib/it/tickets";
 import { formatMoney, INVOICE_STATUS_TONE, todayIso } from "@/lib/it/procurement";
 import type { ItInvoiceStatus } from "@/types/database";
 import { cardClass, FormMessage } from "../../_components/ticket-ui";
+import { EmptyState } from "../_components/ui";
 import { PaymentBlock } from "../demands/[id]/payment-panel";
 
 const TABS: { key: string; label: string; statuses: ItInvoiceStatus[] }[] = [
@@ -114,9 +115,12 @@ export default async function FinancePage({
       </div>
 
       {invoices.length === 0 ? (
-        <p className={`${cardClass} px-6 py-10 text-center text-sm text-slate-400`}>
-          {tab.key === "paid" ? "No paid invoices yet." : "Nothing here right now."}
-        </p>
+        <div className={cardClass}>
+          <EmptyState
+            title={tab.key === "paid" ? "No paid invoices yet" : "Nothing here right now"}
+            text="Invoice packages sent to Finance by procurement appear here."
+          />
+        </div>
       ) : (
         <ul className="space-y-4">
           {invoices.map((inv) => {

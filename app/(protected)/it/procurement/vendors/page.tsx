@@ -2,60 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
-import { StatusPill } from "@/components/status-pill";
 import { checked, hasItPermission } from "@/lib/it/ticket-data";
-import type { ItVendor } from "@/types/database";
-import { createVendor, setVendorActive, updateVendor } from "./actions";
-import {
-  cardClass,
-  FormMessage,
-  inputClass,
-  labelClass,
-  primaryButtonClass,
-  secondaryButtonClass,
-} from "../../_components/ticket-ui";
+import { cardClass, FormMessage, primaryButtonClass } from "../../_components/ticket-ui";
+import { EmptyState, FilterChips, initials } from "../_components/ui";
 
-// One set of fields for both Add and Edit (defaults empty for Add).
-function VendorFields({ vendor }: { vendor?: ItVendor }) {
-  return (
-    <div className="grid gap-3 md:grid-cols-3">
-      <label className="block">
-        <span className={labelClass}>
-          Vendor name <span className="text-red-500">*</span>
-        </span>
-        <input name="vendorName" required defaultValue={vendor?.vendor_name ?? ""} className={inputClass} />
-      </label>
-      <label className="block">
-        <span className={labelClass}>Contact person</span>
-        <input name="contactPerson" defaultValue={vendor?.contact_person ?? ""} className={inputClass} />
-      </label>
-      <label className="block">
-        <span className={labelClass}>Contact no.</span>
-        <input name="contactNo" defaultValue={vendor?.contact_no ?? ""} className={inputClass} />
-      </label>
-      <label className="block">
-        <span className={labelClass}>Email</span>
-        <input type="email" name="email" defaultValue={vendor?.email ?? ""} className={inputClass} />
-      </label>
-      <label className="block">
-        <span className={labelClass}>Tax number (NTN / STRN)</span>
-        <input name="taxNumber" defaultValue={vendor?.tax_number ?? ""} className={inputClass} />
-      </label>
-      <label className="block md:col-span-3">
-        <span className={labelClass}>Address</span>
-        <input name="address" defaultValue={vendor?.address ?? ""} className={inputClass} />
-      </label>
-      <label className="block md:col-span-3">
-        <span className={labelClass}>Notes</span>
-        <textarea name="notes" rows={2} defaultValue={vendor?.notes ?? ""} className={inputClass} />
-      </label>
-    </div>
-  );
-}
+const PATH = "/it/procurement/vendors";
 
 // PRC-01 Vendor Master (BRD §5.5.7 "Vendor Master", gap 4.5 #5 "IT Manager lacks vendor
-// details"). Read-only for anyone who can read the procurement masters; add / edit / deactivate
-// with it.vendors.update (javaria_it_0013 improvements).
+// details"). A plain table; each row opens the vendor's own page (/vendors/[id]) where it is
+// edited. Adding is /vendors/new. Read-only for anyone who can read the procurement masters;
+// writes need it.vendors.update (javaria_it_0013 improvements).
 export default async function VendorsPage({
   searchParams,
 }: {
@@ -83,104 +39,132 @@ export default async function VendorsPage({
   }
   const { data: vendors } = checked(await query);
   const rows = vendors ?? [];
+  const filtered = Boolean(q) || status !== "active";
+
+  const href = (s: string) => {
+    const sp = new URLSearchParams();
+    if (q) sp.set("q", q);
+    if (s !== "active") sp.set("status", s);
+    const qs = sp.toString();
+    return qs ? `${PATH}?${qs}` : PATH;
+  };
 
   return (
     <div className="py-6">
       <PageHeader
-        title="Vendor Master"
-        description="Suppliers that demands, receiving, assets and repairs are linked to. Deactivate instead of deleting."
+        title="Vendors"
+        description="Suppliers IT buys from. Click a vendor to see or change it."
         action={
-          <Link href="/it/procurement/products" className={secondaryButtonClass}>
-            Product Master
-          </Link>
+          canEdit ? (
+            <Link href={`${PATH}/new`} className={primaryButtonClass}>
+              + Add vendor
+            </Link>
+          ) : undefined
         }
       />
       <FormMessage error={params.error} notice={params.notice} />
 
-      {canEdit && (
-        <details className={`${cardClass} mb-6 p-6`} open={rows.length === 0 && !q}>
-          <summary className="cursor-pointer text-base font-semibold text-slate-900">Add vendor</summary>
-          <form action={createVendor} className="mt-4 space-y-4">
-            <VendorFields />
-            <button type="submit" className={primaryButtonClass}>
-              Add vendor
-            </button>
-          </form>
-        </details>
-      )}
-
-      <form method="get" className={`${cardClass} mb-6 flex flex-wrap items-center gap-3 p-4`}>
-        <input
-          name="q"
-          defaultValue={params.q ?? ""}
-          placeholder="Search name, contact, email or tax number"
-          aria-label="Search vendors"
-          className={`${inputClass} min-w-0 flex-1`}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <form method="get" className="relative min-w-[16rem] flex-1">
+          {status !== "active" && <input type="hidden" name="status" value={status} />}
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.8}
+            strokeLinecap="round"
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
+          >
+            <circle cx="11" cy="11" r="6.5" />
+            <path d="m16 16 4 4" />
+          </svg>
+          <input
+            name="q"
+            defaultValue={params.q ?? ""}
+            placeholder="Search name, contact, email or tax no. — press Enter"
+            aria-label="Search vendors"
+            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+          />
+        </form>
+        <FilterChips
+          label="Status"
+          items={[
+            { label: "Active", href: href("active"), active: status === "active" },
+            { label: "Inactive", href: href("inactive"), active: status === "inactive" },
+            { label: "All", href: href("all"), active: status === "all" },
+          ]}
         />
-        <select name="status" defaultValue={status} aria-label="Status" className={`${inputClass} w-auto`}>
-          <option value="active">Active</option>
-          <option value="inactive">Inactive</option>
-          <option value="all">All</option>
-        </select>
-        <button type="submit" className={primaryButtonClass}>
-          Search
-        </button>
-      </form>
+      </div>
 
-      <div className={cardClass}>
+      <div className={`${cardClass} overflow-hidden`}>
         {rows.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-slate-400">
-            {q || status !== "active" ? "No vendors match." : canEdit ? "No vendors yet — add the first one above." : "No vendors yet."}
-          </p>
+          <EmptyState
+            title={filtered ? "No vendors match" : "No vendors yet"}
+            text={filtered ? "Try another search or status." : canEdit ? "Add the first supplier." : undefined}
+            action={!filtered && canEdit ? { href: `${PATH}/new`, label: "Add vendor" } : undefined}
+          />
         ) : (
-          <ul className="divide-y divide-slate-100">
-            {rows.map((v) => (
-              <li key={v.id} className="px-6 py-4">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-900">
-                      {v.vendor_name}{" "}
-                      {!v.is_active && <StatusPill label="Inactive" tone="neutral" />}
-                    </p>
-                    <p className="text-sm text-slate-600">
-                      {[v.contact_person, v.contact_no, v.email].filter(Boolean).join(" · ") || "No contact details"}
-                    </p>
-                    <p className="text-xs text-slate-400">
-                      {[v.tax_number && `Tax no. ${v.tax_number}`, v.address].filter(Boolean).join(" · ")}
-                    </p>
-                  </div>
-                  {canEdit && (
-                    <form action={setVendorActive.bind(null, v.id, !v.is_active)}>
-                      <button
-                        type="submit"
-                        className={
-                          v.is_active
-                            ? "text-sm text-slate-500 hover:text-red-600"
-                            : "text-sm font-medium text-blue-700 hover:underline"
-                        }
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-5 py-3">Vendor</th>
+                  <th className="px-4 py-3">Contact person</th>
+                  <th className="px-4 py-3">Phone</th>
+                  <th className="px-4 py-3">Email</th>
+                  <th className="px-4 py-3">Tax no.</th>
+                  <th className="px-5 py-3 text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {rows.map((v) => (
+                  <tr key={v.id} className="relative transition hover:bg-slate-50">
+                    <td className="px-5 py-3">
+                      <div className="flex items-center gap-3">
+                        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-slate-100 text-xs font-semibold text-slate-600">
+                          {initials(v.vendor_name)}
+                        </span>
+                        <div className="min-w-0">
+                          <Link
+                            href={`${PATH}/${v.id}`}
+                            className="font-medium text-slate-900 after:absolute after:inset-0 hover:text-blue-700"
+                          >
+                            {v.vendor_name}
+                          </Link>
+                          {v.address && <p className="max-w-xs truncate text-xs text-slate-500">{v.address}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-slate-600">{v.contact_person ?? "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3 tabular-nums text-slate-600">{v.contact_no ?? "—"}</td>
+                    <td className="px-4 py-3 text-slate-600">{v.email ?? "—"}</td>
+                    <td className="whitespace-nowrap px-4 py-3 text-slate-600">{v.tax_number ?? "—"}</td>
+                    <td className="whitespace-nowrap px-5 py-3 text-right">
+                      <span
+                        className={`inline-flex items-center gap-1.5 text-xs font-medium ${
+                          v.is_active ? "text-emerald-700" : "text-slate-400"
+                        }`}
                       >
-                        {v.is_active ? "Deactivate" : "Reactivate"}
-                      </button>
-                    </form>
-                  )}
-                </div>
-                {v.notes && <p className="mt-1 whitespace-pre-wrap text-xs text-slate-500">{v.notes}</p>}
-                {canEdit && (
-                  <details className="mt-2">
-                    <summary className="cursor-pointer text-sm font-medium text-blue-700">Edit</summary>
-                    <form action={updateVendor.bind(null, v.id)} className="mt-3 space-y-3">
-                      <VendorFields vendor={v} />
-                      <button type="submit" className={primaryButtonClass}>
-                        Save vendor
-                      </button>
-                    </form>
-                  </details>
-                )}
-              </li>
-            ))}
-          </ul>
+                        <span
+                          aria-hidden
+                          className={`h-1.5 w-1.5 rounded-full ${v.is_active ? "bg-emerald-500" : "bg-slate-300"}`}
+                        />
+                        {v.is_active ? "Active" : "Inactive"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </div>
+      {rows.length > 0 && (
+        <p className="mt-3 text-xs text-slate-400">
+          {rows.length} vendor{rows.length === 1 ? "" : "s"}
+        </p>
+      )}
     </div>
   );
 }

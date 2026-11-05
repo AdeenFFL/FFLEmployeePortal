@@ -37,6 +37,7 @@ import {
   secondaryButtonClass,
   Timeline,
 } from "../../../_components/ticket-ui";
+import { BackLink } from "../../_components/ui";
 
 // Step tracker: done / current / upcoming along the path this demand takes.
 function Steps({ demand }: { demand: Pick<ItDemand, "status" | "demand_category"> }) {
@@ -53,27 +54,84 @@ function Steps({ demand }: { demand: Pick<ItDemand, "status" | "demand_category"
   };
   const current = path.indexOf(position[demand.status] ?? demand.status);
   return (
-    <ol className="mb-6 flex flex-wrap gap-2" aria-label="Demand progress">
+    <ol className="mb-6 flex overflow-x-auto rounded-2xl border border-slate-200 bg-white px-4 py-4 shadow-sm" aria-label="Demand progress">
       {path.map((step, i) => {
         const state = i < current || demand.status === "Closed" ? "done" : i === current ? "current" : "next";
         return (
           <li
             key={step}
             aria-current={state === "current" ? "step" : undefined}
-            className={`rounded-full border px-3 py-1 text-xs font-medium ${
-              state === "done"
-                ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                : state === "current"
-                  ? "border-blue-300 bg-blue-50 text-blue-700"
-                  : "border-slate-200 bg-white text-slate-400"
-            }`}
+            className="relative flex min-w-[96px] flex-1 flex-col items-center text-center"
           >
-            {state === "done" ? "✓ " : ""}
-            {step}
+            {i > 0 && (
+              <span
+                aria-hidden
+                className={`absolute right-1/2 top-3.5 h-0.5 w-full -translate-y-1/2 ${
+                  state === "next" ? "bg-slate-200" : "bg-emerald-400"
+                }`}
+              />
+            )}
+            <span
+              className={`relative z-10 flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold ${
+                state === "done"
+                  ? "bg-emerald-500 text-white"
+                  : state === "current"
+                    ? "bg-blue-600 text-white ring-4 ring-blue-100"
+                    : "border border-slate-300 bg-white text-slate-400"
+              }`}
+            >
+              {state === "done" ? "✓" : i + 1}
+            </span>
+            <span
+              className={`mt-2 px-1 text-xs leading-tight ${
+                state === "current" ? "font-semibold text-blue-700" : state === "done" ? "text-slate-700" : "text-slate-400"
+              }`}
+            >
+              {step}
+            </span>
           </li>
         );
       })}
     </ol>
+  );
+}
+
+// Shown once after Raise Demand (createDemand redirects with ?raised=1).
+function RaisedBanner({
+  number,
+  status,
+  approvers,
+  department,
+}: {
+  number: string;
+  status: ItDemand["status"];
+  approvers: string[];
+  department: string;
+}) {
+  const next =
+    status === "Pending Approval"
+      ? `It's with ${approvers.length ? approvers.join(", ") : "the department head"} for approval — you'll be notified of the decision.`
+      : status === "Categorized"
+        ? `${department} has no approver yet, so it waits and is sent for approval automatically once one is added.`
+        : "Procurement has been notified and will take it from here.";
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl border border-emerald-200 bg-gradient-to-r from-emerald-50 to-white p-5">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-xl text-white shadow-sm">
+        ✓
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="text-base font-semibold text-slate-900">Demand {number} raised</p>
+        <p className="mt-0.5 text-sm text-slate-600">{next}</p>
+      </div>
+      <div className="flex gap-2">
+        <Link href="/it/procurement/demands/new" className={secondaryButtonClass}>
+          Raise another
+        </Link>
+        <Link href="/it/procurement/demands" className={secondaryButtonClass}>
+          All demands
+        </Link>
+      </div>
+    </div>
   );
 }
 
@@ -84,10 +142,10 @@ export default async function DemandPage({
   searchParams,
 }: {
   params: Promise<{ id: string }>;
-  searchParams: Promise<{ notice?: string; error?: string }>;
+  searchParams: Promise<{ notice?: string; error?: string; raised?: string }>;
 }) {
   const { id } = await params;
-  const { notice, error } = await searchParams;
+  const { notice, error, raised } = await searchParams;
   const supabase = await createClient();
 
   const { data: demand } = checked(
@@ -237,13 +295,17 @@ export default async function DemandPage({
         description={`${demand.quantity} × ${product?.product_name ?? "product"} · ${
           orgUnits.nameById.get(demand.site_id) ?? "site"
         }`}
-        action={
-          <Link href="/it/procurement/demands" className={secondaryButtonClass}>
-            Back to demands
-          </Link>
-        }
+        action={<BackLink href="/it/procurement/demands" label="All demands" />}
       />
       <FormMessage error={error} notice={notice} />
+      {raised === "1" && isOwner && (
+        <RaisedBanner
+          number={demand.demand_number}
+          status={demand.status}
+          approvers={departmentApprovers.map((a) => a.full_name)}
+          department={orgUnits.nameById.get(demand.department_id) ?? "the department"}
+        />
+      )}
       <Steps demand={demand} />
 
       <div className="grid gap-6 lg:grid-cols-3">
@@ -530,7 +592,7 @@ export default async function DemandPage({
                 <p className="text-sm text-amber-700">
                   The {orgUnits.nameById.get(demand.department_id) ?? "selected"} department has no
                   demand approver yet. An IT admin adds one under Procurement Settings → Department
-                  Approvers.
+                  Approvers — this demand is then sent for approval automatically.
                 </p>
               )}
             </section>

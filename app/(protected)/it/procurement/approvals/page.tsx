@@ -6,6 +6,7 @@ import { checked, fetchOrgUnits } from "@/lib/it/ticket-data";
 import { formatDate, formatDateTime } from "@/lib/it/tickets";
 import { demandCategoryLabel, formatMoney } from "@/lib/it/procurement";
 import { cardClass, FormMessage } from "../../_components/ticket-ui";
+import { EmptyState, StatTile } from "../_components/ui";
 
 // PRC-06 Approval inbox (BRD §5.5.4–5.5.5): demands awaiting a decision in the departments the
 // viewer is mapped to (it.department_approvers), and their recent decisions. Decisions are made
@@ -94,9 +95,17 @@ export default async function ApprovalsPage({
     <div className="py-6">
       <PageHeader
         title="Approvals"
-        description="Demands waiting for your decision as department head."
+        description="Demands and invoices waiting for your decision as department head."
       />
       <FormMessage error={error} notice={notice} />
+
+      {(departments.length > 0 || invoiceDeptIds.length > 0) && (
+        <dl className="mb-6 grid gap-3 sm:grid-cols-3">
+          <StatTile label="Demands waiting" value={pending.length} tone={pending.length ? "amber" : "slate"} />
+          <StatTile label="Invoices waiting" value={pendingInvoices.length} tone={pendingInvoices.length ? "amber" : "slate"} />
+          <StatTile label="Recent decisions" value={decisions.length} tone="emerald" hint="Your last 20" />
+        </dl>
+      )}
 
       {invoiceDeptIds.length > 0 && (
         <section className={`${cardClass} mb-6`}>
@@ -104,7 +113,7 @@ export default async function ApprovalsPage({
             Invoices waiting for you ({pendingInvoices.length})
           </h2>
           {pendingInvoices.length === 0 ? (
-            <p className="px-6 py-8 text-center text-sm text-slate-400">No invoices to approve.</p>
+            <EmptyState title="No invoices to approve" text="Verified invoices for your departments appear here." />
           ) : (
             <ul className="divide-y divide-slate-100">
               {pendingInvoices.map((inv) => {
@@ -147,7 +156,7 @@ export default async function ApprovalsPage({
           Waiting for you ({pending.length})
         </h2>
         {pending.length === 0 ? (
-          <p className="px-6 py-10 text-center text-sm text-slate-400">Nothing to approve right now.</p>
+          <EmptyState title="All caught up" text="Demands sent to your departments for approval appear here." />
         ) : (
           <ul className="divide-y divide-slate-100">
             {pending.map((d) => {

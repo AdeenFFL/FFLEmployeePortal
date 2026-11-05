@@ -5,8 +5,12 @@ import { StatusPill } from "@/components/status-pill";
 import { checked, fetchOrgUnits } from "@/lib/it/ticket-data";
 import { addApprover, removeApprover, setApproverScope } from "./actions";
 import { cardClass, FormMessage, inputClass, primaryButtonClass, secondaryButtonClass } from "../../../_components/ticket-ui";
+import { SETTINGS_TABS, SubTabs } from "../../_components/ui";
 
-const linkButton = "text-sm font-medium text-blue-700 hover:underline";
+const chip = (on: boolean) =>
+  `rounded-full px-2.5 py-0.5 text-xs font-medium transition ${
+    on ? "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 hover:bg-emerald-100" : "bg-slate-100 text-slate-500 hover:bg-slate-200"
+  }`;
 
 // PRC-08 Department approvers (09 addition P3; BRD §5.5.4 "the relevant Department Head").
 // Gated by it.procurement_settings.update (route prefix /it/procurement/settings).
@@ -34,21 +38,29 @@ export default async function DepartmentApproversPage({
   return (
     <div className="py-6">
       <PageHeader
-        title="Department Approvers"
-        description="Who approves each department's demands. Any one of a department's approvers can decide."
-        action={
-          <Link href="/it/procurement/settings" className={secondaryButtonClass}>
-            Procurement Settings
-          </Link>
-        }
+        title="Settings"
+        description="Rules the demand, invoice and payment steps follow, and who approves each department."
       />
+      <SubTabs items={SETTINGS_TABS} active="approvers" />
       <FormMessage error={error} notice={notice} />
 
-      <p className="mb-6 text-sm text-slate-500">
-        An approver also needs the <strong>Approve Demands</strong> and/or <strong>Approve Invoices</strong>{" "}
-        permission on their role (IT Roles &amp; Permissions → Procurement). People without Approve
-        Demands are flagged below and won&apos;t receive demand approvals.
-      </p>
+      <div className="mb-6 grid gap-3 text-sm text-slate-600 md:grid-cols-3">
+        <Tip title="How it works">
+          A demand goes to its department&apos;s approvers. Any one of them can decide. Adding an
+          approver sends that department&apos;s waiting demands automatically.
+        </Tip>
+        <Tip title="Permission needed">
+          The approver&apos;s role needs <strong>Approve Demands</strong> (and <strong>Approve Invoices</strong>) under
+          IT Roles &amp; Permissions → Procurement. People without it are flagged below.
+        </Tip>
+        <Tip title="Department missing?">
+          Add it under{" "}
+          <Link href="/admin/departments" className="font-medium text-blue-700 hover:underline">
+            Administration → Departments
+          </Link>{" "}
+          and it appears here. Nobody approves their own demand.
+        </Tip>
+      </div>
 
       {departments.length === 0 ? (
         <p className={`${cardClass} p-6 text-sm text-amber-700`}>
@@ -64,8 +76,10 @@ export default async function DepartmentApproversPage({
               <section key={dept.id} id={`dept-${dept.id}`} className={`${cardClass} p-6`}>
                 <div className="mb-3 flex flex-wrap items-center gap-2">
                   <h2 className="text-base font-semibold text-slate-900">{dept.name}</h2>
-                  {working.length === 0 && (
-                    <StatusPill label="No approver — demands can't be sent for approval" tone="warning" />
+                  {working.length === 0 ? (
+                    <StatusPill label="No approver yet — demands wait" tone="warning" />
+                  ) : (
+                    <StatusPill label={`Ready · ${working.length} approver${working.length === 1 ? "" : "s"}`} tone="positive" />
                   )}
                 </div>
 
@@ -73,15 +87,18 @@ export default async function DepartmentApproversPage({
                   <ul className="mb-3 divide-y divide-slate-100">
                     {list.map((a) => (
                       <li key={a.person_id} className="flex flex-wrap items-center gap-3 py-2">
-                        <span className="min-w-0 flex-1 text-sm text-slate-800">
+                        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-50 text-xs font-semibold uppercase text-blue-700">
+                          {initials(a.full_name)}
+                        </span>
+                        <span className="min-w-0 flex-1 text-sm font-medium text-slate-800">
                           {a.full_name}
-                          {a.designation && <span className="ml-1 text-xs text-slate-400">· {a.designation}</span>}
+                          {a.designation && <span className="ml-1 text-xs font-normal text-slate-400">· {a.designation}</span>}
                         </span>
                         {!a.has_permission && <StatusPill label="Missing Approve Demands permission" tone="negative" />}
                         <form
                           action={setApproverScope.bind(null, dept.id, a.person_id, "can_approve_demands", !a.can_approve_demands)}
                         >
-                          <button type="submit" className={linkButton}>
+                          <button type="submit" className={chip(a.can_approve_demands)} title="Click to switch">
                             {a.can_approve_demands ? "✓ Demands" : "Demands off"}
                           </button>
                         </form>
@@ -94,7 +111,7 @@ export default async function DepartmentApproversPage({
                             !a.can_approve_invoices,
                           )}
                         >
-                          <button type="submit" className={linkButton}>
+                          <button type="submit" className={chip(a.can_approve_invoices)} title="Click to switch">
                             {a.can_approve_invoices ? "✓ Invoices" : "Invoices off"}
                           </button>
                         </form>
@@ -114,7 +131,7 @@ export default async function DepartmentApproversPage({
                     <input
                       name="q"
                       defaultValue={isActive ? (q ?? "") : ""}
-                      placeholder="Add approver: search name or employee code"
+                      placeholder="Add an approver — search name or employee code"
                       aria-label={`Search people to add as ${dept.name} approver`}
                       className={`${inputClass} min-w-0 flex-1`}
                     />
@@ -129,9 +146,12 @@ export default async function DepartmentApproversPage({
                       ) : (
                         <>
                           {(candidates ?? []).map((c) => (
-                            <label key={c.person_id} className="flex items-center gap-2 text-sm">
-                              <input type="radio" name="personId" value={c.person_id} required />
-                              {c.full_name}
+                            <label
+                              key={c.person_id}
+                              className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm hover:border-blue-300 has-[:checked]:border-blue-500 has-[:checked]:bg-blue-50/60"
+                            >
+                              <input type="radio" name="personId" value={c.person_id} required className="text-blue-600" />
+                              <span className="font-medium text-slate-800">{c.full_name}</span>
                               <span className="text-xs text-slate-400">
                                 {[c.employee_code, c.designation].filter(Boolean).join(" · ")}
                               </span>
@@ -158,4 +178,18 @@ export default async function DepartmentApproversPage({
       )}
     </div>
   );
+}
+
+function Tip({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+      <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">{title}</p>
+      <p className="leading-relaxed">{children}</p>
+    </div>
+  );
+}
+
+function initials(name: string) {
+  const parts = name.replace(/@.*/, "").split(/[\s._-]+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "") + (parts[1]?.[0] ?? "")).toUpperCase() || "?";
 }

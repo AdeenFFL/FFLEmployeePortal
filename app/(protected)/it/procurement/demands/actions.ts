@@ -97,13 +97,12 @@ export async function createDemand(formData: FormData) {
 
   // The database routes non-consumables to the department head straight away (javaria_it_0017,
   // an AFTER INSERT trigger — so re-read: RETURNING shows the row before that ran).
-  const { data: after } = await supabase.schema("it").from("demands").select("status").eq("id", demand.id).maybeSingle();
-  done(
-    `${LIST}/${demand.id}`,
-    after?.status === "Pending Approval"
-      ? `Demand ${demand.demand_number} raised and sent to the department head for approval.`
-      : `Demand ${demand.demand_number} raised. Procurement has been notified.`,
-  );
+  // The demand page shows a "raised" confirmation (status, approver, next steps) for ?raised=1.
+  const path = `${LIST}/${demand.id}`;
+  revalidatePath(LIST);
+  revalidatePath(path);
+  queueItEmails();
+  redirect(`${path}?raised=1`);
 }
 
 // Requester or procurement staff, while Open.
