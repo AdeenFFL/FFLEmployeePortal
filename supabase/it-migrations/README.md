@@ -159,6 +159,24 @@ their staged source (diffed programmatically after generation); only the header 
 (Author/Branch/Feature/Depends on/Applied-to-live-DB) was replaced with a short replicated-from
 note, same as prior batches.
 
+## Reconciled into the main sequence — 2026-11-05 (batch 4)
+
+The 2 remaining staged `javaria/` files (0019-0020, both already headered `Applied to live DB:
+YES` with a specific date and verifier — no live re-verification needed) were replicated the same
+way as batch 3, continuing straight on from `0066_it_employee_lookup.sql` (the renumbered end of
+batch 3) rather than reusing `0052`/`0053`, which this reconciliation now also knows are taken by
+IT/adeen's own sequence.
+
+| Staged file | Replicated as |
+|---|---|
+| `javaria/javaria_it_0019_route_waiting_on_new_approver.sql` | `supabase/migrations/0067_it_route_waiting_on_new_approver.sql` |
+| `javaria/javaria_it_0020_demands_without_hq_site.sql` | `supabase/migrations/0068_it_demands_without_hq_site.sql` |
+
+Same dual-copy policy as earlier batches: the staged originals stay in `javaria/`; the
+`supabase/migrations/` files are the authoritative ones `supabase db push` actually runs on a
+fresh environment. Bodies are byte-for-byte identical to their staged source; only the header
+comment block was replaced with a short replicated-from note.
+
 ## Applied log
 
 | File | Applied on | By | Notes |
@@ -189,3 +207,5 @@ note, same as prior batches.
 | `javaria/javaria_it_0017_procurement_brd_alignment.sql` | 2026-10-30 (verified live) | Javaria | Procurement BRD alignment review. Replicated as `0065_it_procurement_brd_alignment.sql` |
 | `javaria/javaria_it_0018_employee_lookup.sql` | 2026-10-30 (verified live) | Javaria | Employee lookup for the offboarding/replacement picker. Replicated as `0066_it_employee_lookup.sql` |
 | — | 2026-11-04 | Adeen | Renumbered 0052–0061 → 0057–0066: IT/adeen's own `0052_it_onboarding_site_scoping.sql`…`0056_hr_onboarding_replacement_permissions.sql` sequence collided with this one at merge time (both branches started numbering fresh at 0052 off an older common ancestor). Adeen's files were already applied live under 0052–0054 by the time of the merge, so Javaria's sequence was shifted instead, preserving its internal order. **Unresolved before any further `db push`:** confirm which Supabase project Javaria's "verified live" checks above actually ran against — it push-applied cleanly through 0052–0054 with no schema collisions from Javaria's procurement tables, suggesting the currently-linked project may never have received her procurement migrations at all. |
+| `javaria/javaria_it_0019_route_waiting_on_new_approver.sql` | 2026-11-02 (confirmed live by read-only check) | Javaria | Adding a department approver (or flipping their approve-demands/approve-invoices switch on) routes that department's waiting Categorized demands / Verified invoices straight to Pending Approval, instead of needing a manual "Send for approval" per item. Replicated as `0067_it_route_waiting_on_new_approver.sql` |
+| `javaria/javaria_it_0020_demands_without_hq_site.sql` | 2026-11-03 (applied by Javaria via Supabase SQL Editor) | Javaria | Fixes `it.demands_before_insert`, broken by 0053's removal of `it.hq_site_id()`/`it.settings` (HQ-site routing removal) — the no-site fallback is now the requester's own site. Replicated as `0068_it_demands_without_hq_site.sql` |
