@@ -418,3 +418,25 @@ function call between the two IT tracks (same module, same schema), not an event
 | 5 | Asset tag format (`FFL-LAP-000123`)? | **Decided 2026-10-14: asset tags are entered manually** (no enforced format; unique ignoring case; `talha_it_0007_asset_tag_manual.sql` removes the database default) |
 | 6 | Who writes the shared foundation migration? | **Decided: Talha** (`talha_it_0001` → `0024`) |
 | 7 | Can Javeria ship vendors + products early, so Phases 4–5 aren't blocked? | Open: Javeria |
+
+## Inventory and Procurement as one — 2026-11-06 (`javaria_it_0023_repairs_and_guides.sql`, IT/javaria)
+
+Decision (2026-11-06): repairs are done in Procurement and their status shows in Inventory. This
+replaces the "repairs are not demands" design in the guides of the same date. Inventory is now part
+of the Procurement track's work.
+
+- **No Repairs page.** The Repair Log is gone; `/it/inventory/maintenance` redirects to the register
+  filtered to In Repair. Each asset shows its repair, the demand behind it and its history.
+- **Status follows the demand.** The asset goes In Repair when the demand is raised, and back when
+  Device back is recorded. Rejected or cancelled demands release it.
+- **Free fixes** stay on the ticket (Fixed it) and raise no demand.
+- **Service:** Book a service on the asset raises a Maintenance demand.
+- **Replace device** raises a demand linked to the old asset; assigning the new asset retires the
+  old one and resolves the ticket.
+- **Stock:** minimum per product per site (`it.stock_minimums`), set in Inventory Settings;
+  `products.reorder_level` is the fallback.
+- **Asset tags:** `AST-` plus six digits, applied by a database trigger.
+- **Site scoping:** `it.assets.read_all` sees every site; without it, assets, repairs and stock are
+  limited to the person's sites.
+- **Delete:** an asset with assignments or repairs can't be deleted, only retired.
+- **Offboarding:** the request page lists the leaver's assets with a Record return form.

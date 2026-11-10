@@ -37,6 +37,7 @@ const SECTIONS: { label: string; prefixes: string[] }[] = [
       "it.invoices.",
       "it.payments.",
       "it.procurement_settings.",
+      "it.amounts.",
     ],
   },
   { label: "Administration", prefixes: ["it.manage_role_permissions"] },

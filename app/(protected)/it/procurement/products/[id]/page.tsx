@@ -3,6 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
 import { checked, fetchOrgUnits, hasItPermission } from "@/lib/it/ticket-data";
+import { minimumLevel, stockMinimums } from "@/lib/it/stock";
 import { DEMAND_STATUS_TONE, formatMoney } from "@/lib/it/procurement";
 import { cardClass, FormMessage, primaryButtonClass } from "../../../_components/ticket-ui";
 import { BackLink } from "../../_components/ui";
@@ -24,9 +25,10 @@ export default async function ProductPage({
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
 
-  const [{ data: canRead }, canEdit] = await Promise.all([
+  const [{ data: canRead }, canEdit, showAmounts] = await Promise.all([
     supabase.schema("it").rpc("can_read_procurement_masters"),
     hasItPermission(supabase, "it.products.update"),
+    hasItPermission(supabase, "it.amounts.read"),
   ]);
   if (!canRead) notFound();
 
@@ -59,7 +61,9 @@ export default async function ProductPage({
     ? { data: null, error: null }
     : await supabase.schema("it").from("stock_levels").select("site_id, on_hand").eq("product_id", product.id);
   const levels = levelError ? null : (levelRows ?? []);
-  const { nameById: siteName } = levels?.length ? await fetchOrgUnits(supabase) : { nameById: new Map<string, string>() };
+  const [{ nameById: siteName }, minimums] = levels?.length
+    ? await Promise.all([fetchOrgUnits(supabase), stockMinimums(supabase)])
+    : [{ nameById: new Map<string, string>() }, new Map<string, number>()];
   const noPrice = !product.current_price || Number(product.current_price) <= 0;
 
   return (
@@ -93,6 +97,7 @@ export default async function ProductPage({
             <span>{[product.category, `per ${product.unit}`].filter(Boolean).join(" · ")}</span>
           </div>
         </div>
+        {showAmounts && (
         <dl className="flex gap-8 text-right">
           <div>
             <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Purchase</dt>
@@ -105,6 +110,7 @@ export default async function ProductPage({
             </dd>
           </div>
         </dl>
+        )}
       </div>
 
       <FormMessage error={sp.error} notice={sp.notice} />
@@ -147,7 +153,8 @@ export default async function ProductPage({
               ) : (
                 <ul className="divide-y divide-slate-100">
                   {levels.map((l) => {
-                    const low = product.reorder_level !== null && l.on_hand <= product.reorder_level;
+                    const min = minimumLevel(minimums, product, l.site_id);
+                    const low = min !== null && l.on_hand <= min;
                     return (
                       <li key={l.site_id} className="flex items-center justify-between px-5 py-2.5 text-sm">
                         <span className="text-slate-700">{siteName.get(l.site_id) ?? "Site"}</span>

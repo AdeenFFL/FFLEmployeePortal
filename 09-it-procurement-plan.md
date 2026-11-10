@@ -495,3 +495,24 @@ interim from §2. See `07` Phase 7.
 | 6 | Does a partially-received demand allow one invoice per delivery, or one at the end? | One invoice per receiving record (ERD: `invoices.receiving_id`) | IT BA / Finance |
 | 7 | Do vendors get emails (payment reference, order) from the portal? | Yes for the payment reference (§5.5.19), via the existing Graph mailer | IT BA |
 | 8 | "Open" demand category (BRD lists Consumable / Open / Repair / Maintenance / Fix) — what does "Open" mean? | Treat as "general purchase" until the BA defines it | IT BA |
+
+## Repairs in Procurement — 2026-11-06 (`javaria_it_0023_repairs_and_guides.sql`)
+
+Decision (2026-11-06): all five demand categories stay. Paid repairs are demands, so the spend is
+approved first. This replaces the "repairs are not demands" design in the guides of the same date.
+
+- **Repair demand:** Repair, Maintenance or Fix with `asset_id` set. It names a device instead of a
+  product; `product_id` points at a hidden service product (`products.service_category`). Raised
+  from the ticket's Send for repair or from Raise Demand; needs `it.maintenance.update` too.
+- **Flow:** approval → vendor → **Device back** → invoice → Finance. `it.record_device_back` writes
+  a normal receiving row, so everything after it is unchanged. No gate pass is required. The bill's
+  total becomes the repair cost. "No bill" (warranty, free) closes the demand at Device back.
+- **Old demands** in those categories have no `asset_id` and keep the delivery flow.
+- **Spare parts:** `demands.maintenance_id` links a part on order to the open repair.
+- **Replace device:** `demands.replaces_asset_id`, `ticket_id`.
+- **Amounts:** `it.amounts.read` decides who sees prices and totals. It hides them on the screens
+  only; the rows stay readable under RLS. Which roles keep it is still to confirm with Finance.
+- **Gate pass:** for purchases, unchanged from the 2026-10-22 decision: optional at receiving,
+  required before an invoice goes to Finance.
+- **Audit log:** procurement timeline events reach `public.audit_log` through a security-definer
+  trigger (`javaria_it_0017`), so they don't depend on the admin-only insert policy.

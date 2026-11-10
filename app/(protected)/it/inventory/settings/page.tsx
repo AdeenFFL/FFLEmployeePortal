@@ -2,9 +2,18 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import type { AssetType, AssetValueType, AssetValueTypeName } from "@/types/database";
+import { fetchOrgUnits } from "@/lib/it/ticket-data";
+import { fixedAssetTypeIds, isFixedAsset } from "@/lib/it/stock";
 import { FormMessage, inputClass, labelClass, primaryButtonClass } from "../../_components/ticket-ui";
 import { FormDrawer } from "../_components/drawer";
-import { createAssetType, deleteAssetType, saveAssetValueType, toggleAssetTypeActive, updateAssetType } from "./actions";
+import {
+  createAssetType,
+  deleteAssetType,
+  saveAssetValueType,
+  saveStockMinimum,
+  toggleAssetTypeActive,
+  updateAssetType,
+} from "./actions";
 
 const VALUE_TYPE_NAMES: AssetValueTypeName[] = ["New", "Old"];
 const BASE_PATH = "/it/inventory/settings";
@@ -15,8 +24,8 @@ const VALUE_HINTS: Record<AssetValueTypeName, string> = {
   Old: "Second-hand, transferred or re-used.",
 };
 
-// INV-01 Inventory settings (talha_it_0002): asset types, then the New / Old value rules, on one
-// page. Adding / editing happens in a slide-over (?compose=new, ?editType=…, ?editValue=…).
+// INV-01 Inventory settings (talha_it_0002): asset types, the New / Old value rules and minimum
+// stock levels (javaria_it_0023), on one page. Adding / editing happens in a slide-over (?compose=new, ?editType=…, ?editValue=…).
 export default async function InventorySettingsPage({
   searchParams,
 }: {
@@ -35,7 +44,16 @@ export default async function InventorySettingsPage({
   const q = (sp.q ?? "").trim().toLowerCase();
   const supabase = await createClient();
 
-  const [{ data: assetTypes }, { data: valueTypes }, { data: canEdit }, { data: assetRows }] = await Promise.all([
+  const [
+    { data: assetTypes },
+    { data: valueTypes },
+    { data: canEdit },
+    { data: assetRows },
+    { data: productRows },
+    { data: minimumRows },
+    fixedTypes,
+    { sites, nameById: siteName },
+  ] = await Promise.all([
     supabase
       .schema("it")
       .from("asset_types")
@@ -45,7 +63,13 @@ export default async function InventorySettingsPage({
     supabase.rpc("has_permission", { p_permission_key: "it.inventory_settings.update" }),
     // How many live assets use each type — deleting is only possible at 0.
     supabase.schema("it").from("assets").select("asset_type_id").is("deleted_at", null),
+    supabase.schema("it").from("products").select("id, product_name, unit, asset_type_id, is_active").is("service_category", null).order("product_name"),
+    supabase.schema("it").from("stock_minimums").select("product_id, site_id, min_quantity"),
+    fixedAssetTypeIds(supabase),
+    fetchOrgUnits(supabase),
   ]);
+  const consumables = (productRows ?? []).filter((p) => !isFixedAsset(p, fixedTypes));
+  const productName = new Map(consumables.map((p) => [p.id, p.product_name]));
 
   const types = (assetTypes ?? []) as Pick<AssetType, "id" | "name" | "classification" | "description" | "is_active">[];
   const usage = new Map<string, number>();
@@ -321,6 +345,94 @@ export default async function InventorySettingsPage({
             );
           })}
         </div>
+      </section>
+
+      <section id="minimums" aria-labelledby="minimums-title" className="mt-10 border-t border-slate-200 pt-8">
+        <h2 id="minimums-title" className="text-lg font-semibold text-slate-900">
+          Minimum stock levels
+        </h2>
+        <p className="mb-4 text-sm text-slate-500">
+          At or below this count a consumable shows as running low at that site. Without one here, the product&apos;s own
+          reorder level applies.
+        </p>
+        {canEdit && (
+          <form action={saveStockMinimum} className="mb-4 grid gap-3 rounded-xl border border-slate-200 bg-white p-4 sm:grid-cols-[1fr_1fr_8rem_auto] sm:items-end">
+            <label className="block">
+              <span className={labelClass}>Consumable</span>
+              <select name="productId" required defaultValue="" className={inputClass}>
+                <option value="" disabled>
+                  Choose
+                </option>
+                {consumables
+                  .filter((p) => p.is_active)
+                  .map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.product_name}
+                    </option>
+                  ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className={labelClass}>Site</span>
+              <select name="siteId" required defaultValue="" className={inputClass}>
+                <option value="" disabled>
+                  Choose
+                </option>
+                {sites.map((site) => (
+                  <option key={site.id} value={site.id}>
+                    {site.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block">
+              <span className={labelClass}>Minimum</span>
+              <input name="minQuantity" type="number" min={0} step={1} required className={inputClass} />
+            </label>
+            <button type="submit" className={primaryButtonClass}>
+              Save
+            </button>
+          </form>
+        )}
+        {(minimumRows ?? []).length === 0 ? (
+          <p className="rounded-xl border border-slate-200 bg-white p-6 text-center text-sm text-slate-500">
+            No site minimums set yet.
+          </p>
+        ) : (
+          <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+            <table className="min-w-full text-sm">
+              <thead className="border-b border-slate-200 bg-slate-50 text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-5 py-3">Consumable</th>
+                  <th className="px-4 py-3">Site</th>
+                  <th className="px-4 py-3 text-right">Minimum</th>
+                  {canEdit && <th className="px-5 py-3" />}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {(minimumRows ?? []).map((m) => (
+                  <tr key={`${m.product_id}:${m.site_id}`}>
+                    <td className="px-5 py-3 text-slate-900">{productName.get(m.product_id) ?? "—"}</td>
+                    <td className="px-4 py-3 text-slate-600">{siteName.get(m.site_id) ?? "—"}</td>
+                    <td className="px-4 py-3 text-right tabular-nums text-slate-900">{m.min_quantity}</td>
+                    {canEdit && (
+                      <td className="px-5 py-3 text-right">
+                        <form action={saveStockMinimum}>
+                          <input type="hidden" name="productId" value={m.product_id} />
+                          <input type="hidden" name="siteId" value={m.site_id} />
+                          <input type="hidden" name="minQuantity" value="" />
+                          <button type="submit" className="text-sm font-medium text-slate-500 hover:text-red-600">
+                            Remove
+                          </button>
+                        </form>
+                      </td>
+                    )}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
 
       {canEdit && (sp.compose === "new" || editingType) && (

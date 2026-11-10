@@ -338,6 +338,8 @@ export type ItProduct = {
   is_active: boolean;
   // javaria_it_0022: low-stock warning threshold (null = none).
   reorder_level: number | null;
+  // Set on the hidden products behind repair demands (javaria_it_0023).
+  service_category: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
@@ -358,8 +360,19 @@ export type ItStockMovement = {
   demand_id: string | null;
   issued_to_person_id: string | null;
   reason: string | null;
+  // Spare part used in this repair (javaria_it_0023).
+  maintenance_id: string | null;
   created_at: string;
   created_by: string | null;
+};
+
+// it.stock_minimums (javaria_it_0023): minimum per site; products.reorder_level is the fallback.
+export type ItStockMinimum = {
+  product_id: string;
+  site_id: string;
+  min_quantity: number;
+  updated_at: string;
+  updated_by: string | null;
 };
 
 export type ItStockLevel = {
@@ -447,6 +460,13 @@ export type ItDemand = {
   // javaria_it_0013_procurement_improvements.sql
   agreed_unit_price: number | null;
   approval_follow_up_on: string | null;
+  // javaria_it_0023: repair demands, Replace device, and the repair a spare part is for.
+  // asset_id set = a repair demand: it is for this device, and Device back replaces the delivery.
+  asset_id: string | null;
+  issue_type: string | null;
+  replaces_asset_id: string | null;
+  ticket_id: string | null;
+  maintenance_id: string | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -947,13 +967,17 @@ export type AssetAssignment = {
 };
 
 // it.asset_maintenance (talha_it_0005). Read-only for the app: written only through
-// it.open_maintenance / it.close_maintenance (Phase 4).
+// it.demands_open_repair / it.record_device_back (javaria_it_0023); repairs from before that
+// migration close with it.close_maintenance.
 export type AssetMaintenance = {
   id: string;
   asset_id: string;
   company_id: string;
   site_id: string | null;
   vendor_id: string | null;
+  kind: "Repair" | "Service";
+  ticket_id: string | null;
+  demand_id: string | null;
   issue_type: string;
   description: string | null;
   service_date: string;
@@ -1356,6 +1380,12 @@ export type Database = {
       // javaria_it_0012_receiving_documents.sql — written only through functions.
       stock_movements: {
         Row: ItStockMovement;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      stock_minimums: {
+        Row: ItStockMinimum;
         Insert: never;
         Update: never;
         Relationships: [];
@@ -1904,6 +1934,46 @@ export type Database = {
       };
       issue_demand_from_stock: {
         Args: { p_demand_id: string; p_note: string | null };
+        Returns: undefined;
+      };
+      // javaria_it_0023: repairs, repair bills, replacements, minimum stock.
+      raise_repair_demand: {
+        Args: {
+          p_asset_id: string;
+          p_category: string;
+          p_issue_type: string;
+          p_justification: string | null;
+          p_department_id: string;
+          p_estimate: number | null;
+          p_ticket_id: string | null;
+        };
+        Returns: string;
+      };
+      record_device_back: {
+        Args: {
+          p_demand_id: string;
+          p_resolution: string;
+          p_returned_date: string | null;
+          p_condition: string;
+          p_gate_pass_no: string | null;
+          p_remarks: string | null;
+          p_parts: { product_id: string; quantity: number }[];
+          p_no_bill: boolean;
+          p_beyond_repair: boolean; // javaria_it_0025
+        };
+        Returns: string;
+      };
+      raise_replacement_demand: {
+        Args: {
+          p_ticket_id: string;
+          p_product_id: string;
+          p_department_id: string;
+          p_justification: string | null;
+        };
+        Returns: string;
+      };
+      set_stock_minimum: {
+        Args: { p_product_id: string; p_site_id: string; p_min_quantity: number | null };
         Returns: undefined;
       };
       product_is_fixed_asset: {

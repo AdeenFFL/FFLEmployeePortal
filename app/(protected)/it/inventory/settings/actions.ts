@@ -19,8 +19,29 @@ const DEPRECIATION_METHODS: DepreciationMethod[] = ["Straight Line", "Reducing B
 
 // Every action ends on the settings page with a ?notice= / ?error= banner (and closes the drawer)
 // instead of throwing to the error boundary.
-function go(tab: "types" | "values", kind: "notice" | "error", message: string): never {
-  redirect(`${PATH}?${kind}=${encodeURIComponent(message)}${tab === "values" ? "#values" : ""}`);
+function go(tab: "types" | "values" | "minimums", kind: "notice" | "error", message: string): never {
+  redirect(`${PATH}?${kind}=${encodeURIComponent(message)}${tab === "types" ? "" : `#${tab}`}`);
+}
+
+// Minimum stock per product per site (javaria_it_0023). An empty minimum removes the site's own
+// level, so the product's default applies again.
+export async function saveStockMinimum(formData: FormData) {
+  const { supabase } = await requirePermission(PERMISSION);
+  const productId = String(formData.get("productId") ?? "");
+  const siteId = String(formData.get("siteId") ?? "");
+  const minText = String(formData.get("minQuantity") ?? "").trim();
+  if (!productId || !siteId) go("minimums", "error", "Choose the consumable and the site.");
+  const min = minText === "" ? null : Number(minText);
+  if (min !== null && (!Number.isInteger(min) || min < 0)) go("minimums", "error", "The minimum must be a whole number.");
+
+  const { error } = await supabase
+    .schema("it")
+    .rpc("set_stock_minimum", { p_product_id: productId, p_site_id: siteId, p_min_quantity: min });
+  if (error) go("minimums", "error", error.message);
+
+  revalidatePath(PATH);
+  revalidatePath("/it/inventory/stock");
+  go("minimums", "notice", min === null ? "Minimum removed." : "Minimum saved.");
 }
 
 function parseClassification(value: FormDataEntryValue | null): AssetClassification {

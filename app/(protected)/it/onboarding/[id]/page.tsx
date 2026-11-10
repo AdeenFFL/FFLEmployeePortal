@@ -6,6 +6,8 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { Modal } from "@/components/modal";
 import { AssetAllocationForm } from "../_components/asset-allocation-form";
+import { AssetReturnForm } from "../../inventory/_components/asset-return-form";
+import { listOpenAssignments } from "@/lib/it/assets";
 import { checked, fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
 import {
   CHECKLIST_STATUSES,
@@ -71,6 +73,7 @@ export default async function LifecycleRequestPage({
     q?: string;
     updateTask?: string;
     cancel?: string;
+    returnAsset?: string;
   }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
@@ -164,6 +167,11 @@ export default async function LifecycleRequestPage({
   const assetByAssignmentId = new Map(
     (assignedAssets ?? []).map((a) => [a.id, a.assets as unknown as { asset_tag: string; asset_name: string } | null]),
   );
+
+  // What the leaver still holds; each return goes back to stock with its condition.
+  const leaverAssets =
+    request.kind === "Offboarding" && request.person_id ? await listOpenAssignments(supabase, request.person_id) : [];
+  const returning = leaverAssets.find((a) => a.id === sp.returnAsset);
 
   const nameOf = (pid: string | null) => (pid ? (names.get(pid) ?? "—") : "—");
   const done = checklist.filter((i) => i.status === "Completed" || i.status === "Not Applicable");
@@ -671,6 +679,44 @@ export default async function LifecycleRequestPage({
                 </div>
               )}
             </Panel>
+          )}
+
+          {request.kind === "Offboarding" && request.person_id && (canAssignAssets || leaverAssets.length > 0) && (
+            <Panel title="Assets to return">
+              {leaverAssets.length === 0 ? (
+                <p className="text-sm text-slate-500">Nothing left to return.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {leaverAssets.map((a) => {
+                    const asset = a.assets as unknown as { asset_tag: string; asset_name: string } | null;
+                    return (
+                      <li key={a.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                        <Link href={`/it/inventory/${a.asset_id}`} className="min-w-0 hover:underline">
+                          <span className="font-mono text-xs text-slate-500">{asset?.asset_tag}</span>{" "}
+                          <span className="text-slate-900">{asset?.asset_name}</span>
+                        </Link>
+                        {canAssignAssets && !isFinished && (
+                          <Link href={`${basePath}?returnAsset=${a.id}`} className="shrink-0 font-medium text-blue-700 hover:underline">
+                            Record return
+                          </Link>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Panel>
+          )}
+          {canAssignAssets && returning && !isFinished && (
+            <Modal key={Date.now()} closeHref={basePath} title="Return asset">
+              <AssetReturnForm
+                assetId={returning.asset_id}
+                assignedDate={returning.assigned_date}
+                assignedCondition={returning.assigned_condition}
+                holderName={nameOf(request.person_id)}
+                returnTo={basePath}
+              />
+            </Modal>
           )}
 
           {request.kind === "Offboarding" && request.person_id && canAssign && (

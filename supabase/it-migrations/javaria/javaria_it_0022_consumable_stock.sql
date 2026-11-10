@@ -14,7 +14,7 @@
 -- Depends on:  talha_it_0002 (it.asset_types, it.stock.read / it.stock.update permissions + grants),
 --              javaria_it_0009 (it.products), javaria_it_0010/0011/0013 (it.demands, can_process_demand,
 --              check_org_unit, demands triggers), javaria_it_0012/0013 (it.receiving_records).
--- Applied to live DB: NO
+-- Applied to live DB: YES (by 2026-11-06, by Javaria, via Supabase SQL Editor)
 
 -- Safe to undo:
 --   drop trigger trg_receiving_stock_in on it.receiving_records;

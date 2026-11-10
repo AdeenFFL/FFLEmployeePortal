@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { fixedAssetTypeIds, isFixedAsset } from "@/lib/it/stock";
 import { PageHeader } from "@/components/page-header";
 import { checked, fetchOrgUnits, fetchTicketScope, hasItPermission } from "@/lib/it/ticket-data";
-import { DEMAND_CATEGORIES } from "@/lib/it/procurement";
+import { DEMAND_CATEGORIES, REPAIR_CATEGORIES } from "@/lib/it/procurement";
 import { createDemand } from "../actions";
 import { DemandForm } from "./demand-form";
 import {
@@ -19,13 +19,13 @@ import { BackLink } from "../../_components/ui";
 export default async function NewDemandPage({
   searchParams,
 }: {
-  searchParams: Promise<{ error?: string; product?: string }>;
+  searchParams: Promise<{ error?: string; product?: string; repair?: string; asset?: string; category?: string }>;
 }) {
   const params = await searchParams;
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [productsRes, { sites, departments }, scope, readAll, personRes, canAddProducts, approversRes, canManageApprovers, settingsRes, fixedTypes] =
+  const [productsRes, { sites, departments }, scope, readAll, personRes, canAddProducts, approversRes, canManageApprovers, settingsRes, fixedTypes, showAmounts, canRaiseRepairs, assetsRes] =
     await Promise.all([
     supabase
       .schema("it")
@@ -42,6 +42,18 @@ export default async function NewDemandPage({
     hasItPermission(supabase, "it.procurement_settings.update"),
     supabase.schema("it").from("procurement_settings").select("consumable_path_enabled").eq("id", true).maybeSingle(),
     fixedAssetTypeIds(supabase),
+    hasItPermission(supabase, "it.amounts.read"),
+    hasItPermission(supabase, "it.maintenance.update"),
+    // Devices a repair demand can be for (RLS: the viewer's sites).
+    supabase
+      .schema("it")
+      .from("assets")
+      .select("id, asset_tag, asset_name")
+      .in("status", ["Unassigned", "In Use"])
+      .is("deleted_at", null)
+      .not("site_id", "is", null)
+      .order("asset_tag")
+      .limit(1000),
   ]);
   const products = checked(productsRes).data ?? [];
   const homeSite = personRes.data?.site_id ?? null;
@@ -85,12 +97,19 @@ export default async function NewDemandPage({
       ) : (
         <DemandForm
           action={createDemand}
+          showAmounts={showAmounts}
+          repairId={params.repair}
+          assets={canRaiseRepairs ? (assetsRes.data ?? []) : []}
+          canRaiseRepairs={canRaiseRepairs}
+          defaultAsset={params.asset}
+          defaultCategory={params.category}
+          repairCategories={REPAIR_CATEGORIES}
           products={products.map((p) => ({
             id: p.id,
             name: p.product_name,
             category: p.category,
             unit: p.unit,
-            price: p.current_price ?? p.purchase_price,
+            price: showAmounts ? (p.current_price ?? p.purchase_price) : null,
             fixedAsset: isFixedAsset(p, fixedTypes),
           }))}
           categories={DEMAND_CATEGORIES}

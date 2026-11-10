@@ -15,6 +15,7 @@ import {
   MAX_TOTAL_DOCUMENT_BYTES,
   parseMoney,
   RECEIVING_CONDITIONS,
+  REPAIR_CATEGORIES,
 } from "@/lib/it/procurement";
 import type {
   ItDemand,
@@ -51,7 +52,7 @@ function text(formData: FormData, key: string) {
 // A fixed-asset product (asset type classified Fixed) is bought and registered as an asset — it
 // can't take the consumable "issue from stock" path (javaria_it_0022 it.product_is_fixed_asset).
 const FIXED_ASSET_NOT_CONSUMABLE =
-  "This product is a fixed asset, so it can't be a Consumable — choose General purchase, Repair, Maintenance or Fix.";
+  "This product is a fixed asset, so it can't be a Consumable — choose General purchase.";
 
 async function isFixedAssetProduct(supabase: Awaited<ReturnType<typeof requirePermission>>["supabase"], productId: string) {
   const { data } = await supabase.schema("it").rpc("product_is_fixed_asset", { p_product_id: productId });
@@ -73,8 +74,36 @@ export async function createDemand(formData: FormData) {
   const departmentId = text(formData, "departmentId");
   const justification = text(formData, "justification");
   const category = text(formData, "category") as ItDemandCategory;
-  if (!productId) fail(NEW, "Please choose a product.");
   if (!DEMAND_CATEGORIES.some((c) => c.value === category)) fail(NEW, "Please choose the demand category.");
+
+  // Repair, Maintenance, Fix: the demand names a device instead of a product (javaria_it_0023).
+  if (REPAIR_CATEGORIES.includes(category)) {
+    const assetId = text(formData, "assetId");
+    const estimate = parseMoney(formData.get("estimate"));
+    if (!assetId) fail(NEW, "Please choose the device.");
+    if (!text(formData, "issueType")) fail(NEW, "Say what is wrong with the device.");
+    if (!departmentId) fail(NEW, "Please choose the department.");
+    if (!justification) fail(NEW, "Please explain why this is needed.");
+    if (estimate === undefined) fail(NEW, "The estimated cost must be a positive number.");
+
+    const { data: demandId, error } = await supabase.schema("it").rpc("raise_repair_demand", {
+      p_asset_id: assetId,
+      p_category: category,
+      p_issue_type: text(formData, "issueType"),
+      p_justification: justification,
+      p_department_id: departmentId,
+      p_estimate: estimate ?? null,
+      p_ticket_id: null,
+    });
+    if (error || !demandId) fail(NEW, error?.message ?? "Could not raise the demand.");
+    revalidatePath(LIST);
+    revalidatePath("/it/inventory");
+    revalidatePath(`/it/inventory/${assetId}`);
+    queueItEmails();
+    redirect(`${LIST}/${demandId}?raised=1`);
+  }
+
+  if (!productId) fail(NEW, "Please choose a product.");
   if (!departmentId) fail(NEW, "Please choose the department.");
   if (!justification) fail(NEW, "Please explain why this is needed.");
   if (category === "Consumable" && (await isFixedAssetProduct(supabase, productId))) fail(NEW, FIXED_ASSET_NOT_CONSUMABLE);
@@ -90,6 +119,8 @@ export async function createDemand(formData: FormData) {
       quantity: quantity(formData, NEW),
       justification,
       demand_category: category,
+      // Spare part for an open repair (Request a part on the asset page).
+      maintenance_id: text(formData, "repairId") || null,
     })
     .select("id, demand_number")
     .single();
@@ -320,6 +351,53 @@ async function uploadDocuments(
     if (error) failed++;
   }
   return failed;
+}
+
+// Device back: takes the place of a delivery on a repair demand (javaria_it_0023). Parts come out
+// of the site's stock, the asset returns to its holder or stock, the ticket resolves. With "no bill"
+// (warranty, no charge) the demand closes here; otherwise the invoice steps follow as usual.
+// "Beyond repair" retires the device instead of returning it (javaria_it_0025).
+export async function recordDeviceBack(demandId: string, formData: FormData) {
+  const path = `${LIST}/${demandId}`;
+  const { supabase } = await requirePermission("it.demands.update");
+
+  const resolution = text(formData, "resolution");
+  if (!resolution) fail(path, "Say how the device was fixed.");
+  const condition = text(formData, "condition") as ItReceivingCondition;
+  if (!RECEIVING_CONDITIONS.includes(condition)) fail(path, "Choose the condition of the device.");
+
+  const quantities = formData.getAll("partQty").map(String);
+  const parts = formData
+    .getAll("partProduct")
+    .map(String)
+    .map((product_id, i) => ({ product_id, quantity: Number(quantities[i] || 1) }))
+    .filter((p) => p.product_id);
+  if (parts.some((p) => !Number.isInteger(p.quantity) || p.quantity <= 0)) {
+    fail(path, "Enter how many of each part were used.");
+  }
+
+  const { error } = await supabase.schema("it").rpc("record_device_back", {
+    p_demand_id: demandId,
+    p_resolution: resolution,
+    p_returned_date: text(formData, "returnedDate") || null,
+    p_condition: condition,
+    p_gate_pass_no: text(formData, "gatePassNo") || null,
+    p_remarks: text(formData, "remarks") || null,
+    p_parts: parts,
+    p_no_bill: formData.get("noBill") === "on",
+    p_beyond_repair: formData.get("beyondRepair") === "on",
+  });
+  if (error) fail(path, error.message);
+
+  revalidatePath("/it/inventory");
+  revalidatePath("/it/inventory/stock");
+  revalidatePath("/it/my-assets");
+  done(
+    path,
+    formData.get("beyondRepair") === "on"
+      ? "Device back and retired as beyond repair. Use Replace device on the ticket."
+      : "Device back recorded.",
+  );
 }
 
 // BRD §5.5.7 / §5.6.8 — order from a vendor, or switch vendor.

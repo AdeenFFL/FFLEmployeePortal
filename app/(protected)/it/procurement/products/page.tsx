@@ -29,9 +29,10 @@ export default async function ProductsPage({
   const kind = params.kind === "asset" || params.kind === "consumable" ? params.kind : "all";
   const supabase = await createClient();
 
-  const [{ data: canRead }, canEdit] = await Promise.all([
+  const [{ data: canRead }, canEdit, showAmounts] = await Promise.all([
     supabase.schema("it").rpc("can_read_procurement_masters"),
     hasItPermission(supabase, "it.products.update"),
+    hasItPermission(supabase, "it.amounts.read"),
   ]);
   if (!canRead) notFound();
 
@@ -40,7 +41,7 @@ export default async function ProductsPage({
   const types = typeRows ?? [];
   const fixedIds = types.filter((t) => t.classification === "Fixed").map((t) => t.id);
 
-  let query = supabase.schema("it").from("products").select("*").order("product_name");
+  let query = supabase.schema("it").from("products").select("*").is("service_category", null).order("product_name");
   if (status === "active") query = query.eq("is_active", true);
   if (status === "inactive") query = query.eq("is_active", false);
   if (kind === "asset") query = query.in("asset_type_id", fixedIds.length ? fixedIds : ["00000000-0000-0000-0000-000000000000"]);
@@ -148,8 +149,8 @@ export default async function ProductsPage({
                   <th className="px-4 py-3">Type</th>
                   <th className="px-4 py-3">Category</th>
                   <th className="px-4 py-3">Unit</th>
-                  <th className="px-4 py-3 text-right">Purchase price</th>
-                  <th className="px-4 py-3 text-right">Current price</th>
+                  {showAmounts && <th className="px-4 py-3 text-right">Purchase price</th>}
+                  {showAmounts && <th className="px-4 py-3 text-right">Current price</th>}
                   <th className="px-5 py-3 text-right">Status</th>
                 </tr>
               </thead>
@@ -189,16 +190,20 @@ export default async function ProductsPage({
                       </td>
                       <td className="px-4 py-3 text-slate-600">{p.category ?? "—"}</td>
                       <td className="px-4 py-3 text-slate-600">{p.unit}</td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-600">
-                        {formatMoney(p.purchase_price)}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
-                        {noPrice ? (
-                          <span className="text-amber-700">No price</span>
-                        ) : (
-                          <span className="font-medium text-slate-900">{formatMoney(p.current_price)}</span>
-                        )}
-                      </td>
+                      {showAmounts && (
+                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-600">
+                          {formatMoney(p.purchase_price)}
+                        </td>
+                      )}
+                      {showAmounts && (
+                        <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums">
+                          {noPrice ? (
+                            <span className="text-amber-700">No price</span>
+                          ) : (
+                            <span className="font-medium text-slate-900">{formatMoney(p.current_price)}</span>
+                          )}
+                        </td>
+                      )}
                       <td className="whitespace-nowrap px-5 py-3 text-right">
                         <span
                           className={`inline-flex items-center gap-1.5 text-xs font-medium ${

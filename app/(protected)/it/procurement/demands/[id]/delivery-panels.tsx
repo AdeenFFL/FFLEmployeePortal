@@ -6,7 +6,7 @@ import Link from "next/link";
 import { DocumentLinks } from "./document-links";
 import { RegisterAssetsForm } from "./register-assets-form";
 import { InvoiceBlock } from "./invoice-panel";
-import { assignVendor, recordReceiving, registerAssets, updateReceivingRefs, uploadDemandDocuments } from "../actions";
+import { assignVendor, recordDeviceBack, recordReceiving, registerAssets, updateReceivingRefs, uploadDemandDocuments } from "../actions";
 import { cardClass, inputClass, labelClass, primaryButtonClass, secondaryButtonClass } from "../../../_components/ticket-ui";
 
 // Phase 4 panels for the demand page (javaria_it_0012): vendor, deliveries, documents.
@@ -64,6 +64,7 @@ export function DeliverySection({
   isFinance,
   vendorHasEmail,
   productName,
+  showAmounts,
   assetRegistration,
 }: {
   demand: ItDemand;
@@ -82,6 +83,7 @@ export function DeliverySection({
   isFinance: boolean;
   vendorHasEmail: boolean;
   productName: string;
+  showAmounts: boolean;
   // Set only for fixed-asset products (asset type classified Fixed).
   assetRegistration: { assets: ReceiptAsset[]; canRegister: boolean; companies: { id: string; name: string }[] } | null;
 }) {
@@ -94,7 +96,9 @@ export function DeliverySection({
 
   return (
     <section className={`${cardClass} p-6`}>
-      <h2 className="mb-4 text-base font-semibold text-slate-900">Vendor &amp; delivery</h2>
+      <h2 className="mb-4 text-base font-semibold text-slate-900">
+        {demand.asset_id ? "Vendor & repair" : "Vendor & delivery"}
+      </h2>
 
       <dl className="mb-4 grid gap-4 sm:grid-cols-3">
         <div>
@@ -110,7 +114,7 @@ export function DeliverySection({
         <div>
           <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Expected delivery</dt>
           <dd className="mt-0.5 text-sm text-slate-800">{formatDate(demand.expected_delivery_date) || "—"}</dd>
-          {demand.agreed_unit_price !== null && (
+          {showAmounts && demand.agreed_unit_price !== null && (
             <dd className="text-xs text-slate-500">
               Agreed {formatMoney(demand.agreed_unit_price)} each ·{" "}
               {formatMoney(Number(demand.agreed_unit_price) * target)} total
@@ -142,7 +146,9 @@ export function DeliverySection({
         <ul className="space-y-3">
           {receivings.map((r) => {
             const docs = documents.filter((d) => d.entity_type === "receiving" && d.entity_id === r.id);
-            const hasGateProof = Boolean(r.gate_pass_no) || docs.some((d) => d.doc_type === "Gate Pass");
+            // A repair needs no gate pass (javaria_it_0023).
+            const hasGateProof =
+              Boolean(demand.asset_id) || Boolean(r.gate_pass_no) || docs.some((d) => d.doc_type === "Gate Pass");
             return (
               <li key={r.id} className="rounded-lg border border-slate-200 px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -393,6 +399,96 @@ export function VendorPanel({
           </button>
         </form>
       )}
+    </section>
+  );
+}
+
+// Aside on a repair demand: the device is back. Takes the place of Record delivery.
+export function DeviceBackPanel({
+  demandId,
+  parts,
+}: {
+  demandId: string;
+  parts: { id: string; name: string; unit: string; onHand: number }[];
+}) {
+  return (
+    <section className={`${cardClass} p-6`}>
+      <h2 className="mb-1 text-base font-semibold text-slate-900">Device back</h2>
+      <p className="mb-4 text-xs text-slate-500">
+        The asset goes back to its holder or to stock, and a linked ticket resolves.
+      </p>
+      <form action={recordDeviceBack.bind(null, demandId)} className="space-y-3">
+        <label className="block">
+          <span className={labelClass}>How was it fixed? *</span>
+          <textarea name="resolution" required rows={2} placeholder="e.g. Battery replaced" className={inputClass} />
+        </label>
+        <label className="block">
+          <span className={labelClass}>Date back</span>
+          <input type="date" name="returnedDate" defaultValue={todayIso()} max={todayIso()} className={inputClass} />
+        </label>
+        <label className="block">
+          <span className={labelClass}>Condition</span>
+          <select name="condition" defaultValue="Good" className={inputClass}>
+            {RECEIVING_CONDITIONS.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        </label>
+        <fieldset>
+          <legend className={labelClass}>Spare parts from stock</legend>
+          {parts.length === 0 ? (
+            <p className="text-xs text-slate-500">Nothing in stock at this site.</p>
+          ) : (
+            <div className="space-y-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="grid grid-cols-[1fr_4rem] gap-2">
+                  <select name="partProduct" defaultValue="" aria-label={`Part ${i + 1}`} className={inputClass}>
+                    <option value="">No part</option>
+                    {parts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.onHand} {p.unit})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    name="partQty"
+                    type="number"
+                    min={1}
+                    step={1}
+                    defaultValue={1}
+                    aria-label={`Quantity of part ${i + 1}`}
+                    className={inputClass}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </fieldset>
+        <label className="block">
+          <span className={labelClass}>Gate pass no. (if it left the site)</span>
+          <input name="gatePassNo" className={inputClass} />
+        </label>
+        <label className="block">
+          <span className={labelClass}>Remarks</span>
+          <input name="remarks" className={inputClass} />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" name="noBill" className="h-4 w-4 rounded border-slate-300" />
+          No bill (warranty or free): close the demand now
+        </label>
+        <label className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50/50 p-2.5 text-sm text-slate-700">
+          <input type="checkbox" name="beyondRepair" className="mt-0.5 h-4 w-4 rounded border-slate-300" />
+          <span>
+            <span className="font-medium text-red-700">Beyond repair</span>
+            <span className="block text-xs text-slate-500">
+              The device is retired instead of going back. The ticket stays open so IT can use Replace device.
+            </span>
+          </span>
+        </label>
+        <button type="submit" className={primaryButtonClass}>
+          Record device back
+        </button>
+      </form>
     </section>
   );
 }

@@ -43,12 +43,12 @@ export function AssetForm({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
           <label className={labelClass}>Asset tag *</label>
-          {/* No enforced format (decision 5): the placeholder is only a hint. */}
+          {/* AST- tags are stored as AST- plus six digits (javaria_it_0023); other formats stay as typed. */}
           <input
             name="asset_tag"
             required
             defaultValue={asset?.asset_tag ?? ""}
-            placeholder="e.g. FFL-LAP-001"
+            placeholder="e.g. AST-000123"
             className={inputClass}
           />
         </div>

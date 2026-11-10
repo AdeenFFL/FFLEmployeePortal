@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { checked, fetchOrgUnits } from "@/lib/it/ticket-data";
+import { checked, fetchOrgUnits, hasItPermission } from "@/lib/it/ticket-data";
 import { formatDateTime } from "@/lib/it/tickets";
 import {
   DEMAND_CATEGORIES,
@@ -14,8 +14,8 @@ import {
   DOCUMENT_BUCKET,
   formatMoney,
 } from "@/lib/it/procurement";
-import { stockAtSite } from "@/lib/it/stock";
-import { DeliverySection, ReceivingPanel, VendorPanel, type ReceiptAsset } from "./delivery-panels";
+import { fixedAssetTypeIds, isFixedAsset, stockAtSite } from "@/lib/it/stock";
+import { DeliverySection, DeviceBackPanel, ReceivingPanel, VendorPanel, type ReceiptAsset } from "./delivery-panels";
 import type { ItDemand } from "@/types/database";
 import {
   addDemandComment,
@@ -41,7 +41,7 @@ import {
 import { BackLink } from "../../_components/ui";
 
 // Step tracker: done / current / upcoming along the path this demand takes.
-function Steps({ demand }: { demand: Pick<ItDemand, "status" | "demand_category"> }) {
+function Steps({ demand }: { demand: Pick<ItDemand, "status" | "demand_category" | "asset_id"> }) {
   if (demand.status === "Cancelled" || demand.status === "Rejected") {
     return null;
   }
@@ -88,7 +88,7 @@ function Steps({ demand }: { demand: Pick<ItDemand, "status" | "demand_category"
                 state === "current" ? "font-semibold text-blue-700" : state === "done" ? "text-slate-700" : "text-slate-400"
               }`}
             >
-              {step}
+              {demand.asset_id && step === "Received" ? "Device back" : step}
             </span>
           </li>
         );
@@ -290,6 +290,30 @@ export default async function DemandPage({
     .rpc("demand_person_names", { p_person_ids: [...new Set(peopleIds)] });
   const names = new Map((people ?? []).map((p) => [p.person_id, p.full_name]));
 
+  // The device this demand repairs or replaces, or whose repair the part is for (javaria_it_0023). RLS
+  // hides it from people without asset access; the page then shows the plain label.
+  const linkedAssetId =
+    demand.asset_id ??
+    demand.replaces_asset_id ??
+    (demand.maintenance_id
+      ? (await supabase.schema("it").from("asset_maintenance").select("asset_id").eq("id", demand.maintenance_id).maybeSingle())
+          .data?.asset_id
+      : null);
+  const [showAmounts, { data: linkedAsset }, { count: earlierRepairs }] = await Promise.all([
+    hasItPermission(supabase, "it.amounts.read"),
+    linkedAssetId
+      ? supabase.schema("it").from("assets").select("id, asset_tag").eq("id", linkedAssetId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    demand.asset_id
+      ? supabase
+          .schema("it")
+          .from("asset_maintenance")
+          .select("id", { count: "exact", head: true })
+          .eq("asset_id", demand.asset_id)
+          .neq("demand_id", demand.id)
+      : Promise.resolve({ count: null }),
+  ]);
+
   const total =
     demand.estimated_unit_price === null ? null : Number(demand.estimated_unit_price) * demand.quantity;
   const canEdit = demand.status === "Open" && (isOwner || Boolean(canProcess));
@@ -302,6 +326,13 @@ export default async function DemandPage({
   const canAssignVendor =
     Boolean(canProcess) &&
     ["Approved", "Partially Approved", "Assigned to Vendor", "Partially Received"].includes(demand.status);
+  // Spare parts a repair can take from this site's stock at Device back (javaria_it_0023).
+  const [repairStock, fixedTypes] = demand.asset_id
+    ? await Promise.all([stockAtSite(supabase, demand.site_id), fixedAssetTypeIds(supabase)])
+    : [null, new Set<string>()];
+  const partChoices = (productsRes.data ?? [])
+    .filter((p) => p.is_active && !isFixedAsset(p, fixedTypes) && (repairStock?.get(p.id) ?? 0) > 0)
+    .map((p) => ({ id: p.id, name: p.product_name, unit: p.unit, onHand: repairStock?.get(p.id) ?? 0 }));
   const canReceive =
     Boolean(canProcess) && (demand.status === "Assigned to Vendor" || demand.status === "Partially Received");
   const showDelivery =
@@ -368,10 +399,43 @@ export default async function DemandPage({
                   <span className="text-slate-500"> · approved {demand.approved_quantity}</span>
                 )}
               </Fact>
-              <Fact label="Estimated unit price">{formatMoney(demand.estimated_unit_price)}</Fact>
-              <Fact label="Estimated total">{formatMoney(total)}</Fact>
+              {showAmounts && <Fact label="Estimated unit price">{formatMoney(demand.estimated_unit_price)}</Fact>}
+              {showAmounts && <Fact label="Estimated total">{formatMoney(total)}</Fact>}
               <Fact label="Department">{orgUnits.nameById.get(demand.department_id) ?? "—"}</Fact>
               <Fact label="Site">{orgUnits.nameById.get(demand.site_id) ?? "—"}</Fact>
+              {demand.asset_id && (
+                <Fact label="Device">
+                  {linkedAsset ? (
+                    <Link href={`/it/inventory/${linkedAsset.id}`} className="text-blue-700 hover:underline">
+                      {linkedAsset.asset_tag}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                  {Boolean(earlierRepairs) && (
+                    <span className="text-slate-500"> · repaired {earlierRepairs} time{earlierRepairs === 1 ? "" : "s"} before</span>
+                  )}
+                </Fact>
+              )}
+              {demand.issue_type && <Fact label="Problem">{demand.issue_type}</Fact>}
+              {demand.replaces_asset_id && (
+                <Fact label="Replaces">
+                  <Link href={`/it/inventory/${demand.replaces_asset_id}`} className="text-blue-700 hover:underline">
+                    {linkedAsset?.asset_tag ?? "Old device"}
+                  </Link>
+                </Fact>
+              )}
+              {demand.maintenance_id && (
+                <Fact label="Spare part for">
+                  {linkedAsset ? (
+                    <Link href={`/it/inventory/${linkedAsset.id}`} className="text-blue-700 hover:underline">
+                      Repair of {linkedAsset.asset_tag}
+                    </Link>
+                  ) : (
+                    "A repair"
+                  )}
+                </Fact>
+              )}
               <Fact label="Requested by">{names.get(demand.requested_by_person_id) ?? "—"}</Fact>
               <Fact label="Raised">{formatDateTime(demand.created_at)}</Fact>
               {demand.categorized_at && (
@@ -497,6 +561,7 @@ export default async function DemandPage({
 
           {showDelivery && (
             <DeliverySection
+              showAmounts={showAmounts}
               demand={demand}
               unit={product?.unit ?? ""}
               vendorName={vendorRes.data?.vendor_name ?? null}
@@ -667,8 +732,9 @@ export default async function DemandPage({
             <section className={`${cardClass} border-amber-300 p-6`}>
               <h2 className="mb-1 text-base font-semibold text-slate-900">Your decision</h2>
               <p className="mb-4 text-xs text-slate-500">
-                Requested {demand.quantity} {product?.unit ?? ""} · est. {formatMoney(total)}. The time
-                and your name are recorded with the decision.
+                Requested {demand.quantity} {product?.unit ?? ""}
+                {showAmounts && ` · est. ${formatMoney(total)}`}. The time and your name are recorded with the
+                decision.
               </p>
               <form action={decideDemand.bind(null, demand.id)} className="space-y-3">
                 <fieldset className="space-y-2">
@@ -744,9 +810,12 @@ export default async function DemandPage({
 
           {canAssignVendor && <VendorPanel demand={demand} vendors={vendorsRes.data ?? []} />}
 
-          {canReceive && (
-            <ReceivingPanel demand={demand} unit={product?.unit ?? ""} isFixedAsset={Boolean(assetRegistration)} />
-          )}
+          {canReceive &&
+            (demand.asset_id ? (
+              <DeviceBackPanel demandId={demand.id} parts={partChoices} />
+            ) : (
+              <ReceivingPanel demand={demand} unit={product?.unit ?? ""} isFixedAsset={Boolean(assetRegistration)} />
+            ))}
 
           {canClose && (
             <section className={`${cardClass} p-6`}>

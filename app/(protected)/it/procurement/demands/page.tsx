@@ -74,11 +74,12 @@ export default async function DemandsPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [canRead, canReadAll, canCreate, canUpdate] = await Promise.all([
+  const [canRead, canReadAll, canCreate, canUpdate, showAmounts] = await Promise.all([
     hasItPermission(supabase, "it.demands.read"),
     hasItPermission(supabase, "it.demands.read_all"),
     hasItPermission(supabase, "it.demands.create"),
     hasItPermission(supabase, "it.demands.update"),
+    hasItPermission(supabase, "it.amounts.read"),
   ]);
   const isStaff = canRead || canReadAll;
   const view: "mine" | "queue" | "action" =
@@ -106,8 +107,18 @@ export default async function DemandsPage({
         )
     : { data: [] };
   const withPicture = new Set((gatePics ?? []).map((d) => d.entity_id));
+  // A repair needs no gate pass (javaria_it_0023).
+  const { data: repairDemands } = (noNumber ?? []).length
+    ? await supabase
+        .schema("it")
+        .from("demands")
+        .select("id")
+        .not("asset_id", "is", null)
+        .in("id", [...new Set((noNumber ?? []).map((r) => r.demand_id))])
+    : { data: [] };
+  const repairIds = new Set((repairDemands ?? []).map((d) => d.id));
   const gatePassPending = new Set(
-    (noNumber ?? []).filter((r) => !withPicture.has(r.id)).map((r) => r.demand_id),
+    (noNumber ?? []).filter((r) => !withPicture.has(r.id) && !repairIds.has(r.demand_id)).map((r) => r.demand_id),
   );
   const status = (DEMAND_STATUSES as string[]).includes(params.status ?? "")
     ? (params.status as ItDemandStatus)
@@ -124,7 +135,7 @@ export default async function DemandsPage({
     .schema("it")
     .from("demands")
     .select(
-      "id, demand_number, product_id, quantity, estimated_unit_price, status, demand_category, site_id, department_id, requested_by_person_id, created_at, follow_up_on",
+      "id, demand_number, product_id, issue_type, quantity, estimated_unit_price, status, demand_category, site_id, department_id, requested_by_person_id, created_at, follow_up_on",
     )
     .order("created_at", { ascending: false })
     .limit(PAGE_SIZE);
@@ -286,7 +297,7 @@ export default async function DemandsPage({
                   <th className="px-6 py-3 font-medium">Demand</th>
                   <th className="px-6 py-3 font-medium">Product</th>
                   <th className="px-6 py-3 text-right font-medium">Qty</th>
-                  <th className="px-6 py-3 text-right font-medium">Est. total</th>
+                  {showAmounts && <th className="px-6 py-3 text-right font-medium">Est. total</th>}
                   <th className="px-6 py-3 font-medium">Category</th>
                   {view !== "mine" && <th className="px-6 py-3 font-medium">Requested by</th>}
                   <th className="px-6 py-3 font-medium">Site</th>
@@ -310,13 +321,18 @@ export default async function DemandsPage({
                           {d.demand_number}
                         </Link>
                       </td>
-                      <td className="px-6 py-3 font-medium text-slate-800">{product?.product_name ?? "—"}</td>
+                      <td className="px-6 py-3 font-medium text-slate-800">
+                        {product?.product_name ?? "—"}
+                        {d.issue_type && <span className="block text-xs font-normal text-slate-500">{d.issue_type}</span>}
+                      </td>
                       <td className="whitespace-nowrap px-6 py-3 text-right tabular-nums text-slate-700">
                         {d.quantity} {product?.unit ?? ""}
                       </td>
-                      <td className="whitespace-nowrap px-6 py-3 text-right tabular-nums text-slate-700">
-                        {formatMoney(total)}
-                      </td>
+                      {showAmounts && (
+                        <td className="whitespace-nowrap px-6 py-3 text-right tabular-nums text-slate-700">
+                          {formatMoney(total)}
+                        </td>
+                      )}
                       <td className="px-6 py-3 text-slate-600">{demandCategoryLabel(d.demand_category)}</td>
                       {view !== "mine" && (
                         <td className="px-6 py-3 text-slate-600">{nameById.get(d.requested_by_person_id) ?? "—"}</td>

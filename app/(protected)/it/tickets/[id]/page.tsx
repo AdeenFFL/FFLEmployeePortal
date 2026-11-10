@@ -15,6 +15,7 @@ import {
   signedAttachmentUrls,
 } from "@/lib/it/ticket-data";
 import {
+  formatDate,
   formatDateTime,
   TASK_STATUS_TONE,
   TASK_STATUSES,
@@ -25,7 +26,9 @@ import {
   addStaffUpdate,
   addTask,
   closeTicket,
+  replaceTicketDevice,
   resolveTicket,
+  sendTicketForRepair,
   setEscalation,
   setTicketAsset,
   transferToHq,
@@ -77,6 +80,8 @@ export default async function ItTicketWorkspacePage({
     helpers?: string;
     transfer?: string;
     work?: string;
+    repair?: string;
+    replace?: string;
     escalate?: string;
     close?: string;
   }>;
@@ -191,6 +196,44 @@ export default async function ItTicketWorkspacePage({
   ]);
 
   const nameOf = (pid: string | null) => (pid ? (names.get(pid) ?? "—") : "—");
+
+  // After diagnosing: Fixed it, Send for repair or Replace device (the last two need the device).
+  const [canRepair, canReplace, { data: device }, { data: openRepair }, { data: replacement }] = await Promise.all([
+    hasItPermission(supabase, "it.maintenance.update"),
+    hasItPermission(supabase, "it.demands.create"),
+    ticket.linked_asset_id
+      ? supabase.schema("it").from("assets").select("id, asset_type_id, status").eq("id", ticket.linked_asset_id).maybeSingle()
+      : Promise.resolve({ data: null }),
+    supabase
+      .schema("it")
+      .from("asset_maintenance")
+      .select("id, asset_id, demand_id, issue_type, service_date")
+      .eq("ticket_id", id)
+      .eq("status", "Open")
+      .maybeSingle(),
+    supabase
+      .schema("it")
+      .from("demands")
+      .select("id, demand_number, status")
+      .eq("ticket_id", id)
+      .not("replaces_asset_id", "is", null)
+      .not("status", "in", "(Cancelled,Rejected)")
+      .limit(1)
+      .maybeSingle(),
+  ]);
+  const deviceAvailable = device !== null && ["Unassigned", "In Use"].includes(device.status);
+  const showRepair = canWork && canRepair && canReplace && deviceAvailable && !openRepair;
+  const showReplace = canWork && canReplace && device !== null && !replacement;
+  const { data: replacementProducts } =
+    showReplace && sp.replace === "1"
+      ? await supabase
+          .schema("it")
+          .from("products")
+          .select("id, product_name")
+          .eq("is_active", true)
+          .eq("asset_type_id", device!.asset_type_id)
+          .order("product_name")
+      : { data: null };
 
   return (
     <div className="py-6">
@@ -689,10 +732,134 @@ export default async function ItTicketWorkspacePage({
           {canWork && ticket.status !== "Resolved" && (
             <Panel title="Work the ticket">
               <p className="mb-3 text-sm text-slate-500">Current status: {ticket.status}.</p>
-              <Link href={`${basePath}?work=1`} className={primaryButtonClass}>
-                Update / resolve
-              </Link>
+              {openRepair && (
+                <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-sm text-amber-800">
+                  In repair since {formatDate(openRepair.service_date)} ({openRepair.issue_type}). This ticket resolves
+                  when Device back is recorded on the{" "}
+                  <Link
+                    href={openRepair.demand_id ? `/it/procurement/demands/${openRepair.demand_id}` : `/it/inventory/${openRepair.asset_id}`}
+                    className="font-medium underline"
+                  >
+                    repair demand
+                  </Link>
+                  .
+                </p>
+              )}
+              {replacement && (
+                <p className="mb-3 rounded-lg bg-blue-50 px-3 py-2 text-sm text-blue-800">
+                  Replacement{" "}
+                  <Link href={`/it/procurement/demands/${replacement.id}`} className="font-medium underline">
+                    {replacement.demand_number}
+                  </Link>{" "}
+                  is {replacement.status}. This ticket resolves when the new device is assigned.
+                </p>
+              )}
+              <div className="flex flex-col gap-2">
+                <Link href={`${basePath}?work=1`} className={`${primaryButtonClass} text-center`}>
+                  Fixed it / update
+                </Link>
+                {showRepair && (
+                  <Link href={`${basePath}?repair=1`} className={`${secondaryButtonClass} text-center`}>
+                    Send for repair
+                  </Link>
+                )}
+                {showReplace && (
+                  <Link href={`${basePath}?replace=1`} className={`${secondaryButtonClass} text-center`}>
+                    Replace device
+                  </Link>
+                )}
+              </div>
+              {!ticket.linked_asset_id && (
+                <p className="mt-2 text-xs text-slate-400">Link the device to send it for repair or replace it.</p>
+              )}
             </Panel>
+          )}
+          {showRepair && sp.repair === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Send for repair">
+              <p className="mb-3 text-sm text-slate-500">
+                Raises a Repair demand for this device. The department&apos;s approver decides, then Procurement assigns
+                the vendor. If IT can fix it for free, use Fixed it instead.
+              </p>
+              <form action={sendTicketForRepair.bind(null, ticket.id, device!.id)} className="space-y-3">
+                <div>
+                  <label className={labelClass}>What&apos;s wrong *</label>
+                  <input name="issueType" required placeholder="e.g. Screen, Battery, Keyboard" className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Description</label>
+                  <textarea name="description" rows={2} placeholder="What you found" className={inputClass} />
+                </div>
+                <div>
+                  <label className={labelClass}>Department *</label>
+                  <select name="departmentId" required defaultValue="" className={inputClass}>
+                    <option value="" disabled>
+                      Whose approver decides
+                    </option>
+                    {orgUnits.departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Estimated cost (Rs)</label>
+                  <input name="estimate" inputMode="decimal" placeholder="Optional" className={inputClass} />
+                </div>
+                <button type="submit" className={primaryButtonClass}>
+                  Raise repair demand
+                </button>
+              </form>
+            </Modal>
+          )}
+          {showReplace && sp.replace === "1" && (
+            <Modal key={Date.now()} closeHref={basePath} title="Replace device">
+              <p className="mb-3 text-sm text-slate-500">
+                Raises a General purchase demand for one new device at the same site. It goes through the normal
+                approval. The old device is retired when the new one is assigned.
+              </p>
+              {(replacementProducts ?? []).length === 0 ? (
+                <p className="text-sm text-amber-700">
+                  There is no active product of this device&apos;s type. Add one in Procurement → Products first.
+                </p>
+              ) : (
+                <form action={replaceTicketDevice.bind(null, ticket.id)} className="space-y-3">
+                  <div>
+                    <label className={labelClass}>Replacement product *</label>
+                    <select name="productId" required defaultValue="" className={inputClass}>
+                      <option value="" disabled>
+                        Choose a product
+                      </option>
+                      {(replacementProducts ?? []).map((p) => (
+                        <option key={p.id} value={p.id}>
+                          {p.product_name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Department *</label>
+                    <select name="departmentId" required defaultValue="" className={inputClass}>
+                      <option value="" disabled>
+                        Whose approver decides
+                      </option>
+                      {orgUnits.departments.map((d) => (
+                        <option key={d.id} value={d.id}>
+                          {d.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Why it isn&apos;t worth repairing</label>
+                    <textarea name="justification" rows={2} placeholder="Optional" className={inputClass} />
+                  </div>
+                  <button type="submit" className={primaryButtonClass}>
+                    Raise replacement demand
+                  </button>
+                </form>
+              )}
+            </Modal>
           )}
           {canWork && ticket.status !== "Resolved" && sp.work === "1" && (
             <Modal key={Date.now()} closeHref={basePath} title="Work the ticket">

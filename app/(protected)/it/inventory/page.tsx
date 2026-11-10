@@ -104,6 +104,27 @@ export default async function AssetRegisterPage({
   const holderNames = await fetchAssetPersonNames(supabase, (openAssignments ?? []).map((a) => a.person_id));
   const holderOf = new Map((openAssignments ?? []).map((a) => [a.asset_id, holderNames.get(a.person_id) ?? "—"]));
 
+  // Where each listed In Repair asset stands: its open repair and the demand behind it.
+  const repairingIds = rows.filter((a) => a.status === "In Repair").map((a) => a.id);
+  const { data: openRepairs } = repairingIds.length
+    ? await supabase
+        .schema("it")
+        .from("asset_maintenance")
+        .select("asset_id, demand_id")
+        .in("asset_id", repairingIds)
+        .eq("status", "Open")
+    : { data: [] };
+  const repairDemandIds = (openRepairs ?? []).map((r) => r.demand_id).filter((d): d is string => Boolean(d));
+  const { data: repairDemands } = repairDemandIds.length
+    ? await supabase.schema("it").from("demands").select("id, demand_number, status").in("id", repairDemandIds)
+    : { data: [] };
+  const repairStage = new Map(
+    (openRepairs ?? []).flatMap((r) => {
+      const d = (repairDemands ?? []).find((x) => x.id === r.demand_id);
+      return d ? [[r.asset_id, `${d.demand_number} · ${d.status}`] as const] : [];
+    }),
+  );
+
   // Book value per listed asset from its latest it.asset_values row (Phase 6, valuation.ts).
   const [{ data: valueRows }, { data: valueTypes }] = rows.length
     ? await Promise.all([
@@ -325,7 +346,12 @@ export default async function AssetRegisterPage({
                 <td className="px-4 py-3">
                   <StatusPill label={asset.status} tone={ASSET_STATUS_TONES[asset.status]} />
                 </td>
-                <td className="px-4 py-3 text-slate-700">{holderOf.get(asset.id) ?? <span className="text-slate-300">—</span>}</td>
+                <td className="px-4 py-3 text-slate-700">
+                  {holderOf.get(asset.id) ?? <span className="text-slate-300">—</span>}
+                  {repairStage.has(asset.id) && (
+                    <span className="block text-xs text-amber-700">{repairStage.get(asset.id)}</span>
+                  )}
+                </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right tabular-nums text-slate-700">
                   {valueOf.has(asset.id) ? formatPkr(valueOf.get(asset.id)!) : <span className="text-slate-300">—</span>}
                 </td>

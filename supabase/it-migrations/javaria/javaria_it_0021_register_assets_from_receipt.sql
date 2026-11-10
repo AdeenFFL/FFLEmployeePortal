@@ -11,7 +11,7 @@
 --              talha_it_0006_asset_values.sql (it.asset_values, it.asset_value_types "New"),
 --              javaria_it_0012/0013 (it.receiving_records, it.record_receiving),
 --              javaria_it_0010 (it.demand_updates).
--- Applied to live DB: NO
+-- Applied to live DB: YES (by 2026-11-06, by Javaria, via Supabase SQL Editor)
 
 -- Safe to undo:
 --   drop function it.register_assets_from_receipt(uuid, uuid, jsonb);

@@ -17,7 +17,9 @@ import {
 } from "@/lib/it/ticket-metrics";
 import { formatMoney } from "@/lib/it/procurement";
 import { PROCUREMENT_REPORT_KEYS, procurementKpis } from "@/lib/it/procurement-reports";
+import { inventoryKpis } from "@/lib/it/assets";
 import { BarList, ColumnChart, StatTile } from "../_components/charts";
+import { formatCost } from "../inventory/asset-status";
 import { cardClass, secondaryButtonClass } from "../_components/ticket-ui";
 
 const RANGES = [30, 90, 180] as const;
@@ -63,12 +65,14 @@ export default async function ItDashboardPage({
   const to = new Date(now);
   const from = new Date(now.getTime() - days * 24 * 3_600_000);
 
-  const [tickets, maps, canSeeOnboarding, procurementAccess] = await Promise.all([
+  const [tickets, maps, canSeeOnboarding, procurementAccess, canSeeAssets] = await Promise.all([
     fetchMetricTickets(supabase, from, to),
     fetchCategoryMaps(supabase),
     hasItPermission(supabase, "it.onboarding.read"),
     Promise.all(PROCUREMENT_REPORT_KEYS.map((k) => hasItPermission(supabase, k))),
+    hasItPermission(supabase, "it.assets.read"),
   ]);
+  const inventory = canSeeAssets ? await inventoryKpis(supabase, from, to) : null;
   // <ProcurementKpis> (09-it-procurement-plan.md Phase 7) — only for procurement staff / Finance.
   const procurement = procurementAccess.some(Boolean) ? await procurementKpis(supabase, from, to) : null;
 
@@ -209,6 +213,31 @@ export default async function ItDashboardPage({
           />
         )}
       </div>
+
+      {inventory && (
+        <section className="mb-6" aria-labelledby="inventory-kpis">
+          <div className="mb-3 flex items-center justify-between gap-4">
+            <h2 id="inventory-kpis" className="text-base font-semibold text-slate-900">
+              Inventory
+            </h2>
+            <Link href="/it/inventory" className="text-sm font-medium text-blue-700 hover:underline">
+              Asset Register →
+            </Link>
+          </div>
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
+            <StatTile label="In use" value={inventory.inUse.toLocaleString()} context="Assigned to employees" />
+            <StatTile label="In repair" value={inventory.inRepair.toLocaleString()} context="Repairs and services open" />
+            <StatTile label="In stock" value={inventory.inStock.toLocaleString()} context="Ready to hand out" />
+            <StatTile
+              label="Low stock"
+              value={inventory.lowStock.toLocaleString()}
+              alert={inventory.lowStock > 0 && "At or below minimum"}
+              context="Consumables per site"
+            />
+            <StatTile label="Repair cost" value={formatCost(inventory.repairCost)} context="Closed in period" />
+          </div>
+        </section>
+      )}
 
       {procurement && (
         <section className="mb-6" aria-labelledby="procurement-kpis">

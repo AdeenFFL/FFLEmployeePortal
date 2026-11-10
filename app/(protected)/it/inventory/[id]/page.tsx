@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
+import { DEMAND_STATUS_TONE } from "@/lib/it/procurement";
 import { Modal } from "@/components/modal";
 import { fetchAssetPersonNames, fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
 import { formatDateTime } from "@/lib/it/tickets";
@@ -19,7 +20,7 @@ import {
 import { ProductIcon, productKind } from "../../procurement/_components/product-icon";
 import { AssetAssignForm } from "../_components/asset-assign-form";
 import { AssetReturnForm } from "../_components/asset-return-form";
-import { changeAssetStatus, closeMaintenance, deleteAsset, openMaintenance, setAssetValue } from "../actions";
+import { changeAssetStatus, closeMaintenance, deleteAsset, setAssetValue } from "../actions";
 import { FormDrawer } from "../_components/drawer";
 import { bookValue, formatPkr } from "../valuation";
 import {
@@ -123,11 +124,11 @@ export default async function AssetDetailPage({
     hasItPermission(supabase, "it.assets.assign"),
     hasItPermission(supabase, "it.maintenance.update"),
     // Repair history (talha_it_0005), newest first. Read-only here: changes go through
-    // it.open_maintenance / it.close_maintenance.
+    // repair demands (javaria_it_0023): the demand does the work, this shows where it is.
     supabase
       .schema("it")
       .from("asset_maintenance")
-      .select("id, issue_type, description, service_date, returned_date, status, resolution, cost, remarks, created_at, updated_at")
+      .select("id, kind, ticket_id, demand_id, vendor_id, issue_type, description, service_date, returned_date, status, resolution, cost, remarks, created_at, updated_at")
       .eq("asset_id", id)
       .order("service_date", { ascending: false })
       .order("created_at", { ascending: false }),
@@ -171,7 +172,7 @@ export default async function AssetDetailPage({
   const showAssign = canAssign && asset.status === "Unassigned";
   const showReturn = canAssign && asset.status === "In Use" && openAssignment !== null;
   // it.open_maintenance refuses Retired / Disposed / Lost and already-In-Repair assets.
-  const showSendForRepair = canMaintain && (asset.status === "Unassigned" || asset.status === "In Use");
+  const showBookService = canMaintain && (asset.status === "Unassigned" || asset.status === "In Use");
   const showCloseRepair = canMaintain && asset.status === "In Repair";
 
   // Only shown to the IT queue: without it.tickets.read, RLS would return just the viewer's own
@@ -184,6 +185,37 @@ export default async function AssetDetailPage({
         .eq("linked_asset_id", asset.id)
         .order("created_at", { ascending: false })
     : { data: null };
+
+  // The repair demands behind this asset, vendors and spare parts (javaria_it_0023). Demands follow
+  // RLS, so someone without access sees the repair here but no link to it.
+  const repairIds = repairs.map((r) => r.id);
+  const demandIds = repairs.map((r) => r.demand_id).filter((d): d is string => Boolean(d));
+  const [{ data: vendorRows }, { data: repairDemands }, { data: partRows }, { data: productRows }, canRaiseDemand] =
+    await Promise.all([
+      supabase.schema("it").from("vendors").select("id, vendor_name").order("vendor_name"),
+      demandIds.length
+        ? supabase.schema("it").from("demands").select("id, demand_number, status").in("id", demandIds)
+        : Promise.resolve({ data: [] }),
+      repairIds.length
+        ? supabase
+            .schema("it")
+            .from("stock_movements")
+            .select("maintenance_id, product_id, quantity")
+            .in("maintenance_id", repairIds)
+        : Promise.resolve({ data: [] }),
+      supabase.schema("it").from("products").select("id, product_name"),
+      hasItPermission(supabase, "it.demands.create"),
+    ]);
+  const vendorName = new Map((vendorRows ?? []).map((v) => [v.id, v.vendor_name]));
+  const productById = new Map((productRows ?? []).map((pr) => [pr.id, pr]));
+  const demandById = new Map((repairDemands ?? []).map((d) => [d.id, d]));
+  const partsOf = (repairId: string) =>
+    (partRows ?? [])
+      .filter((m) => m.maintenance_id === repairId)
+      .map((m) => `${-m.quantity} × ${productById.get(m.product_id)?.product_name ?? "part"}`);
+  const openDemand = openRepair?.demand_id ? demandById.get(openRepair.demand_id) : undefined;
+  const openTicket = (tickets ?? []).find((t) => !["Resolved", "Closed"].includes(t.status));
+  const canRaiseRepair = canMaintain && canRaiseDemand;
 
   // Valuation (Phase 6): history of it.asset_values rows, newest first; the latest drives the
   // book value. Values are readable by it.assets.read holders, written with it.valuation.update.
@@ -268,8 +300,11 @@ export default async function AssetDetailPage({
         at: r.service_date,
         seq: r.created_at,
         tone: "amber",
-        title: `Sent for repair — ${r.issue_type}`,
-        lines: r.description ? [r.description] : [],
+        title: `${r.kind === "Service" ? "Service" : "Sent for repair"} — ${r.issue_type}`,
+        lines: [
+          ...(r.demand_id && demandById.get(r.demand_id) ? [`Demand ${demandById.get(r.demand_id)?.demand_number}`] : []),
+          ...(r.description ? [r.description] : []),
+        ],
       },
       ...(r.status !== "Open" && r.returned_date
         ? [
@@ -277,9 +312,12 @@ export default async function AssetDetailPage({
               at: r.returned_date,
               seq: r.updated_at,
               tone: "blue" as const,
-              title: "Back from repair",
+              title: r.kind === "Service" ? "Service finished" : "Back from repair",
               lines: [
-                [r.resolution, r.cost !== null ? formatCost(r.cost) : null].filter(Boolean).join(" · "),
+                [r.resolution, r.cost ? formatCost(r.cost) : null].filter(Boolean).join(" · "),
+                ...(r.vendor_id ? [`Vendor: ${vendorName.get(r.vendor_id) ?? "—"}`] : []),
+                ...(partsOf(r.id).length ? [`Parts: ${partsOf(r.id).join(", ")}`] : []),
+                ...(r.demand_id && demandById.get(r.demand_id) ? [`Demand ${demandById.get(r.demand_id)?.demand_number}`] : []),
                 ...(r.remarks ? [r.remarks] : []),
               ].filter(Boolean),
             },
@@ -579,7 +617,8 @@ export default async function AssetDetailPage({
               {asset.status === "In Repair" && (
                 <>
                   <p className="text-sm text-slate-600">
-                    In repair since {openRepair ? formatDate(openRepair.service_date) : "—"}
+                    {openRepair?.kind === "Service" ? "In service" : "In repair"} since{" "}
+                    {openRepair ? formatDate(openRepair.service_date) : "—"}
                     {openRepair && (
                       <>
                         : <span className="font-medium text-slate-900">{openRepair.issue_type}</span>
@@ -588,11 +627,35 @@ export default async function AssetDetailPage({
                     .
                     {openAssignment && ` It goes back to ${nameOf(openAssignment.person_id)} when closed.`}
                   </p>
+                  {openDemand && (
+                    <Link
+                      href={`/it/procurement/demands/${openDemand.id}`}
+                      className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm hover:bg-slate-50"
+                    >
+                      <span className="font-medium text-slate-900">{openDemand.demand_number}</span>
+                      <StatusPill label={openDemand.status} tone={DEMAND_STATUS_TONE[openDemand.status]} />
+                    </Link>
+                  )}
+                  {openRepair?.demand_id && (
+                    <p className="text-xs text-slate-400">Procurement handles this repair. Device back is recorded on the demand.</p>
+                  )}
                   {showCloseRepair &&
                     (openRepair ? (
-                      <Link href={`${basePath}?repair=1`} className={`${primaryButtonClass} block text-center`}>
-                        Close repair
-                      </Link>
+                      <>
+                        {!openRepair.demand_id && (
+                          <Link href={`${basePath}?repair=1`} className={`${primaryButtonClass} block text-center`}>
+                            Close repair
+                          </Link>
+                        )}
+                        {canRaiseDemand && (
+                          <Link
+                            href={`/it/procurement/demands/new?repair=${openRepair.id}`}
+                            className="block text-center text-sm font-medium text-blue-700 hover:underline"
+                          >
+                            Order a spare part
+                          </Link>
+                        )}
+                      </>
                     ) : (
                       <p className="text-sm text-slate-500">
                         This asset is In Repair but has no open repair record, so it can&apos;t be closed here.
@@ -630,11 +693,14 @@ export default async function AssetDetailPage({
               )}
 
               {/* Less common actions */}
-              {(showSendForRepair || (canUpdate && !isSystemManaged)) && (
+              {(showBookService || (canUpdate && !isSystemManaged)) && (
                 <div className="flex flex-wrap gap-x-4 gap-y-1 border-t border-slate-100 pt-3 text-sm">
-                  {showSendForRepair && (
-                    <Link href={`${basePath}?repair=1`} className="font-medium text-blue-700 hover:underline">
-                      Send for repair
+                  {showBookService && canRaiseRepair && (
+                    <Link
+                      href={`/it/procurement/demands/new?category=Maintenance&asset=${asset.id}`}
+                      className="font-medium text-blue-700 hover:underline"
+                    >
+                      Book a service
                     </Link>
                   )}
                   {canUpdate && asset.status === "Unassigned" && (
@@ -649,10 +715,20 @@ export default async function AssetDetailPage({
                   )}
                 </div>
               )}
-              {asset.status === "In Use" && showSendForRepair && openAssignment && (
+              {showBookService && (
                 <p className="text-xs text-slate-400">
-                  A repair keeps it assigned to {nameOf(openAssignment.person_id)}; it returns to In Use when the repair
-                  is closed.
+                  Repairs start from the IT ticket
+                  {openTicket && (
+                    <>
+                      {" "}
+                      (
+                      <Link href={`/it/tickets/${openTicket.id}`} className="font-medium text-blue-700 hover:underline">
+                        {openTicket.ticket_number}
+                      </Link>
+                      )
+                    </>
+                  )}
+                  .{openAssignment && ` The asset stays with ${nameOf(openAssignment.person_id)} and goes back when closed.`}
                 </p>
               )}
             </div>
@@ -688,56 +764,31 @@ export default async function AssetDetailPage({
           />
         </Modal>
       )}
-      {showSendForRepair && sp.repair === "1" && (
-        <Modal key={Date.now()} closeHref={basePath} title="Send for repair">
-          <form action={openMaintenance.bind(null, asset.id)} className="space-y-3">
-            <div>
-              <label className={labelClass}>Issue type *</label>
-              <input name="issue_type" required placeholder="e.g. Screen, Battery, Keyboard" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Description</label>
-              <textarea name="description" rows={2} placeholder="Optional" className={inputClass} />
-            </div>
-            <div>
-              {/* Left empty = today, decided by the database (no server-timezone guess). */}
-              <label className={labelClass}>Service date (leave empty for today)</label>
-              <input type="date" name="service_date" className={inputClass} />
-            </div>
-            <button type="submit" className={primaryButtonClass}>
-              Send for repair
-            </button>
-          </form>
-        </Modal>
-      )}
-      {showCloseRepair && openRepair && sp.repair === "1" && (
-        <Modal key={Date.now()} closeHref={basePath} title="Close repair">
-          <p className="mb-3 text-sm text-slate-500">
-            In repair since {formatDate(openRepair.service_date)}:{" "}
-            <span className="font-medium text-slate-900">{openRepair.issue_type}</span>.
-          </p>
-          <form action={closeMaintenance.bind(null, asset.id, openRepair.id)} className="space-y-3">
-            <div>
-              <label className={labelClass}>Resolution *</label>
-              <textarea name="resolution" required rows={2} placeholder="e.g. Battery replaced" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Cost (PKR)</label>
-              <input type="number" name="cost" min="0" step="0.01" placeholder="Optional" className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Returned date (leave empty for today)</label>
-              <input type="date" name="returned_date" min={openRepair.service_date} className={inputClass} />
-            </div>
-            <div>
-              <label className={labelClass}>Remarks</label>
-              <input name="remarks" placeholder="Optional" className={inputClass} />
-            </div>
-            <button type="submit" className={primaryButtonClass}>
-              Close repair
-            </button>
-          </form>
-        </Modal>
+      {showCloseRepair && openRepair && !openRepair.demand_id && sp.repair === "1" && (
+        <FormDrawer
+          closeHref={basePath}
+          title="Close repair"
+          description={`${openRepair.issue_type}, since ${formatDate(openRepair.service_date)}.`}
+          action={closeMaintenance.bind(null, asset.id, openRepair.id)}
+          submitLabel="Close repair"
+        >
+          <label className="block">
+            <span className={labelClass}>Resolution *</span>
+            <textarea name="resolution" required rows={2} placeholder="e.g. Battery replaced" className={inputClass} />
+          </label>
+          <label className="block">
+            <span className={labelClass}>Cost (PKR)</span>
+            <input type="number" name="cost" min="0" step="0.01" placeholder="Optional" className={inputClass} />
+          </label>
+          <label className="block">
+            <span className={labelClass}>Returned date (leave empty for today)</span>
+            <input type="date" name="returned_date" min={openRepair.service_date} className={inputClass} />
+          </label>
+          <label className="block">
+            <span className={labelClass}>Remarks</span>
+            <input name="remarks" placeholder="Optional" className={inputClass} />
+          </label>
+        </FormDrawer>
       )}
       {canValue && sp.value === "1" && (
         <FormDrawer

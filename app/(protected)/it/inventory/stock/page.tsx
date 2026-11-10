@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { fetchAssetPersonNames, fetchOrgUnits, hasItPermission } from "@/lib/it/ticket-data";
-import { fixedAssetTypeIds, isFixedAsset } from "@/lib/it/stock";
+import { fixedAssetTypeIds, isFixedAsset, minimumLevel, stockMinimums } from "@/lib/it/stock";
 import type { ItStockMovementType } from "@/types/database";
 import { FormMessage, primaryButtonClass } from "../../_components/ticket-ui";
 import { ProductIcon, productKind } from "../../procurement/_components/product-icon";
@@ -46,11 +46,12 @@ export default async function StockPage({
   ]);
   if (!canRead) notFound();
 
-  const [{ data: productRows }, fixedTypes, { sites, nameById: siteName }, levelsRes, movementsRes] = await Promise.all([
+  const [{ data: productRows }, fixedTypes, { sites, nameById: siteName }, levelsRes, movementsRes, minimums] = await Promise.all([
     supabase
       .schema("it")
       .from("products")
       .select("id, product_name, category, unit, asset_type_id, reorder_level, is_active")
+      .is("service_category", null)
       .order("product_name"),
     fixedAssetTypeIds(supabase),
     fetchOrgUnits(supabase),
@@ -66,6 +67,7 @@ export default async function StockPage({
       if (sp.site) q = q.eq("site_id", sp.site);
       return q;
     })(),
+    stockMinimums(supabase),
   ]);
 
   // Before javaria_it_0022 is applied the ledger doesn't exist — say so instead of an empty page.
@@ -100,9 +102,9 @@ export default async function StockPage({
         .map((p) => {
           const level = onHand.get(`${p.id}:${siteId}`);
           const qty = level?.on_hand ?? 0;
-          const state: "out" | "low" | "ok" =
-            qty <= 0 ? "out" : p.reorder_level !== null && qty <= p.reorder_level ? "low" : "ok";
-          return { product: p, siteId, qty, state, last: level?.last_movement_at ?? null };
+          const min = minimumLevel(minimums, p, siteId);
+          const state: "out" | "low" | "ok" = qty <= 0 ? "out" : min !== null && qty <= min ? "low" : "ok";
+          return { product: p, siteId, qty, min, state, last: level?.last_movement_at ?? null };
         }),
     )
     .filter((r) => !q || r.product.product_name.toLowerCase().includes(q) || (r.product.category ?? "").toLowerCase().includes(q))
@@ -264,7 +266,7 @@ export default async function StockPage({
                       </span>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-right tabular-nums text-slate-500">{r.product.reorder_level ?? "—"}</td>
+                  <td className="px-4 py-3 text-right tabular-nums text-slate-500">{r.min ?? "—"}</td>
                   <td className="px-4 py-3 text-xs text-slate-500">{r.last ? formatDate(r.last) : "Never stocked"}</td>
                   {canUpdate && (
                     <td className="whitespace-nowrap px-5 py-3 text-right text-sm">

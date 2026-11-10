@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { queueItEmails } from "@/lib/it/notifications";
+import { parseMoney } from "@/lib/it/procurement";
 import { TASK_STATUSES, TICKET_PRIORITIES, WORKING_STATUSES } from "@/lib/it/tickets";
 import type { ItTicketPriority, ItTicketStatus, ItTicketTaskStatus } from "@/types/database";
 
@@ -124,6 +125,56 @@ export async function resolveTicket(ticketId: string, formData: FormData) {
   if (!data?.length) fail(ticketId, "You can only resolve tickets assigned to you.");
 
   done(ticketId, "Ticket resolved. The requester has been asked to confirm.");
+}
+
+// Send for repair: raises a Repair demand for the ticket's device, so the spend goes through
+// approval. The asset goes In Repair now; Device back on the demand resolves this ticket.
+export async function sendTicketForRepair(ticketId: string, assetId: string, formData: FormData) {
+  const { supabase } = await requirePermission("it.demands.create");
+
+  const issueType = text(formData, "issueType");
+  const departmentId = text(formData, "departmentId");
+  const estimate = parseMoney(formData.get("estimate"));
+  if (!issueType) fail(ticketId, "Say what is wrong with the device.");
+  if (!departmentId) fail(ticketId, "Choose the department.");
+  if (estimate === undefined) fail(ticketId, "The estimated cost must be a positive number.");
+
+  const { error } = await supabase.schema("it").rpc("raise_repair_demand", {
+    p_asset_id: assetId,
+    p_category: "Repair",
+    p_issue_type: issueType,
+    p_justification: text(formData, "description") || null,
+    p_department_id: departmentId,
+    p_estimate: estimate ?? null,
+    p_ticket_id: ticketId,
+  });
+  if (error) fail(ticketId, error.message);
+
+  revalidatePath("/it/inventory");
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/procurement/demands");
+  done(ticketId, "Repair demand raised. The ticket resolves when the device is back.");
+}
+
+// Replace device: a ready-made demand that follows the normal approval flow.
+export async function replaceTicketDevice(ticketId: string, formData: FormData) {
+  const { supabase } = await requirePermission("it.demands.create");
+
+  const productId = text(formData, "productId");
+  const departmentId = text(formData, "departmentId");
+  if (!productId) fail(ticketId, "Choose the replacement product.");
+  if (!departmentId) fail(ticketId, "Choose the department.");
+
+  const { error } = await supabase.schema("it").rpc("raise_replacement_demand", {
+    p_ticket_id: ticketId,
+    p_product_id: productId,
+    p_department_id: departmentId,
+    p_justification: text(formData, "justification") || null,
+  });
+  if (error) fail(ticketId, error.message);
+
+  revalidatePath("/it/procurement/demands");
+  done(ticketId, "Replacement demand raised. The ticket resolves when the new device is assigned.");
 }
 
 // BRD §5.3.11.
