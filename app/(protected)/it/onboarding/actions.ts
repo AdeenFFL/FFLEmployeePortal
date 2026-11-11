@@ -123,7 +123,7 @@ export async function createLifecycleRequest(formData: FormData) {
 
   if (kind === "Onboarding") {
     if (!employeeName) go(back, "error", "Enter the new joiner's name.");
-    if (!text(formData, "joiningDate")) go(back, "error", "Enter the joining date.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text(formData, "joiningDate"))) go(back, "error", "Select the joining date.");
     // No company email means their portal account gets auto-created on their personal address
     // (see below) — there's nowhere else to send it.
     if (!emailRequired && !personalEmail) {
@@ -131,6 +131,28 @@ export async function createLifecycleRequest(formData: FormData) {
     }
   } else {
     if (!personId) go(back, "error", "Select the employee.");
+  }
+
+  // Double submit / raised twice: an open request of this kind for the same employee is the one
+  // already made, so show that instead of creating a copy.
+  const existing = supabase
+    .schema("it")
+    .from("onboarding_offboarding")
+    .select("id, request_number")
+    .eq("request_type_id", requestType.id)
+    .not("status", "in", "(Completed,Closed,Cancelled)");
+  const { data: alreadyRaised } = await (kind === "Onboarding"
+    ? existing.ilike("employee_name", employeeName).eq("joining_date", text(formData, "joiningDate"))
+    : existing.eq("person_id", personId ?? "")
+  )
+    .limit(1)
+    .maybeSingle();
+  if (alreadyRaised) {
+    go(
+      `/it/onboarding/${alreadyRaised.id}`,
+      "notice",
+      `${alreadyRaised.request_number} is already raised for this employee. No copy was made.`,
+    );
   }
 
   const { data: created, error } = await supabase

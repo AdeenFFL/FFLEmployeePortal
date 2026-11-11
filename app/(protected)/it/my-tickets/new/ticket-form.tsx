@@ -205,6 +205,7 @@ export function TicketForm({
   return (
     <form
       action={action}
+      autoComplete="off"
       className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
     >
       <section className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg bg-slate-50 px-4 py-3">

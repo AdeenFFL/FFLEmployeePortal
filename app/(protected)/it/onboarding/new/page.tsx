@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -68,7 +69,14 @@ export default async function NewLifecycleRequestPage({
       />
       <FormMessage error={params.error} />
 
-      <form action={createLifecycleRequest} className={`${cardClass} space-y-6 p-6`}>
+      {/* key: a fresh, empty form on every visit (no date or name left over from the last
+          request); autoComplete off so the browser doesn't fill in old values either. */}
+      <form
+        key={randomUUID()}
+        action={createLifecycleRequest}
+        autoComplete="off"
+        className={`${cardClass} space-y-6 p-6`}
+      >
         <input type="hidden" name="kind" value={kind} />
 
         {isReplacement && <EmployeePicker sites={sites} inputClass={inputClass} labelClass={labelClass} />}

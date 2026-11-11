@@ -25,6 +25,24 @@ function optional(formData: FormData, key: string) {
   return text(formData, key) || null;
 }
 
+// Double submit / raised twice: one open offboarding per employee. Returns the open one, if any.
+async function openOffboarding(
+  supabase: Awaited<ReturnType<typeof requirePermission>>["supabase"],
+  requestTypeId: string,
+  personId: string,
+) {
+  const { data } = await supabase
+    .schema("it")
+    .from("onboarding_offboarding")
+    .select("id, request_number")
+    .eq("request_type_id", requestTypeId)
+    .eq("person_id", personId)
+    .not("status", "in", "(Completed,Closed,Cancelled)")
+    .limit(1)
+    .maybeSingle();
+  return data;
+}
+
 export async function createSelfOffboardingRequest(formData: FormData) {
   const NEW = "/it/my-offboarding/new";
   const { supabase, personId } = await requirePermission("hr.offboarding.create_self");
@@ -32,7 +50,7 @@ export async function createSelfOffboardingRequest(formData: FormData) {
   const lastWorkingDate = text(formData, "lastWorkingDate");
   const category = text(formData, "employeeCategory") as ItEmployeeCategory;
   const priority = (text(formData, "priority") || "Medium") as ItTicketPriority;
-  if (!lastWorkingDate) fail(NEW, "Enter your last working date.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(lastWorkingDate)) fail(NEW, "Select your last working date.");
   if (!["Permanent", "Contractual"].includes(category)) fail(NEW, "Choose Permanent or Contractual.");
   if (!TICKET_PRIORITIES.includes(priority)) fail(NEW, "Invalid priority.");
 
@@ -53,6 +71,11 @@ export async function createSelfOffboardingRequest(formData: FormData) {
     .eq("id", personId)
     .maybeSingle();
   if (!person) fail(NEW, "Could not find your employee record.");
+
+  const already = await openOffboarding(supabase, requestType.id, personId);
+  if (already) {
+    redirect(`/it/my-offboarding?notice=${encodeURIComponent(`${already.request_number} is already submitted. No copy was made.`)}`);
+  }
 
   const { data: created, error } = await supabase
     .schema("it")
@@ -100,7 +123,7 @@ export async function createSiteOffboardingRequest(formData: FormData) {
   const category = text(formData, "employeeCategory") as ItEmployeeCategory;
   const priority = (text(formData, "priority") || "Medium") as ItTicketPriority;
   if (!targetPersonId) fail(NEW, "Choose the employee you're filing this for.");
-  if (!lastWorkingDate) fail(NEW, "Enter the last working date.");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(lastWorkingDate)) fail(NEW, "Select the last working date.");
   if (!["Permanent", "Contractual"].includes(category)) fail(NEW, "Choose Permanent or Contractual.");
   if (!TICKET_PRIORITIES.includes(priority)) fail(NEW, "Invalid priority.");
 
@@ -121,6 +144,13 @@ export async function createSiteOffboardingRequest(formData: FormData) {
     .eq("id", targetPersonId)
     .maybeSingle();
   if (!person) fail(NEW, "Could not find that employee's record.");
+
+  const already = await openOffboarding(supabase, requestType.id, targetPersonId);
+  if (already) {
+    redirect(
+      `/it/my-offboarding?notice=${encodeURIComponent(`${already.request_number} is already submitted for ${person.full_name}. No copy was made.`)}`,
+    );
+  }
 
   const { data: created, error } = await supabase
     .schema("it")

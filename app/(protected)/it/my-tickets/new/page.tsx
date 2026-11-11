@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -35,7 +36,9 @@ export default async function NewItTicketPage({
         }
       />
       <FormMessage error={error} />
+      {/* key: a fresh, empty form on every visit, nothing left over from the last ticket. */}
       <TicketForm
+        key={randomUUID()}
         action={createItTicket}
         requestTypes={requestTypes.filter((t) => t.is_active)}
         categories={categories.filter((c) => c.is_active)}

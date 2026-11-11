@@ -1,3 +1,5 @@
+import { Suspense } from "react";
+import { SubmitGuard } from "@/components/submit-guard";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./topbar";
 import { getCurrentUserNav } from "./current-user";
@@ -16,6 +18,10 @@ export default async function ProtectedLayout({
 
   return (
     <div className="flex min-h-screen bg-slate-50">
+      {/* Stops double clicks from saving a form twice, on every page. */}
+      <Suspense fallback={null}>
+        <SubmitGuard />
+      </Suspense>
       {/* Sidebar sits in normal flex flow (not fixed) so its own width transition pushes/pulls
           this content area as it expands and collapses on hover. */}
       <Sidebar permissions={permissions} homePath={homePath} />
