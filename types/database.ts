@@ -82,6 +82,7 @@ export type Person = {
   designation: string | null;
   company_id: string | null;
   site_id: string | null;
+  department_id: string | null; // 0054_it_department_based_staff
   employment_type: EmploymentType | null;
   contract_start_date: string | null;
   contract_end_date: string | null;
@@ -128,6 +129,7 @@ export type InvitedUser = {
   role_id: string;
   department: string | null;
   site: string | null;
+  department_id: string | null; // 0054_it_department_based_staff
   status: UserStatus;
   notes: string | null;
   employee_code: string | null;
@@ -135,6 +137,7 @@ export type InvitedUser = {
   date_of_joining: string | null;
   invited_by: string | null;
   invited_at: string;
+  onboarding_request_id: string | null;
 };
 
 export type OrgUnit = {
@@ -257,23 +260,13 @@ export type ItRequestType = {
   applies_to: ItRequestTypeAppliesTo;
   description: string | null;
   is_active: boolean;
-  handled_at: ItHandledAt; // javaria_it_0005
   created_at: string;
   updated_at: string;
   created_by: string | null;
   updated_by: string | null;
 };
 
-// Phase 6.1 site routing — mirrors javaria_it_0005_site_routing.sql.
-export type ItHandledAt = "site" | "hq";
 export type ItSiteRole = "manager" | "member";
-
-export type ItSettings = {
-  id: boolean;
-  hq_site_id: string | null;
-  updated_at: string;
-  updated_by: string | null;
-};
 
 export type ItSiteItStaff = {
   site_id: string;
@@ -286,6 +279,15 @@ export type ItSiteItStaff = {
 // Phase 6.2 / 6.3 — javaria_it_0006_owners_and_assignees.sql
 export type ItCategoryOwner = {
   category_id: string;
+  site_id: string;
+  person_id: string;
+  is_primary: boolean;
+  created_at: string;
+  created_by: string | null;
+};
+
+export type ItTaskTypeOwner = {
+  task_type: string;
   site_id: string;
   person_id: string;
   is_primary: boolean;
@@ -680,7 +682,7 @@ export type ItTicketCategory = {
   description: string | null;
   is_active: boolean;
   sort_order: number;
-  handled_at: ItHandledAt; // javaria_it_0005
+  needs_access_field: boolean; // 0044_it_category_access_field
   created_at: string;
   updated_at: string;
 };
@@ -788,9 +790,11 @@ export type ItLifecycleStatus =
 export type ItChecklistStatus = "Pending" | "In Progress" | "Completed" | "Not Applicable";
 export type ItChecklistTaskType =
   | "email_account"
+  | "license_assignment"
   | "access_provisioning"
   | "software_installation"
   | "asset_allocation"
+  | "asset_handover"
   | "portal_account"
   | "email_backup_closure"
   | "access_revocation"
@@ -822,6 +826,7 @@ export type ItLifecycleRequest = {
   site_id: string | null;
   department_id: string | null;
   reporting_manager_name: string | null;
+  reporting_manager_id: string | null;
   personal_email: string | null;
   joining_date: string | null;
   last_working_date: string | null;
@@ -1189,6 +1194,15 @@ export type Database = {
         Args: { p_permission_key: string };
         Returns: boolean;
       };
+      resolve_proxy_access: {
+        Args: { p_permission_key?: string | null };
+        Returns: {
+          person_id: string | null;
+          is_active: boolean;
+          has_role: boolean;
+          permission_ok: boolean;
+        }[];
+      };
       update_own_biodata: {
         Args: {
           p_display_name: string | null;
@@ -1318,12 +1332,6 @@ export type Database = {
           },
         ];
       };
-      settings: {
-        Row: ItSettings;
-        Insert: Partial<ItSettings>;
-        Update: Partial<ItSettings>;
-        Relationships: [];
-      };
       site_it_staff: {
         Row: ItSiteItStaff;
         Insert: Partial<ItSiteItStaff> & Pick<ItSiteItStaff, "site_id" | "person_id">;
@@ -1428,6 +1436,12 @@ export type Database = {
         Insert: Partial<ItCategoryOwner> &
           Pick<ItCategoryOwner, "category_id" | "site_id" | "person_id">;
         Update: Partial<ItCategoryOwner>;
+        Relationships: [];
+      };
+      task_type_owners: {
+        Row: ItTaskTypeOwner;
+        Insert: Partial<ItTaskTypeOwner> & Pick<ItTaskTypeOwner, "task_type" | "site_id" | "person_id">;
+        Update: Partial<ItTaskTypeOwner>;
         Relationships: [];
       };
       ticket_assignees: {
@@ -1691,11 +1705,24 @@ export type Database = {
           designation: string | null;
           site_id: string | null;
           status: string;
+          onboarding_cleared: boolean;
         }[];
       };
       list_onboarding_staff: {
         Args: Record<string, never>;
         Returns: { person_id: string; full_name: string; designation: string | null }[];
+      };
+      search_employees_for_my_sites: {
+        Args: { p_search: string };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          site_id: string | null;
+          status: string;
+          onboarding_cleared: boolean;
+        }[];
       };
       routing_team_for_site: {
         Args: { p_site_id: string | null };
@@ -2033,12 +2060,7 @@ export type Database = {
           hq_executive: boolean;
           site_ids: string[];
           managed_site_ids: string[];
-          hq_site_id: string | null;
         }[];
-      };
-      transfer_ticket_to_hq: {
-        Args: { p_ticket_id: string; p_reason: string };
-        Returns: undefined;
       };
       list_ticket_assignees: {
         Args: { p_ticket_id: string };
@@ -2073,6 +2095,16 @@ export type Database = {
           is_primary: boolean;
         }[];
       };
+      list_task_type_owners: {
+        Args: Record<string, never>;
+        Returns: {
+          task_type: string;
+          site_id: string;
+          person_id: string;
+          full_name: string;
+          is_primary: boolean;
+        }[];
+      };
       list_site_it_staff: {
         Args: Record<string, never>;
         Returns: {
@@ -2082,6 +2114,15 @@ export type Database = {
           designation: string | null;
           role: ItSiteRole;
         }[];
+      };
+      // 0054_it_department_based_staff.sql
+      is_it_department: {
+        Args: { p_person_id: string };
+        Returns: boolean;
+      };
+      list_it_department_staff: {
+        Args: Record<string, never>;
+        Returns: { person_id: string; full_name: string; designation: string | null }[];
       };
       search_assets_for_ticket: {
         Args: { p_search: string };

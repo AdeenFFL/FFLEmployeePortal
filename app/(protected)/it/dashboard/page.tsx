@@ -65,16 +65,62 @@ export default async function ItDashboardPage({
   const to = new Date(now);
   const from = new Date(now.getTime() - days * 24 * 3_600_000);
 
-  const [tickets, maps, canSeeOnboarding, procurementAccess, canSeeAssets] = await Promise.all([
+  const [tickets, maps, canSeeOnboarding, procurementAccess, canSeeAssets, { data: personId }] = await Promise.all([
     fetchMetricTickets(supabase, from, to),
     fetchCategoryMaps(supabase),
     hasItPermission(supabase, "it.onboarding.read"),
     Promise.all(PROCUREMENT_REPORT_KEYS.map((k) => hasItPermission(supabase, k))),
     hasItPermission(supabase, "it.assets.read"),
+    supabase.rpc("current_person_id"),
   ]);
   const inventory = canSeeAssets ? await inventoryKpis(supabase, from, to) : null;
   // <ProcurementKpis> (09-it-procurement-plan.md Phase 7) — only for procurement staff / Finance.
   const procurement = procurementAccess.some(Boolean) ? await procurementKpis(supabase, from, to) : null;
+
+  // "My open work" (IT Module Onboarding Overhaul Phase 1, item 4): an actionable list on top of
+  // the aggregate KPIs below — open tickets assigned to me, plus onboarding/offboarding work
+  // either I'm the IT Executive on or have a pending checklist item on. RLS (now site-scoped —
+  // 0052_it_onboarding_site_scoping.sql) already limits both to what this viewer can see.
+  const [{ data: myTickets }, { data: myLifecycle }, { data: myTasks }] = await Promise.all([
+    personId
+      ? supabase
+          .schema("it")
+          .from("tickets")
+          .select("id, ticket_number, subject, priority, status")
+          .eq("assigned_to_person_id", personId)
+          .not("status", "in", "(Resolved,Closed)")
+          .order("created_at", { ascending: false })
+          .limit(8)
+      : Promise.resolve({ data: null }),
+    personId && canSeeOnboarding
+      ? supabase
+          .schema("it")
+          .from("onboarding_offboarding")
+          .select("id, request_number, kind, employee_name, status")
+          .eq("it_executive_person_id", personId)
+          .not("status", "in", `(${FINISHED_STATUSES.join(",")})`)
+          .order("created_at", { ascending: false })
+          .limit(8)
+      : Promise.resolve({ data: null }),
+    personId && canSeeOnboarding
+      ? supabase
+          .schema("it")
+          .from("checklist_items")
+          .select("id, task_name, request_id")
+          .eq("assigned_to_person_id", personId)
+          .in("status", ["Pending", "In Progress"])
+          .limit(8)
+      : Promise.resolve({ data: null }),
+  ]);
+  const taskRequestIds = (myTasks ?? []).map((t) => t.request_id);
+  const { data: taskRequests } = taskRequestIds.length
+    ? await supabase
+        .schema("it")
+        .from("onboarding_offboarding")
+        .select("id, request_number, employee_name")
+        .in("id", taskRequestIds)
+    : { data: null };
+  const taskRequestById = new Map((taskRequests ?? []).map((r) => [r.id, r]));
 
   const categoryName = (id: string | null) =>
     (id && maps.categoryNameById.get(id)) ?? "Uncategorised";
@@ -161,6 +207,65 @@ export default async function ItDashboardPage({
           Open, overdue and ageing are always as of now.
         </span>
       </nav>
+
+      {(myTickets?.length || myLifecycle?.length || myTasks?.length) ? (
+        <div className="mb-6 grid gap-6 xl:grid-cols-3">
+          <Card title="My open tickets" subtitle="Assigned to you">
+            {myTickets?.length ? (
+              <ul className="divide-y divide-slate-100 text-sm">
+                {myTickets.map((t) => (
+                  <li key={t.id} className="py-2">
+                    <Link href={`/it/tickets/${t.id}`} className="font-medium text-blue-700 hover:underline">
+                      {t.ticket_number}
+                    </Link>
+                    <span className="ml-2 text-slate-600">{t.subject}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-4 text-center text-sm text-slate-400">Nothing assigned to you.</p>
+            )}
+          </Card>
+          <Card title="My onboarding work" subtitle="Requests you're the IT Executive on">
+            {myLifecycle?.length ? (
+              <ul className="divide-y divide-slate-100 text-sm">
+                {myLifecycle.map((r) => (
+                  <li key={r.id} className="py-2">
+                    <Link href={`/it/onboarding/${r.id}`} className="font-medium text-blue-700 hover:underline">
+                      {r.request_number}
+                    </Link>
+                    <span className="ml-2 text-slate-600">{r.employee_name}</span>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="py-4 text-center text-sm text-slate-400">No requests assigned to you.</p>
+            )}
+          </Card>
+          <Card title="My onboarding tasks" subtitle="Checklist items assigned to you">
+            {myTasks?.length ? (
+              <ul className="divide-y divide-slate-100 text-sm">
+                {myTasks.map((t) => {
+                  const r = taskRequestById.get(t.request_id);
+                  return (
+                    <li key={t.id} className="py-2">
+                      <Link href={`/it/onboarding/${t.request_id}`} className="font-medium text-blue-700 hover:underline">
+                        {r?.request_number ?? "Request"}
+                      </Link>
+                      <span className="ml-2 text-slate-600">
+                        {t.task_name}
+                        {r?.employee_name ? ` — ${r.employee_name}` : ""}
+                      </span>
+                    </li>
+                  );
+                })}
+              </ul>
+            ) : (
+              <p className="py-4 text-center text-sm text-slate-400">No tasks assigned to you.</p>
+            )}
+          </Card>
+        </div>
+      ) : null}
 
       <div className="mb-6 grid grid-cols-2 gap-4 md:grid-cols-4">
         <StatTile

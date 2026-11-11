@@ -63,7 +63,7 @@ export async function GET(request: NextRequest) {
     const { data: invitation } = await admin
       .from("invited_users")
       .select(
-        "role_id, department, site, status, notes, employee_code, designation, date_of_joining",
+        "role_id, department, site, department_id, status, notes, employee_code, designation, date_of_joining",
       )
       .eq("email", normalizedEmail)
       .maybeSingle();
@@ -77,6 +77,7 @@ export async function GET(request: NextRequest) {
         employee_code: invitation?.employee_code ?? null,
         designation: invitation?.designation ?? null,
         date_of_joining: invitation?.date_of_joining ?? null,
+        department_id: invitation?.department_id ?? null,
       })
       .select("id, status")
       .single();

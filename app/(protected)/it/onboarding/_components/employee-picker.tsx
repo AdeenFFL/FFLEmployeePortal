@@ -1,16 +1,16 @@
 "use client";
 
 import { useEffect, useId, useRef, useState } from "react";
-import type { EmployeeLookup, ItEmployeeCategory, ItLifecycleKind } from "@/types/database";
+import type { EmployeeLookup, ItEmployeeCategory } from "@/types/database";
 import { findEmployees } from "../actions";
 
-// HR's offboarding / replacement form (javaria_it_0018): type a name or employee code, pick from
-// the suggestions, and the employee's details show as a read-only card — nothing to re-type.
-// Each field HR may know better than the record has a "Change" link. What's submitted:
+// HR's replacement form (javaria_it_0018 — originally shared with Offboarding, which now has its
+// own dedicated screens instead): type a name or employee code, pick from the suggestions, and
+// the employee's details show as a read-only card — nothing to re-type. Each field HR may know
+// better than the record has a "Change" link. What's submitted:
 //   personId                 — always
 //   designation / siteId     — only when changed (empty = the database copies them from persons)
 //   employeeCategory         — pre-set from persons.employment_type, changeable
-//   lastWorkingDate          — Offboarding; pre-filled with the contract end date if there is one
 
 type Site = { id: string; name: string };
 
@@ -50,12 +50,10 @@ function Row({
 }
 
 export function EmployeePicker({
-  kind,
   sites,
   inputClass,
   labelClass,
 }: {
-  kind: ItLifecycleKind;
   sites: Site[];
   inputClass: string;
   labelClass: string;
@@ -209,8 +207,6 @@ export function EmployeePicker({
     );
   }
 
-  const defaultLastDay = picked.employee_category === "Contractual" ? (picked.contract_end_date ?? "") : "";
-
   return (
     <div className="rounded-lg border border-slate-200 bg-slate-50 p-4">
       <input type="hidden" name="personId" value={picked.person_id} />
@@ -262,11 +258,10 @@ export function EmployeePicker({
           <select
             name="employeeCategory"
             defaultValue={picked.employee_category ?? ""}
-            required={kind === "Offboarding"}
             aria-label="Employee category"
             className={inputClass}
           >
-            <option value="">{kind === "Offboarding" ? "Choose…" : "—"}</option>
+            <option value="">—</option>
             <option value="Permanent">Permanent</option>
             <option value="Contractual">Contractual</option>
           </select>
@@ -275,16 +270,6 @@ export function EmployeePicker({
         <Row label="Joining date" value={fmtDate(picked.date_of_joining)} />
         {picked.contract_end_date && <Row label="Contract ends" value={fmtDate(picked.contract_end_date)} />}
       </dl>
-
-      {kind === "Offboarding" && (
-        <label className="mt-4 block max-w-xs">
-          <span className={labelClass}>
-            Last working date <span className="text-red-500">*</span>
-          </span>
-          <input type="date" name="lastWorkingDate" required defaultValue={defaultLastDay} className={inputClass} />
-          {defaultLastDay && <span className="mt-1 block text-xs text-slate-400">Pre-filled from the contract end date.</span>}
-        </label>
-      )}
     </div>
   );
 }

@@ -18,9 +18,23 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/it/my-tickets": "module:it",
   "/it/tickets": "it.tickets.read",
   "/it/my-onboarding": "module:it",
+  // More specific prefixes first — permissionKeyForPath returns the first match.
+  "/it/my-offboarding/new-for-employee": "hr.offboarding.create_for_site_users",
+  "/it/my-offboarding/new": "hr.offboarding.create_self",
   "/it/my-offboarding": "module:it",
-  // More specific prefix first — permissionKeyForPath returns the first match.
-  "/it/onboarding/new": "it.onboarding.create",
+  // Unified staff queue (tickets + onboarding/offboarding/replacement) — needs either
+  // it.tickets.read or it.onboarding.read, which this single-key map can't express as "any of".
+  // Gated at module:it here; the page itself only queries/shows each half the viewer actually
+  // holds the specific permission for (same permissive-then-filter shape as the "/it" catch-all
+  // below), same as sidebar.tsx's "Requests" nav entry decides visibility the same way.
+  "/it/requests": "module:it",
+  // More specific prefix first — permissionKeyForPath returns the first match. The two kinds
+  // left on this route (Onboarding, Replacement — Offboarding moved to its own dedicated,
+  // permission-split screens under /it/my-offboarding/) each have their own permission,
+  // hr.onboarding.create / hr.replacement.create, which this single-key map can't express as
+  // "any of"; gated loosely at module:it here, same shape as /it/settings, and the page itself
+  // enforces the per-kind permission on submit.
+  "/it/onboarding/new": "module:it",
   "/it/onboarding": "it.onboarding.read",
   // Consumable stock (javaria_it_0022) — before the /it/inventory prefix.
   "/it/inventory/stock": "it.stock.read",
@@ -28,11 +42,12 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   // Inventory track: every employee sees the assets they hold (RLS limits rows to their own).
   "/it/my-assets": "module:it",
   "/it/admin/roles": "it.manage_role_permissions",
-  "/it/settings/tickets": "it.ticket_settings.update",
-  "/it/settings/sites": "it.ticket_settings.update",
-  // Category owners: settings admins edit any site, site IT managers their own; other IT staff
-  // see it read-only — so the route only needs queue access (javaria_it_0006).
-  "/it/settings/owners": "it.tickets.read",
+  // Unified IT Settings (tickets, onboarding task owners, sites & IT staff — IT Settings
+  // redesign). Old /it/settings/tickets, /it/settings/sites, /it/settings/owners now just
+  // redirect here. Gated loosely like /it/requests — the route needs module:it, and the page
+  // itself only shows/enables each tab for the permission it actually requires
+  // (it.ticket_settings.update for Tickets/Sites, it.onboarding.assign for Onboarding Tasks).
+  "/it/settings": "module:it",
   // SCR-06: the IT Dashboard is for IT team members who handle tickets, not every employee with
   // module:it — reconciled per Javaria's own note anticipating this conflict (she built the real
   // dashboard; it.tickets.read replaces the earlier module:it placeholder gate).

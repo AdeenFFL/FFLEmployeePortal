@@ -11,6 +11,7 @@ type UserFormValues = {
   email: string;
   display_name: string | null;
   role_id: string | null;
+  department_id: string | null;
   status: UserStatus;
   notes: string | null;
   employee_code: string | null;
@@ -33,10 +34,12 @@ const inputClass =
 export function UserFormPanel({
   mode,
   roles,
+  departments,
   initialValues,
 }: {
   mode: "new" | "edit";
   roles: Role[];
+  departments: { id: string; name: string }[];
   initialValues: UserFormValues;
 }) {
   const { visible, close } = useDismissable("/admin/users");
@@ -171,6 +174,25 @@ export function UserFormPanel({
                 </option>
               ))}
             </select>
+          </label>
+
+          <label className="flex flex-col gap-1 text-sm">
+            <span className="font-medium text-slate-700">Department</span>
+            <select
+              name="department_id"
+              defaultValue={initialValues.department_id ?? ""}
+              className={inputClass}
+            >
+              <option value="">— Select —</option>
+              {departments.map((d) => (
+                <option key={d.id} value={d.id}>
+                  {d.name}
+                </option>
+              ))}
+            </select>
+            <span className="text-xs text-slate-400">
+              People in the "IT" department become eligible for site assignment on IT Settings.
+            </span>
           </label>
 
           <label className="flex flex-col gap-1 text-sm">

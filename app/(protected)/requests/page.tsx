@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
+import { primaryButtonClass } from "../it/_components/ticket-ui";
 
 // A single, read-only aggregator across the portal's separate ticket/request systems (HR
 // tickets, IT tickets, IT onboarding/offboarding) — built instead of merging those backends
@@ -95,7 +96,7 @@ export default async function MyRequestsPage() {
       label: r.request_number,
       status: r.status,
       createdAt: r.created_at,
-      href: "/it/my-onboarding",
+      href: `/it/onboarding/${r.id}`,
     })),
     ...(offboarding ?? []).map((r) => ({
       key: `off-${r.id}`,
@@ -103,7 +104,7 @@ export default async function MyRequestsPage() {
       label: r.request_number,
       status: r.status,
       createdAt: r.created_at,
-      href: "/it/my-offboarding",
+      href: `/it/onboarding/${r.id}`,
     })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
@@ -112,6 +113,11 @@ export default async function MyRequestsPage() {
       <PageHeader
         title="My Requests"
         description="Every ticket and request you've submitted, across HR and IT, in one place."
+        action={
+          <Link href="/requests/new" className={primaryButtonClass}>
+            + New
+          </Link>
+        }
       />
 
       {rows.length === 0 ? (

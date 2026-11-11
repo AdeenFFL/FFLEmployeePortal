@@ -78,6 +78,7 @@ export default async function AssetRegisterPage({
     { sites, nameById: siteNameById },
     { data: canCreate },
     { data: statusRows },
+    { data: canRequestReplacement },
   ] = await Promise.all([
     query.order("updated_at", { ascending: false }).limit(MAX_ROWS),
     supabase.schema("it").from("asset_types").select("id, name, classification").order("name"),
@@ -85,6 +86,7 @@ export default async function AssetRegisterPage({
     fetchOrgUnits(supabase),
     supabase.rpc("has_permission", { p_permission_key: "it.assets.create" }),
     supabase.schema("it").from("assets").select("status, receiving_id").is("deleted_at", null),
+    supabase.rpc("has_permission", { p_permission_key: "hr.replacement.create" }),
   ]);
   const rows = assets ?? [];
   const statusCount = new Map<string, number>();
@@ -170,13 +172,25 @@ export default async function AssetRegisterPage({
         title="Asset Register"
         description="Every IT asset, where it is in its life, and who has it."
         action={
-          canCreate ? (
-            <Link
-              href="/it/inventory/new"
-              className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-            >
-              + Add asset
-            </Link>
+          canCreate || canRequestReplacement ? (
+            <div className="flex flex-wrap gap-2">
+              {canRequestReplacement && (
+                <Link
+                  href="/it/onboarding/new?kind=Replacement"
+                  className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                >
+                  Request replacement
+                </Link>
+              )}
+              {canCreate && (
+                <Link
+                  href="/it/inventory/new"
+                  className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+                >
+                  + Add Asset
+                </Link>
+              )}
+            </div>
           ) : undefined
         }
       />

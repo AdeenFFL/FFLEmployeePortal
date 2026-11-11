@@ -1,16 +1,30 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
+import { StatusPill } from "@/components/status-pill";
+import { Modal } from "@/components/modal";
 import { createTicket } from "./actions";
+import { hasItPermission } from "@/lib/it/ticket-data";
+import { cardClass, inputClass, labelClass, primaryButtonClass, secondaryButtonClass } from "../../it/_components/ticket-ui";
 
-const STATUS_STYLES: Record<string, string> = {
-  Open: "bg-blue-50 text-blue-700",
-  "In Progress": "bg-amber-50 text-amber-700",
-  Resolved: "bg-green-50 text-green-700",
-  Closed: "bg-slate-100 text-slate-500",
+export const HR_STATUS_TONE: Record<string, "positive" | "neutral" | "warning" | "info"> = {
+  Open: "info",
+  "In Progress": "warning",
+  Resolved: "positive",
+  Closed: "neutral",
 };
 
-export default async function HrTicketsPage() {
+const BASE_PATH = "/hr/tickets";
+
+// IT module revision's button + Modal pattern (components/modal.tsx), applied outside IT for
+// the first time — same recipe: searchParam trigger, key={Date.now()} on the panel so it can
+// reopen after a close. Replaces the old always-rendered create form.
+export default async function HrTicketsPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ compose?: string }>;
+}) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const {
     data: { user },
@@ -22,7 +36,7 @@ export default async function HrTicketsPage() {
     .eq("auth_user_id", user!.id)
     .maybeSingle();
 
-  const [{ data: categories }, { data: tickets }] = await Promise.all([
+  const [{ data: categories }, { data: tickets }, canSelfOffboard, canOffboardSiteUsers] = await Promise.all([
     supabase.schema("hr").from("ticket_categories").select("id, name").eq("is_active", true).order("name"),
     supabase
       .schema("hr")
@@ -30,6 +44,8 @@ export default async function HrTicketsPage() {
       .select("id, subject, status, created_at")
       .eq("person_id", account?.person_id ?? "")
       .order("created_at", { ascending: false }),
+    hasItPermission(supabase, "hr.offboarding.create_self"),
+    hasItPermission(supabase, "hr.offboarding.create_for_site_users"),
   ]);
 
   return (
@@ -37,60 +53,61 @@ export default async function HrTicketsPage() {
       <PageHeader
         title="HR Tickets"
         description="Submit a request or complaint to HR and track its progress."
+        action={
+          <div className="flex gap-2">
+            {canOffboardSiteUsers && (
+              <Link href="/it/my-offboarding/new-for-employee" className={secondaryButtonClass}>
+                Submit Offboarding (for an Employee)
+              </Link>
+            )}
+            {canSelfOffboard && (
+              <Link href="/it/my-offboarding/new" className={secondaryButtonClass}>
+                Submit Offboarding Request
+              </Link>
+            )}
+            <Link href={`${BASE_PATH}?compose=new`} className={primaryButtonClass}>
+              + Submit Ticket
+            </Link>
+          </div>
+        }
       />
 
-      <form
-        action={createTicket}
-        className="mb-6 space-y-4 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
-      >
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Category</label>
-            <select
-              name="categoryId"
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-            >
-              <option value="">General</option>
-              {(categories ?? []).map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="mb-1 block text-sm font-medium text-slate-700">Subject</label>
-            <input
-              name="subject"
-              required
-              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-            />
-          </div>
-        </div>
-        <div>
-          <label className="mb-1 block text-sm font-medium text-slate-700">Description</label>
-          <textarea
-            name="body"
-            required
-            rows={4}
-            className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-blue-500"
-          />
-        </div>
-        <button
-          type="submit"
-          className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          Submit Ticket
-        </button>
-      </form>
+      {sp.compose === "new" && (
+        <Modal key={Date.now()} closeHref={BASE_PATH} title="Submit a Ticket">
+          <form action={createTicket} className="space-y-4">
+            <div>
+              <label className={labelClass}>Category</label>
+              <select name="categoryId" defaultValue="" className={inputClass}>
+                <option value="">General</option>
+                {(categories ?? []).map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Subject</label>
+              <input name="subject" required className={inputClass} />
+            </div>
+            <div>
+              <label className={labelClass}>Description</label>
+              <textarea name="body" required rows={4} className={inputClass} />
+            </div>
+            <button type="submit" className={primaryButtonClass}>
+              Submit Ticket
+            </button>
+          </form>
+        </Modal>
+      )}
 
-      <div className="rounded-xl border border-slate-200 bg-white shadow-sm">
+      <div className={cardClass}>
         <div className="border-b border-slate-200 px-6 py-4">
           <p className="text-sm font-medium text-slate-900">Your Tickets</p>
         </div>
         {(tickets ?? []).length === 0 ? (
           <p className="px-6 py-8 text-center text-sm text-slate-400">
-            You haven't submitted any tickets yet.
+            You haven&apos;t submitted any tickets yet.
           </p>
         ) : (
           <ul className="divide-y divide-slate-100">
@@ -106,13 +123,7 @@ export default async function HrTicketsPage() {
                       {new Date(t.created_at).toLocaleDateString()}
                     </p>
                   </div>
-                  <span
-                    className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                      STATUS_STYLES[t.status] ?? "bg-slate-100 text-slate-600"
-                    }`}
-                  >
-                    {t.status}
-                  </span>
+                  <StatusPill label={t.status} tone={HR_STATUS_TONE[t.status] ?? "neutral"} />
                 </Link>
               </li>
             ))}

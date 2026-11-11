@@ -2,10 +2,10 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { fetchOrgUnits } from "@/lib/it/ticket-data";
-import { LIFECYCLE_KINDS } from "@/lib/it/onboarding";
 import { TICKET_PRIORITIES } from "@/lib/it/tickets";
 import type { ItLifecycleKind } from "@/types/database";
 import { createLifecycleRequest } from "../actions";
+import { ReportingManagerPicker } from "../_components/reporting-manager-picker";
 import { EmployeePicker } from "../_components/employee-picker";
 import {
   cardClass,
@@ -35,25 +35,20 @@ function Field({
   );
 }
 
-const INTRO: Record<ItLifecycleKind, string> = {
-  Onboarding:
-    "New joiner details for IT (BRD §5.1.1). IT gets a checklist for email, access, software, equipment and the portal account.",
-  Offboarding:
-    "Leaver details for IT (BRD §5.2.1). IT gets a checklist for mailbox backup, access revocation and asset recovery, routed to the HQ or plant-site IT team by location.",
-  Replacement: "Equipment replacement for an existing employee: return the old asset, issue the new one.",
-};
-
-// ONB-01 — HR raises an onboarding / offboarding / replacement request.
+// ONB-01 — HR raises an onboarding / replacement request. Offboarding used to be a third tab
+// here (gated by the same blanket it.onboarding.create as these two), but now that it has its
+// own two dedicated, permission-split screens — /it/my-offboarding/new (self) and
+// /it/my-offboarding/new-for-employee (site-scoped, on someone else's behalf) — this screen no
+// longer offers it at all; any stale ?kind=Offboarding link just falls back to Onboarding below.
 export default async function NewLifecycleRequestPage({
   searchParams,
 }: {
   searchParams: Promise<{ kind?: string; error?: string }>;
 }) {
   const params = await searchParams;
-  const kind: ItLifecycleKind = LIFECYCLE_KINDS.includes(params.kind as ItLifecycleKind)
-    ? (params.kind as ItLifecycleKind)
-    : "Onboarding";
+  const kind: ItLifecycleKind = params.kind === "Replacement" ? "Replacement" : "Onboarding";
   const isOnboarding = kind === "Onboarding";
+  const isReplacement = kind === "Replacement";
   const supabase = await createClient();
 
   const { sites, departments } = await fetchOrgUnits(supabase);
@@ -62,36 +57,21 @@ export default async function NewLifecycleRequestPage({
     <div className="py-6">
       <PageHeader
         title={`New ${kind.toLowerCase()} request`}
-        description={INTRO[kind]}
         action={
-          <Link href="/it/onboarding" className={secondaryButtonClass}>
-            Back to list
+          <Link
+            href={isReplacement ? "/it/inventory" : "/it/onboarding"}
+            className={secondaryButtonClass}
+          >
+            {isReplacement ? "Back to Asset Register" : "Back to list"}
           </Link>
         }
       />
       <FormMessage error={params.error} />
 
-      <div className="mb-6 flex flex-wrap gap-2">
-        {LIFECYCLE_KINDS.map((k) => (
-          <Link
-            key={k}
-            href={`/it/onboarding/new?kind=${k}`}
-            className={`rounded-full px-4 py-1.5 text-sm font-medium ${
-              k === kind ? "bg-blue-600 text-white" : "bg-white text-slate-600 ring-1 ring-slate-200"
-            }`}
-          >
-            {k}
-          </Link>
-        ))}
-      </div>
-
       <form action={createLifecycleRequest} className={`${cardClass} space-y-6 p-6`}>
         <input type="hidden" name="kind" value={kind} />
 
-        {!isOnboarding && (
-          // key resets the picker when switching between Offboarding and Replacement.
-          <EmployeePicker key={kind} kind={kind} sites={sites} inputClass={inputClass} labelClass={labelClass} />
-        )}
+        {isReplacement && <EmployeePicker sites={sites} inputClass={inputClass} labelClass={labelClass} />}
 
         <section className="grid gap-4 sm:grid-cols-2">
           {isOnboarding && (
@@ -137,10 +117,10 @@ export default async function NewLifecycleRequestPage({
             </Field>
           )}
           <Field label="Reporting manager">
-            <input name="reportingManager" className={inputClass} />
+            <ReportingManagerPicker name="reportingManagerId" />
           </Field>
-          {/* Offboarding / replacement: designation, location, category and last working date
-              come from the employee card above (javaria_it_0018). */}
+          {/* Replacement: designation, location and category come from the employee card above
+              (javaria_it_0018). */}
           {isOnboarding && (
             <>
               <Field label="Employee category">

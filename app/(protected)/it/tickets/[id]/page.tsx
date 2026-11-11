@@ -31,7 +31,6 @@ import {
   sendTicketForRepair,
   setEscalation,
   setTicketAsset,
-  transferToHq,
   addHelper,
   removeHelper,
   triageTicket,
@@ -78,7 +77,6 @@ export default async function ItTicketWorkspacePage({
     device?: string;
     triage?: string;
     helpers?: string;
-    transfer?: string;
     work?: string;
     repair?: string;
     replace?: string;
@@ -129,13 +127,7 @@ export default async function ItTicketWorkspacePage({
   // Triage rights follow the handling site (javaria_it_0005): its IT manager(s), or HQ.
   const canAssign = canManageSite(scope, ticket.handling_site_id);
   const handlingSiteName =
-    (ticket.handling_site_id && orgUnits.nameById.get(ticket.handling_site_id)) ?? "HQ / unrouted";
-  const canTransferToHq =
-    canAssign &&
-    !scope.hqExecutive &&
-    Boolean(scope.hqSiteId) &&
-    ticket.handling_site_id !== scope.hqSiteId &&
-    !["Resolved", "Closed"].includes(ticket.status);
+    (ticket.handling_site_id && orgUnits.nameById.get(ticket.handling_site_id)) ?? "Unrouted";
 
   const isClosed = ticket.status === "Closed";
   const isAssignee = Boolean(personId) && ticket.assigned_to_person_id === personId;
@@ -617,7 +609,7 @@ export default async function ItTicketWorkspacePage({
                       defaultValue={ticket.handling_site_id ?? ""}
                       className={inputClass}
                     >
-                      {!ticket.handling_site_id && <option value="">HQ / unrouted</option>}
+                      {!ticket.handling_site_id && <option value="">Unrouted</option>}
                       {orgUnits.sites.map((s) => (
                         <option key={s.id} value={s.id}>
                           {s.name}
@@ -628,8 +620,8 @@ export default async function ItTicketWorkspacePage({
                 )}
                 <p className="text-xs text-slate-400">
                   Changing priority recalculates the SLA from the submission time. Changing the
-                  request type or category may re-route the ticket (e.g. to HQ); moving it to
-                  another site clears the assignee.
+                  request type or category may re-route the ticket; moving it to another site
+                  clears the assignee.
                 </p>
                 <button type="submit" className={primaryButtonClass}>
                   Save triage
@@ -693,37 +685,6 @@ export default async function ItTicketWorkspacePage({
                 </select>
                 <button type="submit" className={secondaryButtonClass}>
                   Add
-                </button>
-              </form>
-            </Modal>
-          )}
-
-          {canTransferToHq && (
-            <Panel title="Transfer to HQ">
-              <p className="mb-3 text-sm text-slate-500">
-                For work only HQ can do (e.g. SAP / ERP access, email accounts).
-              </p>
-              <Link href={`${basePath}?transfer=1`} className={secondaryButtonClass}>
-                Transfer to HQ
-              </Link>
-            </Panel>
-          )}
-          {canTransferToHq && sp.transfer === "1" && (
-            <Modal key={Date.now()} closeHref={basePath} title="Transfer to HQ">
-              <form action={transferToHq.bind(null, ticket.id)} className="space-y-3">
-                <p className="text-sm text-slate-500">
-                  The ticket leaves {handlingSiteName}&apos;s queue and goes unassigned to HQ.
-                </p>
-                <textarea
-                  name="reason"
-                  required
-                  rows={2}
-                  placeholder="Why does HQ need to handle this?"
-                  aria-label="Reason for transfer"
-                  className={inputClass}
-                />
-                <button type="submit" className={secondaryButtonClass}>
-                  Transfer to HQ
                 </button>
               </form>
             </Modal>

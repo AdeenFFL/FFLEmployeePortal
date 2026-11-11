@@ -102,7 +102,51 @@ function AssetPicker() {
 }
 
 type Option = { id: string; name: string };
-type Category = Option & { parent_id: string | null };
+type Category = Option & { parent_id: string | null; needs_access_field: boolean };
+
+// Location is already known from the employee's own record (persons.site_id) — showing it as a
+// full dropdown every time implied it needed picking, when really it only needs confirming.
+// Plain text + a small Edit button that reveals the real dropdown only for the rare case
+// someone's actually filing on behalf of a different site.
+function LocationField({ sites, defaultSiteId }: { sites: Option[]; defaultSiteId: string | null }) {
+  const [editing, setEditing] = useState(false);
+  const currentName = sites.find((s) => s.id === defaultSiteId)?.name ?? "Not set";
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-slate-500">Location:</span>
+        <span className="font-medium text-slate-800">{currentName}</span>
+        <button
+          type="button"
+          onClick={() => setEditing(true)}
+          className="text-xs font-medium text-blue-600 hover:underline"
+        >
+          Edit
+        </button>
+        <input type="hidden" name="siteId" value={defaultSiteId ?? ""} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 text-sm">
+      <span className="text-slate-500">Location:</span>
+      <select
+        name="siteId"
+        defaultValue={defaultSiteId ?? ""}
+        className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:ring-blue-500"
+      >
+        <option value="">—</option>
+        {sites.map((s) => (
+          <option key={s.id} value={s.id}>
+            {s.name}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
 
 function SubmitButton() {
   const { pending } = useFormStatus();
@@ -131,10 +175,16 @@ export function TicketForm({
   defaultSiteId: string | null;
 }) {
   const [categoryId, setCategoryId] = useState("");
+  const [subcategoryId, setSubcategoryId] = useState("");
   const [fileError, setFileError] = useState<string | null>(null);
 
   const topLevel = categories.filter((c) => !c.parent_id);
   const subcategories = categories.filter((c) => c.parent_id === categoryId);
+  // Access required only matters for categories an admin has flagged as access-related
+  // (/it/settings/tickets) — the selected subcategory wins when there is one, since it's more
+  // specific than its parent.
+  const selected = categories.find((c) => c.id === (subcategoryId || categoryId));
+  const needsAccessField = selected?.needs_access_field ?? false;
 
   function checkFiles(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? []);
@@ -157,6 +207,25 @@ export function TicketForm({
       action={action}
       className="space-y-6 rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
     >
+      <section className="flex flex-wrap items-center gap-x-6 gap-y-2 rounded-lg bg-slate-50 px-4 py-3">
+        <LocationField sites={sites} defaultSiteId={defaultSiteId} />
+        <div className="flex items-center gap-2 text-sm">
+          <span className="text-slate-500">Department:</span>
+          <select
+            name="departmentId"
+            defaultValue=""
+            className="rounded-md border border-slate-300 bg-white px-2 py-1 text-sm focus:border-blue-500 focus:ring-blue-500"
+          >
+            <option value="">—</option>
+            {departments.map((d) => (
+              <option key={d.id} value={d.id}>
+                {d.name}
+              </option>
+            ))}
+          </select>
+        </div>
+      </section>
+
       <section className="grid gap-4 sm:grid-cols-2">
         <div>
           <label htmlFor="requestTypeId" className={labelClass}>
@@ -194,7 +263,10 @@ export function TicketForm({
             name="categoryId"
             className={inputClass}
             value={categoryId}
-            onChange={(e) => setCategoryId(e.target.value)}
+            onChange={(e) => {
+              setCategoryId(e.target.value);
+              setSubcategoryId("");
+            }}
           >
             <option value="">Not sure</option>
             {topLevel.map((c) => (
@@ -214,7 +286,8 @@ export function TicketForm({
             className={`${inputClass} disabled:bg-slate-50 disabled:text-slate-400`}
             disabled={subcategories.length === 0}
             key={categoryId}
-            defaultValue=""
+            value={subcategoryId}
+            onChange={(e) => setSubcategoryId(e.target.value)}
           >
             <option value="">{subcategories.length === 0 ? "—" : "Select…"}</option>
             {subcategories.map((c) => (
@@ -256,32 +329,6 @@ export function TicketForm({
       </section>
 
       <section className="grid gap-4 sm:grid-cols-2">
-        <div>
-          <label htmlFor="siteId" className={labelClass}>
-            Location
-          </label>
-          <select id="siteId" name="siteId" className={inputClass} defaultValue={defaultSiteId ?? ""}>
-            <option value="">—</option>
-            {sites.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.name}
-              </option>
-            ))}
-          </select>
-        </div>
-        <div>
-          <label htmlFor="departmentId" className={labelClass}>
-            Department
-          </label>
-          <select id="departmentId" name="departmentId" className={inputClass} defaultValue="">
-            <option value="">—</option>
-            {departments.map((d) => (
-              <option key={d.id} value={d.id}>
-                {d.name}
-              </option>
-            ))}
-          </select>
-        </div>
         <div className="sm:col-span-2">
           <label className={labelClass}>
             Linked asset <span className="font-normal text-slate-400">(if this is about a registered device)</span>
@@ -299,17 +346,20 @@ export function TicketForm({
             className={inputClass}
           />
         </div>
-        <div>
-          <label htmlFor="accessRequired" className={labelClass}>
-            Access required <span className="font-normal text-slate-400">(if applicable)</span>
-          </label>
-          <input
-            id="accessRequired"
-            name="accessRequired"
-            placeholder="e.g. Finance shared folder (read/write)"
-            className={inputClass}
-          />
-        </div>
+        {needsAccessField && (
+          <div>
+            <label htmlFor="accessRequired" className={labelClass}>
+              Access required
+            </label>
+            <input
+              id="accessRequired"
+              name="accessRequired"
+              required
+              placeholder="e.g. Finance shared folder (read/write)"
+              className={inputClass}
+            />
+          </div>
+        )}
         <div>
           <label htmlFor="preferredContactMethod" className={labelClass}>
             Preferred contact method

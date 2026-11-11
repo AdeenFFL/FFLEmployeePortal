@@ -28,13 +28,23 @@ export default async function ProfilePage({
   const { edit } = await searchParams;
   const { supabase, personId } = await requireActiveUser();
 
-  const { data: profile } = await supabase
+  // Explicit FK hints (companies!persons_company_id_fkey, not just companies(...)) so PostgREST
+  // never has to auto-discover which relationship to embed — a stale schema cache (e.g. right
+  // after a raw DDL change outside the normal migration flow) can otherwise report "more than
+  // one relationship was found" even when only one FK actually exists.
+  const { data: profile, error: profileError } = await supabase
     .from("persons")
-    .select("*, companies(name), org_units(name)")
+    .select("*, companies!persons_company_id_fkey(name), org_units!persons_site_id_fkey(name)")
     .eq("id", personId)
     .single();
 
-  if (!profile) throw new Error("Profile not found.");
+  // requireActiveUser() above already confirmed this exact person's row is Active via its own
+  // query on the same session, so a failure here should never be a genuinely missing row — swallowing
+  // the real Supabase/PostgREST error (RLS denial, embed failure, etc.) behind a generic message
+  // made this unnecessarily hard to diagnose the one time it did happen. Surface it instead.
+  if (!profile) {
+    throw new Error(profileError ? `Could not load your profile: ${profileError.message}` : "Profile not found.");
+  }
 
   const { data: account } = await supabase
     .from("user_accounts")

@@ -85,12 +85,36 @@ export function suggestEmailAccount(employeeName: string) {
   };
 }
 
-// The live DB can hold task types this branch doesn't know yet (develop's 0047 added
-// license_assignment / asset_handover), so callers read this with `?? []`.
+// Human-readable label per task type, for the task-type owners settings screen
+// (/it/settings/owners?track=tasks) — matches the task_name wording the seeding trigger uses.
+export const TASK_TYPE_LABELS: Record<ItChecklistTaskType, string> = {
+  email_account: "Email Account Creation",
+  license_assignment: "Software License Assignment",
+  access_provisioning: "User Access Provisioning",
+  software_installation: "Software Installation & Device Configuration",
+  asset_allocation: "Asset Allocation & Assignment Form",
+  asset_handover: "Asset Handover Confirmation",
+  portal_account: "Employee Portal Account Creation",
+  email_backup_closure: "Email Backup & Account Closure",
+  access_revocation: "User Access Revocation",
+  hardware_recovery: "Laptop & Hardware Recovery",
+  asset_return: "Asset Return Form",
+  license_deactivation: "Software License Deactivation",
+  other: "Other",
+};
+
 export const TASK_DETAIL_FIELDS: Record<ItChecklistTaskType, DetailField[]> = {
   email_account: [
     { key: "email_address", label: "Company email address", placeholder: `name@${COMPANY_EMAIL_DOMAIN}` },
     { key: "username", label: "Username" },
+  ],
+  license_assignment: [
+    {
+      key: "license_sku",
+      label: "License / SKU assigned",
+      placeholder: "Microsoft 365 E3, Adobe Reader DC, …",
+      multiline: true,
+    },
   ],
   access_provisioning: [
     {
@@ -109,7 +133,13 @@ export const TASK_DETAIL_FIELDS: Record<ItChecklistTaskType, DetailField[]> = {
     },
   ],
   asset_allocation: ASSET_FIELDS,
-  portal_account: [{ key: "username", label: "Portal username" }],
+  // No manual fields — completion is driven by the real acknowledgment data on the linked
+  // asset_assignments row (it.acknowledge_assignment, "My Assets"), not typed-in details. See
+  // app/(protected)/it/onboarding/actions.ts's completeHandoverTask.
+  asset_handover: [],
+  // No free-text fields — the role picker is a real dropdown in its own dedicated form
+  // (completePortalAccountTask), not a generic detail field.
+  portal_account: [],
   email_backup_closure: [
     { key: "backup_date", label: "Mailbox backup date", placeholder: "YYYY-MM-DD" },
     { key: "mailbox_status", label: "Mailbox status", placeholder: "Backed up / Closed" },

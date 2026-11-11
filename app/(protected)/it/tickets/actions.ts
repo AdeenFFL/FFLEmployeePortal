@@ -66,25 +66,6 @@ export async function triageTicket(ticketId: string, formData: FormData) {
   done(ticketId, "Ticket updated.");
 }
 
-// Phase 6.1 — a site IT manager sends work only HQ can do (SAP / ERP access, email) to HQ.
-export async function transferToHq(ticketId: string, formData: FormData) {
-  const { supabase } = await requirePermission("it.tickets.read");
-
-  const reason = text(formData, "reason");
-  if (!reason) fail(ticketId, "Please give a reason for transferring to HQ.");
-
-  const { error } = await supabase
-    .schema("it")
-    .rpc("transfer_ticket_to_hq", { p_ticket_id: ticketId, p_reason: reason });
-  if (error) fail(ticketId, error.message);
-
-  // The ticket has left this site's scope, so the workspace may no longer be visible: go to the
-  // queue instead of back to the ticket.
-  queueItEmails();
-  revalidatePath("/it/tickets");
-  redirect(`/it/tickets?notice=${encodeURIComponent("Ticket transferred to HQ.")}`);
-}
-
 // BRD §5.3.9 — assignee moves the ticket through its working states.
 export async function updateTicketStatus(ticketId: string, formData: FormData) {
   const { supabase } = await requirePermission("it.tickets.update");
