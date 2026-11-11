@@ -35,10 +35,19 @@ export async function proxy(request: NextRequest) {
   // single protected-route navigation, and the dominant cost is network latency per round trip,
   // not any one query's complexity. `permissionKey` is computed first (pure, no DB) so it can be
   // passed straight into the one RPC call.
-  const permissionKey = permissionKeyForPath(pathname);
-  const { data: access } = await supabase
-    .rpc("resolve_proxy_access", { p_permission_key: permissionKey })
-    .maybeSingle();
+  const routePermission = permissionKeyForPath(pathname);
+  // A route open to "any one of" several keys: resolve_proxy_access checks one key, so the list is
+  // checked with has_permission in parallel (one extra round trip, only on those routes).
+  const anyOf = Array.isArray(routePermission) ? routePermission : null;
+  const permissionKey = typeof routePermission === "string" ? routePermission : null;
+  const [{ data: access }, anyOfOk] = await Promise.all([
+    supabase.rpc("resolve_proxy_access", { p_permission_key: permissionKey }).maybeSingle(),
+    anyOf
+      ? Promise.all(
+          anyOf.map((key) => supabase.rpc("has_permission", { p_permission_key: key })),
+        ).then((results) => results.some((r) => r.data === true))
+      : Promise.resolve(true),
+  ]);
 
   const personId = access?.person_id ?? null;
   // Two status columns exist (account-level login suspension vs. person-level employment
@@ -70,7 +79,7 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL(resolveHomePath(grantedKeys), request.url));
   }
 
-  if (permissionKey && !access?.permission_ok) {
+  if ((permissionKey && !access?.permission_ok) || !anyOfOk) {
     return NextResponse.redirect(new URL("/unauthorized", request.url));
   }
 

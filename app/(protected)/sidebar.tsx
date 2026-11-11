@@ -149,7 +149,7 @@ export function Sidebar({
         {
           href: "/it/settings",
           label: "Settings",
-          permission: ["it.ticket_settings.update", "it.onboarding.read"],
+          permission: ["it.ticket_settings.update", "it.onboarding.assign", "it.onboarding.read"],
         },
         {
           href: "/it/admin/roles",
@@ -175,6 +175,7 @@ export function Sidebar({
             "it.demands.read_all",
             "it.demands.approve",
             "it.invoices.approve",
+            "it.invoices.update",
             "it.payments.update",
             "it.vendors.update",
             "it.products.update",
