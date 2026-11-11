@@ -130,10 +130,13 @@ export default async function AdminUsersPage({
       .maybeSingle();
 
     if (existingAccount?.persons) {
+      // limit(1): a person left with two role rows by the old save made maybeSingle() fail.
       const { data: roleRow } = await supabase
         .from("user_roles")
         .select("role_id")
         .eq("person_id", existingAccount.person_id)
+        .order("granted_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       panel = {

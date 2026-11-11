@@ -17,7 +17,7 @@ export async function saveRolePermissions(
   changes: { permissionId: string; granted: boolean }[],
 ) {
   const { supabase, personId, actorLabel } = await requirePermission("route:/admin/roles");
-  await applyRolePermissionChanges({
+  return applyRolePermissionChanges({
     supabase,
     personId,
     actorLabel,

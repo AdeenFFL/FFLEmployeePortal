@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
+import { notifyRoleHolders } from "@/lib/admin/notify-role-holders";
 
 // IT Roles & Permissions (javaria_it_0008_it_roles.sql). Every write goes through security-
 // definer functions that only ever touch permissions whose module is 'it', so an IT admin can
@@ -28,6 +29,18 @@ export async function saveItRolePermissions(
 
   revalidatePath(PATH);
   revalidatePath("/", "layout"); // sidebar visibility follows permissions
+
+  // Everyone with this role gets a notification; returns how many, for the screen's message.
+  const { data: labels } = await supabase
+    .from("permissions")
+    .select("id, label")
+    .in("id", changes.map((c) => c.permissionId));
+  const labelOf = new Map((labels ?? []).map((p) => [p.id, p.label]));
+  return notifyRoleHolders(
+    supabase,
+    roleId,
+    changes.map((c) => ({ label: labelOf.get(c.permissionId) ?? "A permission", granted: c.granted })),
+  );
 }
 
 export async function createItRole(formData: FormData) {

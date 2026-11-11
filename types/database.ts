@@ -1203,6 +1203,15 @@ export type Database = {
           permission_ok: boolean;
         }[];
       };
+      // javaria_it_0026: User Management's role change, in one transaction.
+      set_person_role: {
+        Args: { p_person_id: string; p_role_id: string };
+        Returns: boolean; // whether the role changed (the person is notified when it did)
+      };
+      notify_role_access_changed: {
+        Args: { p_role_id: string; p_summary: string };
+        Returns: number;
+      };
       update_own_biodata: {
         Args: {
           p_display_name: string | null;

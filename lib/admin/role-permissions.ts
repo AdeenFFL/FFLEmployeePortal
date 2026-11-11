@@ -1,4 +1,5 @@
 import "server-only";
+import { notifyRoleHolders } from "@/lib/admin/notify-role-holders";
 import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
@@ -57,8 +58,8 @@ export async function applyRolePermissionChanges({
   roleId: string;
   changes: { permissionId: string; granted: boolean }[];
   revalidatePaths: string[];
-}) {
-  if (changes.length === 0) return;
+}): Promise<number> {
+  if (changes.length === 0) return 0;
 
   const { data: role } = await supabase
     .from("roles")
@@ -67,13 +68,15 @@ export async function applyRolePermissionChanges({
     .maybeSingle();
 
   const { permissionIdToKey, holdersByKey } = await getProtectedKeyHolders(supabase);
+  const applied: { label: string; granted: boolean }[] = [];
 
   for (const change of changes) {
     const { data: permission } = await supabase
       .from("permissions")
-      .select("key, description")
+      .select("key, label, description")
       .eq("id", change.permissionId)
       .maybeSingle();
+    applied.push({ label: permission?.label ?? permission?.key ?? "A permission", granted: change.granted });
 
     if (!change.granted) {
       const key = permissionIdToKey.get(change.permissionId);
@@ -114,4 +117,7 @@ export async function applyRolePermissionChanges({
   }
 
   for (const path of revalidatePaths) revalidatePath(path);
+
+  // Everyone with this role gets a notification; returns how many, for the screen's message.
+  return notifyRoleHolders(supabase, roleId, applied);
 }

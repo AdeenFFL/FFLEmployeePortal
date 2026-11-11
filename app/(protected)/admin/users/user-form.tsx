@@ -44,6 +44,7 @@ export function UserFormPanel({
 }) {
   const { visible, close } = useDismissable("/admin/users");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
   if (!visible) return null;
@@ -56,10 +57,11 @@ export function UserFormPanel({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
       try {
-        await inviteOrUpdateUser(formData);
+        setNotice(await inviteOrUpdateUser(formData));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
       }
@@ -85,6 +87,11 @@ export function UserFormPanel({
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {notice && (
+            <p role="status" className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {notice}
+            </p>
+          )}
           {error && (
             <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
           )}
