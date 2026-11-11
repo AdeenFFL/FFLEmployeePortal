@@ -42,6 +42,7 @@ type NavEntry = NavLeaf | NavGroup;
 // Small open/close delays smooth out brief graze-past mouse movement.
 const EXPAND_DELAY_MS = 100;
 const COLLAPSE_DELAY_MS = 200;
+const PERMISSION_CHECK_MS = 10_000; // at most one live permission check per 10 seconds
 
 export function Sidebar({
   permissions,
@@ -50,7 +51,14 @@ export function Sidebar({
   permissions: string[];
   homePath: string;
 }) {
-  const granted = new Set(permissions);
+  // The layout (and so these props) is not re-rendered on client-side navigation, so after an
+  // admin changes this person's role or its permissions the sidebar would stay as it was until
+  // a full reload. Re-check now and then: after navigating, and when the tab comes back into view.
+  const [live, setLive] = useState<{ permissions: string[]; homePath: string } | null>(null);
+  const lastCheckRef = useRef(0);
+  const effectivePermissions = live?.permissions ?? permissions;
+  const effectiveHomePath = live?.homePath ?? homePath;
+  const granted = new Set(effectivePermissions);
   const has = (permission?: Permission) =>
     !permission ||
     (Array.isArray(permission) ? permission.some((p) => granted.has(p)) : granted.has(permission));
@@ -63,6 +71,31 @@ export function Sidebar({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    function check() {
+      if (Date.now() - lastCheckRef.current < PERMISSION_CHECK_MS) return;
+      lastCheckRef.current = Date.now();
+      fetch("/api/me/permissions", { cache: "no-store" })
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (!cancelled && data && Array.isArray(data.permissions)) setLive(data);
+        })
+        .catch(() => {});
+    }
+    // The first render already has fresh props, so start the clock instead of fetching at once.
+    if (lastCheckRef.current === 0) lastCheckRef.current = Date.now();
+    else check();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") check();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      cancelled = true;
+      document.removeEventListener("visibilitychange", onVisible);
+    };
+  }, [pathname]);
 
   function handleMouseEnter() {
     if (timeoutRef.current) clearTimeout(timeoutRef.current);
@@ -77,7 +110,7 @@ export function Sidebar({
   const collapsed = !expandedByHover;
 
   const allBaseItems: NavLeaf[] = [
-    { type: "link", href: homePath, label: "Home", icon: HomeIcon },
+    { type: "link", href: effectiveHomePath, label: "Home", icon: HomeIcon },
     { type: "link", href: "/profile", label: "My Profile", icon: UserIcon },
     { type: "link", href: "/requests", label: "My Requests", icon: TicketIcon },
     {

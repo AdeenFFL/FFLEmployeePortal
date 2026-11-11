@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 import { logAuditEvent } from "@/lib/audit/log";
+import { createAdminClient } from "@/lib/supabase/admin";
 
 // Revoking either of these, from the LAST role anywhere that still holds it, would lock every
 // admin out of this module (or, for core.full_access, out of writing to persons/companies/
@@ -70,6 +71,14 @@ export async function applyRolePermissionChanges({
   const { permissionIdToKey, holdersByKey } = await getProtectedKeyHolders(supabase);
   const applied: { label: string; granted: boolean }[] = [];
 
+  // The grant rows are written with the admin client. RLS on role_permissions only lets
+  // core.full_access holders write, so HR Role Permissions (hr.manage_role_permissions) got an
+  // error on every grant and, worse, a revoke that silently deleted nothing but still said
+  // "Saved". The real check is the caller's requirePermission plus its own restriction on which
+  // permissions may change (see the header comment above), same as lib/supabase/admin.ts's
+  // other already-permission-checked writes.
+  const writer = createAdminClient();
+
   for (const change of changes) {
     const { data: permission } = await supabase
       .from("permissions")
@@ -89,14 +98,14 @@ export async function applyRolePermissionChanges({
         }
       }
 
-      const { error } = await supabase
+      const { error } = await writer
         .from("role_permissions")
         .delete()
         .eq("role_id", roleId)
         .eq("permission_id", change.permissionId);
       if (error) throw new Error(error.message);
     } else {
-      const { error } = await supabase.from("role_permissions").insert({
+      const { error } = await writer.from("role_permissions").insert({
         role_id: roleId,
         permission_id: change.permissionId,
         granted_by: personId,
@@ -117,6 +126,7 @@ export async function applyRolePermissionChanges({
   }
 
   for (const path of revalidatePaths) revalidatePath(path);
+  revalidatePath("/", "layout"); // sidebar visibility follows permissions
 
   // Everyone with this role gets a notification; returns how many, for the screen's message.
   return notifyRoleHolders(supabase, roleId, applied);
