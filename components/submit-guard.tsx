@@ -22,7 +22,16 @@ const NO_ACTION_UNLOCK_MS = 800; // nothing was sent: unlock
 const AFTER_ACTION_UNLOCK_MS = 1000; // action done: give a redirect time to land first
 const MAX_LOCK_MS = 120_000; // never stay stuck
 
-type Lock = { form: HTMLFormElement; sawAction: boolean; timers: number[] };
+const SLOW_SAVE_MS = 20_000; // a save still running after this gets a "still saving" message
+
+// Picked up by components/form-feedback.tsx.
+export const SAVE_PROBLEM_EVENT = "portal:save-problem";
+export type SaveProblem = { kind: "error" | "slow" | "done"; message: string };
+function reportSaveProblem(kind: SaveProblem["kind"], message: string) {
+  window.dispatchEvent(new CustomEvent<SaveProblem>(SAVE_PROBLEM_EVENT, { detail: { kind, message } }));
+}
+
+type Lock ={ form: HTMLFormElement; sawAction: boolean; timers: number[] };
 const locks = new Set<Lock>();
 let actionsInFlight = 0;
 let fetchPatched = false;
@@ -55,7 +64,14 @@ function patchFetch() {
     if (!isServerAction(init)) return original(input, init);
     actionsInFlight++;
     locks.forEach((l) => (l.sawAction = true));
+    // Tell the user (components/form-feedback.tsx) when a save is slow or didn't go through, so a
+    // failure never looks like success.
+    const slowTimer = window.setTimeout(() => {
+      reportSaveProblem("slow", "Still saving… this is taking longer than usual. Please wait before trying again.");
+    }, SLOW_SAVE_MS);
     const settle = () => {
+      window.clearTimeout(slowTimer);
+      reportSaveProblem("done", "");
       actionsInFlight = Math.max(0, actionsInFlight - 1);
       if (actionsInFlight > 0) return;
       for (const lock of locks) {
@@ -65,10 +81,17 @@ function patchFetch() {
     return original(input, init).then(
       (res) => {
         settle();
+        if (!res.ok) {
+          reportSaveProblem(
+            "error",
+            `Not saved: the server had a problem (error ${res.status}). Please try again, and tell IT if it keeps happening.`,
+          );
+        }
         return res;
       },
       (err) => {
         settle();
+        reportSaveProblem("error", "Not saved: couldn't reach the server. Check your connection and try again.");
         throw err;
       },
     );
