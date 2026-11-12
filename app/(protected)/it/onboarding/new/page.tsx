@@ -8,6 +8,7 @@ import type { ItLifecycleKind } from "@/types/database";
 import { createLifecycleRequest } from "../actions";
 import { ReportingManagerPicker } from "../_components/reporting-manager-picker";
 import { EmployeePicker } from "../_components/employee-picker";
+import { EmailRequiredToggle } from "../_components/email-required-toggle";
 import {
   cardClass,
   FormMessage,
@@ -141,7 +142,7 @@ export default async function NewLifecycleRequestPage({
               <Field label="Joining date" required>
                 <input type="date" name="joiningDate" required className={inputClass} />
               </Field>
-              <Field label="Personal email">
+              <Field label="Personal email (required without a company email)">
                 <input
                   type="email"
                   name="personalEmail"
@@ -165,10 +166,7 @@ export default async function NewLifecycleRequestPage({
         {isOnboarding ? (
           <section className="space-y-4">
             <div className="flex flex-wrap gap-6">
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" name="emailRequired" defaultChecked className="h-4 w-4" />
-                Company email required
-              </label>
+              <EmailRequiredToggle />
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input type="checkbox" name="laptopRequired" className="h-4 w-4" />
                 Laptop / equipment required

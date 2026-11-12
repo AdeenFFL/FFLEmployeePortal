@@ -29,7 +29,9 @@ import type {
 // status moves are allowed. Messages come back as ?error= / ?notice=.
 
 function go(path: string, kind: "error" | "notice", message: string): never {
-  redirect(`${path}?${kind}=${encodeURIComponent(message)}`);
+  // "&" when the path already has a query (e.g. /it/onboarding/new?kind=Onboarding): a second "?"
+  // broke the URL, so the error never showed and the form just came back empty.
+  redirect(`${path}${path.includes("?") ? "&" : "?"}${kind}=${encodeURIComponent(message)}`);
 }
 
 function text(formData: FormData, key: string) {
