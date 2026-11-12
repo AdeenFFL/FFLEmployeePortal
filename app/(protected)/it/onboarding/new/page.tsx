@@ -94,16 +94,16 @@ export default async function NewLifecycleRequestPage({
           )}
           {isOnboarding && (
             <>
-              <Field label="Designation / job title">
-                <input name="designation" className={inputClass} />
+              <Field label="Designation / job title" required>
+                <input name="designation" required className={inputClass} />
               </Field>
               <Field label="Grade">
                 <input name="grade" className={inputClass} />
               </Field>
             </>
           )}
-          <Field label="Department">
-            <select name="departmentId" defaultValue="" className={inputClass}>
+          <Field label="Department" required={isOnboarding}>
+            <select name="departmentId" defaultValue="" required={isOnboarding} className={inputClass}>
               <option value="">—</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -113,8 +113,8 @@ export default async function NewLifecycleRequestPage({
             </select>
           </Field>
           {isOnboarding && (
-            <Field label="Work location">
-              <select name="siteId" defaultValue="" className={inputClass}>
+            <Field label="Work location" required>
+              <select name="siteId" defaultValue="" required className={inputClass}>
                 <option value="">—</option>
                 {sites.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -124,15 +124,15 @@ export default async function NewLifecycleRequestPage({
               </select>
             </Field>
           )}
-          <Field label="Reporting manager">
-            <ReportingManagerPicker name="reportingManagerId" />
+          <Field label="Reporting manager" required={isOnboarding}>
+            <ReportingManagerPicker name="reportingManagerId" required={isOnboarding} />
           </Field>
           {/* Replacement: designation, location and category come from the employee card above
               (javaria_it_0018). */}
           {isOnboarding && (
             <>
-              <Field label="Employee category">
-                <select name="employeeCategory" defaultValue="" className={inputClass}>
+              <Field label="Employee category" required>
+                <select name="employeeCategory" defaultValue="" required className={inputClass}>
                   <option value="">—</option>
                   <option value="Permanent">Permanent</option>
                   <option value="Contractual">Contractual</option>

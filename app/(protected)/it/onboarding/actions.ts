@@ -123,6 +123,12 @@ export async function createLifecycleRequest(formData: FormData) {
 
   if (kind === "Onboarding") {
     if (!employeeName) go(back, "error", "Enter the new joiner's name.");
+    // Every field marked * on the form, checked here too so nothing half-filled is ever raised.
+    if (!optional(formData, "designation")) go(back, "error", "Enter the designation.");
+    if (!optional(formData, "departmentId")) go(back, "error", "Choose the department.");
+    if (!optional(formData, "siteId")) go(back, "error", "Choose the work location.");
+    if (!reportingManagerId) go(back, "error", "Choose the reporting manager.");
+    if (category !== "Permanent" && category !== "Contractual") go(back, "error", "Choose the employee category.");
     if (!/^\d{4}-\d{2}-\d{2}$/.test(text(formData, "joiningDate"))) go(back, "error", "Select the joining date.");
     // No company email means their portal account gets auto-created on their personal address
     // (see below) — there's nowhere else to send it.

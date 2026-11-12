@@ -19,7 +19,9 @@ function describe(p: ManagerOption) {
 // Reporting manager lookup for the New request form. Searches as you type (2+ letters, after a
 // short pause) through searchReportingManagers, and submits the chosen person's id as
 // reportingManagerId — same shape as PersonPicker in the inventory module.
-export function ReportingManagerPicker({ name }: { name: string }) {
+// required: the form can't be sent until a person is picked from the list (typing a name
+// without picking one doesn't count).
+export function ReportingManagerPicker({ name, required = false }: { name: string; required?: boolean }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<ManagerOption[]>([]);
   const [selected, setSelected] = useState<ManagerOption | null>(null);
@@ -76,7 +78,18 @@ export function ReportingManagerPicker({ name }: { name: string }) {
   }
 
   return (
-    <div>
+    <div className="relative">
+      {required && (
+        <input
+          tabIndex={-1}
+          aria-hidden
+          required
+          value=""
+          onChange={() => {}}
+          onInvalid={(e) => e.currentTarget.setCustomValidity("Choose the reporting manager from the list.")}
+          className="pointer-events-none absolute bottom-0 left-4 h-px w-px opacity-0"
+        />
+      )}
       <input
         type="search"
         value={query}

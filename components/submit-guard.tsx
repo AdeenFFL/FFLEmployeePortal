@@ -7,7 +7,8 @@ import { usePathname, useSearchParams } from "next/navigation";
 // action has finished, so a double (or triple) click on Save / Submit can't send it twice and
 // create two tickets, two demands, two payments… Mounted once in app/(protected)/layout.tsx.
 //
-// How: a capture-phase "submit" listener on document runs before React's own listener, so a
+// How: a capture-phase "submit" listener on window runs before React's own listener (React
+// listens on the document, which Next hydrates as its root), so a
 // second submit of a locked form is stopped before React ever sees it. The lock comes off when
 // the action's request has finished (Next sends server actions as a fetch with a "Next-Action"
 // header, counted below), when the page URL changes (the action redirected), or, if no action
@@ -105,8 +106,8 @@ export function SubmitGuard() {
 
   useEffect(() => {
     patchFetch();
-    document.addEventListener("submit", onSubmit, true);
-    return () => document.removeEventListener("submit", onSubmit, true);
+    window.addEventListener("submit", onSubmit, true);
+    return () => window.removeEventListener("submit", onSubmit, true);
   }, []);
 
   // A redirect (?notice= / ?error= or a new page) means the action is over.
