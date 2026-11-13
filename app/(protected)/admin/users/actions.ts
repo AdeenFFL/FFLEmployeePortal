@@ -9,14 +9,17 @@ import type { UserStatus, AuthMethod, EmploymentType } from "@/types/database";
 
 const MIN_PASSWORD_LENGTH = 6; // Supabase's own GoTrue default minimum
 
-// persons.company_id/site_id are proper FKs this pass doesn't wire a picker for yet (see
-// 0008_org_hierarchy_fix_and_identity_split.sql step B.4 comment) — department_id now has one
-// (0054_it_department_based_staff.sql), since the IT module needs it to determine IT staff.
+// persons.company_id is a proper FK this pass doesn't wire a picker for yet (see
+// 0008_org_hierarchy_fix_and_identity_split.sql step B.4 comment) — department_id has one
+// (0054_it_department_based_staff.sql), since the IT module needs it to determine IT staff, and
+// site_id has one too. The Microsoft invite path doesn't carry site_id yet (invited_users has no
+// such column — that needs a migration), so a Microsoft user's site is set after first sign-in.
 function readUserFormFields(formData: FormData) {
   return {
     full_name: String(formData.get("display_name") ?? "").trim() || null,
     role_id: String(formData.get("role_id") ?? ""),
     department_id: String(formData.get("department_id") ?? "").trim() || null,
+    site_id: String(formData.get("site_id") ?? "").trim() || null,
     status: (String(formData.get("status") ?? "Active") as UserStatus) ?? "Active",
     notes: String(formData.get("notes") ?? "").trim() || null,
     employee_code: String(formData.get("employee_code") ?? "").trim() || null,
@@ -135,6 +138,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
         date_of_joining: fields.date_of_joining,
         employment_type: fields.employment_type,
         department_id: fields.department_id,
+        site_id: fields.site_id,
       })
       .select("id")
       .single();

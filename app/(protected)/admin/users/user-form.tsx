@@ -12,6 +12,7 @@ type UserFormValues = {
   display_name: string | null;
   role_id: string | null;
   department_id: string | null;
+  site_id: string | null;
   status: UserStatus;
   notes: string | null;
   employee_code: string | null;
@@ -35,11 +36,13 @@ export function UserFormPanel({
   mode,
   roles,
   departments,
+  sites,
   initialValues,
 }: {
   mode: "new" | "edit";
   roles: Role[];
   departments: { id: string; name: string }[];
+  sites: { id: string; name: string }[];
   initialValues: UserFormValues;
 }) {
   const { visible, close } = useDismissable("/admin/users");
@@ -194,6 +197,29 @@ export function UserFormPanel({
               People in the "IT" department become eligible for site assignment on IT Settings.
             </span>
           </label>
+
+          {/* Pending Microsoft invites can't carry a site yet (invited_users has no site_id). */}
+          {!(mode === "edit" && initialValues.id === null) && (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Site</span>
+              <select
+                name="site_id"
+                defaultValue={initialValues.site_id ?? ""}
+                className={inputClass}
+              >
+                <option value="">— Select —</option>
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-slate-400">
+                Saved for Email &amp; Password users and existing users. For a Microsoft invite,
+                set the site after their first sign-in.
+              </span>
+            </label>
+          )}
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-slate-700">Employment Type</span>

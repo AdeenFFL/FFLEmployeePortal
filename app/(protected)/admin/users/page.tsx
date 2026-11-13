@@ -41,6 +41,13 @@ export default async function AdminUsersPage({
     .eq("is_active", true)
     .order("name");
 
+  const { data: sites } = await supabase
+    .from("org_units")
+    .select("id, name")
+    .eq("type", "Site")
+    .eq("is_active", true)
+    .order("name");
+
   // Existing (provisioned) login emails, to anti-join pending invitations. Login email now
   // lives on user_accounts, not persons.
   const { data: allAccounts } = await supabase.from("user_accounts").select("email");
@@ -93,6 +100,7 @@ export default async function AdminUsersPage({
       display_name: string | null;
       role_id: string | null;
       department_id: string | null;
+      site_id: string | null;
       status: UserStatus;
       notes: string | null;
       employee_code: string | null;
@@ -112,6 +120,7 @@ export default async function AdminUsersPage({
         display_name: null,
         role_id: null,
         department_id: null,
+        site_id: null,
         status: "Active",
         notes: null,
         employee_code: null,
@@ -144,6 +153,7 @@ export default async function AdminUsersPage({
           display_name: existingAccount.persons.full_name,
           role_id: roleRow?.role_id ?? null,
           department_id: existingAccount.persons.department_id,
+          site_id: existingAccount.persons.site_id,
           status: existingAccount.persons.status,
           notes: existingAccount.persons.notes,
           employee_code: existingAccount.persons.employee_code,
@@ -170,6 +180,7 @@ export default async function AdminUsersPage({
             display_name: invitation.display_name,
             role_id: invitation.role_id,
             department_id: invitation.department_id,
+            site_id: null, // invited_users has no site_id yet; the form hides Site for invites
             status: invitation.status,
             notes: invitation.notes,
             employee_code: invitation.employee_code,
@@ -180,6 +191,21 @@ export default async function AdminUsersPage({
           },
         };
       }
+    }
+  }
+
+  // Keep a user's current site selectable even if it was deactivated since — otherwise the
+  // select falls back to "— Select —" and saving the form silently clears persons.site_id.
+  let siteOptions = sites ?? [];
+  const currentSiteId = panel?.initialValues.site_id ?? null;
+  if (currentSiteId && !siteOptions.some((s) => s.id === currentSiteId)) {
+    const { data: currentSite } = await supabase
+      .from("org_units")
+      .select("id, name")
+      .eq("id", currentSiteId)
+      .maybeSingle();
+    if (currentSite) {
+      siteOptions = [...siteOptions, { id: currentSite.id, name: `${currentSite.name} (inactive)` }];
     }
   }
 
@@ -394,6 +420,7 @@ export default async function AdminUsersPage({
           mode={panel.mode}
           roles={roles ?? []}
           departments={departments ?? []}
+          sites={siteOptions}
           initialValues={panel.initialValues}
         />
       )}
