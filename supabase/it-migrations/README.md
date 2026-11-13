@@ -211,3 +211,4 @@ comment block was replaced with a short replicated-from note.
 | `javaria/javaria_it_0020_demands_without_hq_site.sql` | 2026-11-03 (applied by Javaria via Supabase SQL Editor) | Javaria | Fixes `it.demands_before_insert`, broken by 0053's removal of `it.hq_site_id()`/`it.settings` (HQ-site routing removal) — the no-site fallback is now the requester's own site. Replicated as `0068_it_demands_without_hq_site.sql` |
 | `talha/talha_hr_0001_clearance_system.sql` | 2026-11-12 | Talha | Offboarding clearance system, HR module: tables, functions, form lines. Not yet in the main sequence |
 | `talha/talha_hr_0002_clearance_permissions.sql` | 2026-11-12 | Talha | Offboarding clearance permissions, roles HRBP and Clearance Signer. Not yet in the main sequence |
+| `talha/talha_hr_0003_clearance_fixes.sql` | 2026-11-13 | Talha | Clearance review fixes: page-one tick reflects answers, own-clearance block, line consistency trigger, date limits. Not yet in the main sequence |
