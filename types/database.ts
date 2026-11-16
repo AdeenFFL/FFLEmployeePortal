@@ -1224,6 +1224,54 @@ export type Database = {
         Update: Record<string, never>;
         Relationships: [];
       };
+      // Read by the profile Offboarding card; written only through the hr.* clearance functions.
+      clearance_cases: {
+        Row: {
+          id: string;
+          case_number: string;
+          person_id: string;
+          employee_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          department_id: string | null;
+          site_id: string | null;
+          company_id: string | null;
+          date_of_joining: string | null;
+          contact_phone: string | null;
+          contact_email: string | null;
+          postal_address: string | null;
+          reporting_manager_name: string | null;
+          last_working_date: string;
+          raised_by_person_id: string | null;
+          raised_via: "self" | "hrbp";
+          status: "Submitted" | "In Clearance" | "Completed" | "Cancelled";
+          hrbp_person_id: string | null;
+          forwarded_at: string | null;
+          employee_signed_at: string | null;
+          completed_at: string | null;
+          cancelled_reason: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      clearance_signoffs: {
+        Row: {
+          id: string;
+          case_id: string;
+          slot_key: string;
+          signed_by_person_id: string | null;
+          signer_name: string;
+          signer_designation: string | null;
+          signed_at: string;
+          remarks: string | null;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       hrbp_departments: {
         Row: HrbpDepartment;
         Insert: HrbpDepartment;
@@ -1335,6 +1383,11 @@ export type Database = {
       set_clearance_primary_signer: {
         Args: { p_signer_id: string };
         Returns: undefined;
+      };
+      // talha_hr_0001_clearance_system.sql
+      submit_clearance_self: {
+        Args: { p_last_working_date: string };
+        Returns: string;
       };
     };
   };
