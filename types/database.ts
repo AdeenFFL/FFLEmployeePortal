@@ -1193,6 +1193,37 @@ export type Database = {
           },
         ];
       };
+      // talha_hr_0001_clearance_system.sql — only what /hr/admin/clearance-signers reads. Signers
+      // are written through the hr.*_clearance_signer functions below, never directly.
+      clearance_slots: {
+        Row: {
+          slot_key: string;
+          form_key: string;
+          label: string;
+          scope: "site" | "department";
+          sort_order: number;
+          is_active: boolean;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      clearance_signers: {
+        Row: {
+          id: string;
+          slot_key: string;
+          site_id: string | null;
+          department_id: string | null;
+          person_id: string;
+          is_primary: boolean;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       hrbp_departments: {
         Row: HrbpDepartment;
         Insert: HrbpDepartment;
@@ -1252,6 +1283,57 @@ export type Database = {
     Functions: {
       reply_to_anonymous_conversation: {
         Args: { p_conversation_id: string; p_body: string };
+        Returns: undefined;
+      };
+      // talha_hr_0004_clearance_signer_lookups.sql
+      clearance_list_units: {
+        Args: Record<string, never>;
+        Returns: { id: string; name: string; type: OrgUnitType }[];
+      };
+      clearance_list_signers: {
+        Args: Record<string, never>;
+        Returns: {
+          id: string;
+          slot_key: string;
+          site_id: string | null;
+          department_id: string | null;
+          person_id: string;
+          is_primary: boolean;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          person_status: string;
+          unit_name: string | null;
+          unit_is_active: boolean | null;
+          can_open_inbox: boolean;
+        }[];
+      };
+      clearance_search_people: {
+        Args: { p_query: string; p_limit?: number };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          site_name: string | null;
+          department_name: string | null;
+        }[];
+      };
+      add_clearance_signer: {
+        Args: {
+          p_slot_key: string;
+          p_site_id: string | null;
+          p_department_id: string | null;
+          p_person_id: string;
+        };
+        Returns: string;
+      };
+      remove_clearance_signer: {
+        Args: { p_signer_id: string };
+        Returns: undefined;
+      };
+      set_clearance_primary_signer: {
+        Args: { p_signer_id: string };
         Returns: undefined;
       };
     };

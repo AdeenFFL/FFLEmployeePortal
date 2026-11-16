@@ -126,6 +126,11 @@ export function Sidebar({
           permission: "hr.categories.update",
         },
         {
+          href: "/hr/admin/clearance-signers",
+          label: "Clearance Signers",
+          permission: "hr.clearance.read_all",
+        },
+        {
           href: "/hr/admin/roles",
           label: "Role Permissions",
           permission: "hr.manage_role_permissions",
