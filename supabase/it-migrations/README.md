@@ -212,3 +212,5 @@ comment block was replaced with a short replicated-from note.
 | `talha/talha_hr_0001_clearance_system.sql` | 2026-11-12 | Talha | Offboarding clearance system, HR module: tables, functions, form lines. Not yet in the main sequence |
 | `talha/talha_hr_0002_clearance_permissions.sql` | 2026-11-12 | Talha | Offboarding clearance permissions, roles HRBP and Clearance Signer. Not yet in the main sequence |
 | `talha/talha_hr_0003_clearance_fixes.sql` | 2026-11-13 | Talha | Clearance review fixes: page-one tick reflects answers, own-clearance block, line consistency trigger, date limits. Not yet in the main sequence |
+| `talha/talha_hr_0004_clearance_signer_lookups.sql` | 2026-11-13 | Talha | Clearance signers screen: 6 lookup and management functions (list units, list signers, search people, add, remove, set primary). Not yet in the main sequence |
+| `talha/talha_it_0010_valuation_functions.sql` | 2026-11-13 | Talha | Phase 6 valuation: it.compute_depreciation and it.record_asset_valuation (straight line, completed months). Not yet in the main sequence |
