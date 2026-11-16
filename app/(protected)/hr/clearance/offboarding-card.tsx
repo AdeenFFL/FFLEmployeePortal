@@ -1,28 +1,11 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
+import { StatusPill } from "@/components/status-pill";
 import { OffboardingForm } from "./offboarding-form";
+import { getSignatureCount, MISSING_SETUP_WARNING } from "./clearance-tracker";
+import { formatDay, STATUS_TONE } from "../resignations/clearance-view";
 
 const TZ = "Asia/Karachi";
-const timestampFormat = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: TZ,
-});
-// A plain date (last_working_date) has no time zone: format it as-is, never shifted.
-const dayFormat = new Intl.DateTimeFormat("en-GB", {
-  day: "numeric",
-  month: "short",
-  year: "numeric",
-  timeZone: "UTC",
-});
-
-function formatTimestamp(value: string) {
-  return timestampFormat.format(new Date(value));
-}
-
-function formatDay(value: string) {
-  return dayFormat.format(new Date(`${value}T00:00:00Z`));
-}
 
 // "Today" and "one year from today" in Pakistan time (YYYY-MM-DD) for the date input — the same
 // bounds hr.create_clearance_case_internal checks (self: today or later, at most 365 days ahead).
@@ -33,19 +16,9 @@ function karachiDateRange() {
   return { min: today, max: max.toISOString().slice(0, 10) };
 }
 
-// "HR (page one)" -> "HR", "Department Head (page one)" -> "Department Head".
-function cleanLabel(label: string) {
-  return label.replace(/ \(page one\)$/, "");
-}
-
-type Step = { key: string; label: string; done: boolean; detail: string };
-
-const MISSING_SETUP_WARNING =
-  "Your site or department is not set in the portal. You can still submit, but HR cannot start your clearance until it is set. Please ask HR or the portal administrator to update your record.";
-
-// The employee's own Offboarding card on /profile. Reads only what RLS already lets the employee
-// see: their own clearance_cases rows, the slots, and the signatures on their own case (never
-// the answers). Renders nothing for someone who may not submit and has no request.
+// The employee's own Offboarding card on /profile: the submit form, or a short summary of the
+// latest request with a link to its detail page (/requests/offboarding/[id], which has the full
+// tracker). Renders nothing for someone who may not submit and has no request.
 export async function OffboardingCard({
   personId,
   siteId,
@@ -76,66 +49,7 @@ export async function OffboardingCard({
   const missingSetup = !siteId || !departmentId;
   const isTracked = latest && latest.status !== "Cancelled";
 
-  let steps: Step[] = [];
-  if (latest && isTracked) {
-    const [{ data: slots }, { data: signoffs }] = await Promise.all([
-      hr
-        .from("clearance_slots")
-        .select("slot_key, label, sort_order")
-        .eq("is_active", true)
-        .order("sort_order"),
-      hr
-        .from("clearance_signoffs")
-        .select("slot_key, signer_name, signer_designation, signed_at")
-        .eq("case_id", latest.id),
-    ]);
-
-    const signoffBySlot = new Map((signoffs ?? []).map((s) => [s.slot_key, s]));
-    // HR signs last (the database enforces it), so it is shown last, just before Completed.
-    const orderedSlots = [
-      ...(slots ?? []).filter((s) => s.slot_key !== "hr"),
-      ...(slots ?? []).filter((s) => s.slot_key === "hr"),
-    ];
-
-    const submittedAt = latest.employee_signed_at ?? latest.created_at;
-    steps = [
-      {
-        key: "submitted",
-        label: "Submitted",
-        done: true,
-        detail:
-          latest.raised_via === "self"
-            ? `Submitted on ${formatTimestamp(submittedAt)} (signed electronically)`
-            : `Started by HR on ${formatTimestamp(latest.created_at)}`,
-      },
-      {
-        key: "forwarded",
-        label: "Forwarded (In Clearance)",
-        done: latest.forwarded_at !== null,
-        detail: latest.forwarded_at ? `Forwarded on ${formatTimestamp(latest.forwarded_at)}` : "Waiting",
-      },
-      ...orderedSlots.map((slot) => {
-        const signoff = signoffBySlot.get(slot.slot_key);
-        const signer = signoff
-          ? signoff.signer_designation
-            ? `${signoff.signer_name} (${signoff.signer_designation})`
-            : signoff.signer_name
-          : null;
-        return {
-          key: slot.slot_key,
-          label: cleanLabel(slot.label),
-          done: Boolean(signoff),
-          detail: signoff ? `Signed by ${signer} on ${formatTimestamp(signoff.signed_at)}` : "Waiting",
-        };
-      }),
-      {
-        key: "completed",
-        label: "Completed",
-        done: latest.status === "Completed",
-        detail: latest.completed_at ? `Completed on ${formatTimestamp(latest.completed_at)}` : "Waiting",
-      },
-    ];
-  }
+  const progress = latest && isTracked ? await getSignatureCount(latest.id) : null;
 
   const range = karachiDateRange();
 
@@ -159,35 +73,39 @@ export async function OffboardingCard({
           )}
 
           {latest && isTracked && (
-            <>
-              <p className="text-sm text-slate-700">
+            <div className="flex flex-col gap-1">
+              <p className="flex items-center gap-2 text-sm text-slate-700">
                 <span className="font-medium">{latest.case_number}</span>
-                {" · "}Last working date: {formatDay(latest.last_working_date)}
+                <StatusPill label={latest.status} tone={STATUS_TONE[latest.status]} />
               </p>
-              <ol className="flex flex-col gap-3">
-                {steps.map((step) => (
-                  <li key={step.key} className="flex items-start gap-3">
-                    <span
-                      className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs ${
-                        step.done ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-400"
-                      }`}
-                      aria-hidden
-                    >
-                      {step.done ? "✓" : "○"}
-                    </span>
-                    <div>
-                      <p className="text-sm font-medium text-slate-900">{step.label}</p>
-                      <p className="text-xs text-slate-500">{step.detail}</p>
-                    </div>
-                  </li>
-                ))}
-              </ol>
-            </>
+              <p className="text-sm text-slate-700">
+                Last working date: {formatDay(latest.last_working_date)}
+                {" · "}
+                {latest.status === "Submitted"
+                  ? "Waiting for HR to forward"
+                  : progress
+                    ? `Signatures: ${progress.signed} of ${progress.total}`
+                    : "Signatures could not be loaded"}
+              </p>
+              <Link
+                href={`/requests/offboarding/${latest.id}`}
+                className="text-sm font-medium text-blue-700 hover:underline"
+              >
+                View details →
+              </Link>
+            </div>
           )}
 
           {latest?.status === "Cancelled" && (
             <p className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
               Your request {latest.case_number} was cancelled. Reason: {latest.cancelled_reason ?? "—"}
+              {" · "}
+              <Link
+                href={`/requests/offboarding/${latest.id}`}
+                className="font-medium text-blue-700 hover:underline"
+              >
+                View details
+              </Link>
             </p>
           )}
 

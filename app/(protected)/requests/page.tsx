@@ -147,7 +147,7 @@ export default async function MyRequestsPage() {
       label: `${c.case_number} · Offboarding clearance – last working date ${formatDay(c.last_working_date)}`,
       status: c.status,
       createdAt: c.created_at,
-      href: "/profile",
+      href: `/requests/offboarding/${c.id}`,
       progress:
         c.status === "In Clearance"
           ? `${signedByCase.get(c.id) ?? 0} of ${slotCount ?? 0} signed`
