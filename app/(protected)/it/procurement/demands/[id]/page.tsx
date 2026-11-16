@@ -739,23 +739,29 @@ export default async function DemandPage({
               <form action={decideDemand.bind(null, demand.id)} className="space-y-3">
                 <fieldset className="space-y-2">
                   <legend className="sr-only">Decision</legend>
-                  {(["Approved", "Partially Approved", "Rejected"] as const).map((d) => (
+                  {/* A repair is for one device: approve or reject, no part (javaria_it_0027). */}
+                  {(demand.asset_id
+                    ? (["Approved", "Rejected"] as const)
+                    : (["Approved", "Partially Approved", "Rejected"] as const)
+                  ).map((d) => (
                     <label key={d} className="flex items-center gap-2 text-sm text-slate-800">
                       <input type="radio" name="decision" value={d} required defaultChecked={d === "Approved"} />
                       {d === "Approved" ? `Approve all ${demand.quantity}` : d === "Partially Approved" ? "Approve part" : "Reject"}
                     </label>
                   ))}
                 </fieldset>
-                <label className="block">
-                  <span className={labelClass}>Quantity approved (for “Approve part”)</span>
-                  <input
-                    type="number"
-                    name="approvedQuantity"
-                    min={1}
-                    max={Math.max(1, demand.quantity - 1)}
-                    className={inputClass}
-                  />
-                </label>
+                {!demand.asset_id && (
+                  <label className="block">
+                    <span className={labelClass}>Quantity approved (for “Approve part”)</span>
+                    <input
+                      type="number"
+                      name="approvedQuantity"
+                      min={1}
+                      max={Math.max(1, demand.quantity - 1)}
+                      className={inputClass}
+                    />
+                  </label>
+                )}
                 <label className="block">
                   <span className={labelClass}>Comments (required to reject or approve part)</span>
                   <textarea name="comments" rows={3} className={inputClass} />
@@ -775,18 +781,23 @@ export default async function DemandPage({
                 automatically. The rejection stays in the history.
               </p>
               <form action={reviseRejectedDemand.bind(null, demand.id)} className="space-y-3">
-                <label className="block">
-                  <span className={labelClass}>Quantity</span>
-                  <input
-                    type="number"
-                    name="quantity"
-                    min={1}
-                    max={100000}
-                    required
-                    defaultValue={demand.quantity}
-                    className={inputClass}
-                  />
-                </label>
+                {demand.asset_id ? (
+                  // A repair is always for one device (javaria_it_0027).
+                  <input type="hidden" name="quantity" value="1" />
+                ) : (
+                  <label className="block">
+                    <span className={labelClass}>Quantity</span>
+                    <input
+                      type="number"
+                      name="quantity"
+                      min={1}
+                      max={100000}
+                      required
+                      defaultValue={demand.quantity}
+                      className={inputClass}
+                    />
+                  </label>
+                )}
                 <label className="block">
                   <span className={labelClass}>Justification</span>
                   <textarea

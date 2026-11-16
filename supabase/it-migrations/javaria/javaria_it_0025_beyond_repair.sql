@@ -5,7 +5,7 @@
 --              told, and the ticket stays open for Replace device. Replace device now also works for
 --              a device retired this way, and assigning the new one resolves the ticket.
 -- Depends on:  javaria_it_0024_repairs_in_procurement.sql
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed 2026-11-16: the 9-argument it.record_device_back is installed)
 --
 -- Functions REPLACED: it.record_device_back (new argument p_beyond_repair, so the old one is
 -- dropped), it.raise_replacement_demand, it.retire_replaced_asset.
