@@ -136,6 +136,11 @@ export default async function LifecycleRequestPage({
     !isFinished &&
     (canAssign || (portalTask && portalTask.assigned_to_person_id === personId));
 
+  // The checklist is IT's own work. HR (who raise the request and can read it) see only how far it
+  // has got; the tasks themselves are for whoever can assign or work them, or holds one.
+  const showChecklist =
+    canAssign || canUpdate || checklist.some((i) => Boolean(personId) && i.assigned_to_person_id === personId);
+
   const assignmentIds = checklist
     .map((i) => i.assignment_id)
     .filter((aid): aid is string => Boolean(aid));
@@ -282,6 +287,7 @@ export default async function LifecycleRequestPage({
           </section>
 
           {/* Checklist */}
+          {showChecklist ? (
           <section className={`${cardClass} p-6`}>
             <div className="mb-4 flex items-baseline justify-between">
               <h2 className="text-base font-semibold text-slate-900">Checklist</h2>
@@ -610,6 +616,17 @@ export default async function LifecycleRequestPage({
               </form>
             )}
           </section>
+          ) : (
+            <section className={`${cardClass} p-6`}>
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-base font-semibold text-slate-900">IT progress</h2>
+                <span className="text-sm text-slate-500">
+                  {done.length}/{checklist.length} tasks done
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">IT works through its checklist; the status above shows when it is finished.</p>
+            </section>
+          )}
 
           {/* Timeline */}
           <section className={`${cardClass} p-6`}>
