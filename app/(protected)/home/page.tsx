@@ -66,11 +66,13 @@ export default async function EmployeeHomePage() {
       count: assetCount,
     },
     {
-      href: "/it/my-offboarding",
+      // The HR clearance flow replaced the old IT self-offboarding: the request is now the
+      // Offboarding card on the profile page.
+      href: "/profile",
       label: "Resignation / Offboarding",
-      description: "Leaving the company? Let IT know so they can prepare.",
+      description: "Leaving the company? Submit your offboarding request from your profile.",
       icon: LogoutIcon,
-      permission: "module:it",
+      permission: "hr.clearance.request_self",
     },
     {
       href: "/hr/dashboard",

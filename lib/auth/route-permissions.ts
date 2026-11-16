@@ -15,13 +15,15 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/admin/categories": "hr.categories.update",
   "/hr/admin/roles": "hr.manage_role_permissions",
   "/hr/admin/clearance-signers": "hr.clearance.read_all",
+  "/hr/resignations": "hr.clearance.read_all",
   // IT module — Service Management track (08-it-service-management-plan.md §4).
   "/it/my-tickets": "module:it",
   "/it/tickets": "it.tickets.read",
   "/it/my-onboarding": "module:it",
-  // More specific prefixes first — permissionKeyForPath returns the first match.
-  "/it/my-offboarding/new-for-employee": "hr.offboarding.create_for_site_users",
-  "/it/my-offboarding/new": "hr.offboarding.create_self",
+  // More specific prefixes first — permissionKeyForPath returns the first match. The two /new
+  // routes are now only redirects into the HR clearance flow, gated on its keys.
+  "/it/my-offboarding/new-for-employee": "hr.clearance.read_all",
+  "/it/my-offboarding/new": "hr.clearance.request_self",
   "/it/my-offboarding": "module:it",
   // Unified staff queue (tickets + onboarding/offboarding/replacement) — needs either
   // it.tickets.read or it.onboarding.read, which this single-key map can't express as "any of".

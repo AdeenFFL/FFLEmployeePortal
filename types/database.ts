@@ -1270,7 +1270,55 @@ export type Database = {
         };
         Insert: Record<string, never>;
         Update: Record<string, never>;
+        // Lets /hr/resignations embed clearance_signoffs(count) on clearance_cases.
+        Relationships: [
+          {
+            foreignKeyName: "clearance_signoffs_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "clearance_cases";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // Read by the HRBP inbox (/hr/resignations); written only through the hr.* clearance functions.
+      clearance_lines: {
+        Row: {
+          id: string;
+          line_key: string;
+          form_key: "page_one" | "admin" | "accounts" | "it";
+          slot_key: string;
+          description: string;
+          auto_from_form: "admin" | "accounts" | "it" | null;
+          sort_order: number;
+          is_active: boolean;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
         Relationships: [];
+      };
+      clearance_responses: {
+        Row: {
+          id: string;
+          case_id: string;
+          line_id: string;
+          outcome: "Yes" | "No" | "N/A" | null;
+          remarks: string | null;
+          responded_by: string | null;
+          responded_at: string | null;
+          updated_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "clearance_responses_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "clearance_cases";
+            referencedColumns: ["id"];
+          },
+        ];
       };
       hrbp_departments: {
         Row: HrbpDepartment;
@@ -1388,6 +1436,38 @@ export type Database = {
       submit_clearance_self: {
         Args: { p_last_working_date: string };
         Returns: string;
+      };
+      raise_clearance_for: {
+        Args: { p_person_id: string; p_last_working_date: string };
+        Returns: string;
+      };
+      forward_clearance_case: {
+        Args: { p_case_id: string };
+        Returns: undefined;
+      };
+      cancel_clearance_case: {
+        Args: { p_case_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      // talha_hr_0005_hrbp_inbox_lookups.sql
+      clearance_search_employees: {
+        Args: { p_query: string; p_limit?: number };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          person_status: string;
+          site_id: string | null;
+          site_name: string | null;
+          department_id: string | null;
+          department_name: string | null;
+          has_open_case: boolean;
+        }[];
+      };
+      refresh_clearance_case_org: {
+        Args: { p_case_id: string };
+        Returns: undefined;
       };
     };
   };

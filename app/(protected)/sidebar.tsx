@@ -115,6 +115,7 @@ export function Sidebar({
           label: "Onboarding",
           permission: "hr.onboarding.create",
         },
+        { href: "/hr/resignations", label: "Resignations", permission: "hr.clearance.read_all" },
         {
           href: "/hr/feedback/anonymous",
           label: "Anonymous Feedback",

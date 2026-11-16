@@ -18,6 +18,7 @@ type Row = {
   status: string;
   createdAt: string;
   href: string;
+  progress?: string;
 };
 
 const MODULE_BADGE: Record<Row["module"], string> = {
@@ -33,17 +34,28 @@ const STATUS_TONE: Record<string, "positive" | "neutral" | "warning" | "negative
   "Under Review": "info",
   "Awaiting Confirmation": "warning",
   "Pending Final Review": "warning",
+  Submitted: "info",
+  "In Clearance": "warning",
   Resolved: "positive",
   Completed: "positive",
   Closed: "neutral",
   Cancelled: "neutral",
 };
 
+// last_working_date is a plain date ("2026-11-30"): read it as Karachi midnight → "30 Nov 2026".
+const dayFormat = new Intl.DateTimeFormat("en-GB", {
+  day: "numeric",
+  month: "short",
+  year: "numeric",
+  timeZone: "Asia/Karachi",
+});
+const formatDay = (value: string) => dayFormat.format(new Date(`${value}T00:00:00+05:00`));
+
 export default async function MyRequestsPage() {
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [{ data: hrTickets }, { data: itTickets }, { data: onboarding }, { data: offboarding }] =
+  const [{ data: hrTickets }, { data: itTickets }, { data: onboarding }, { data: offboarding }, cases, slots] =
     await Promise.all([
       supabase
         .schema("hr")
@@ -71,7 +83,30 @@ export default async function MyRequestsPage() {
         .eq("kind", "Offboarding")
         .eq("requested_by", personId ?? "")
         .order("created_at", { ascending: false }),
+      // HR clearance flow (replaced the old IT self-offboarding). The person_id filter is needed:
+      // hr.clearance.read_all holders can read everyone's cases.
+      supabase
+        .schema("hr")
+        .from("clearance_cases")
+        .select("id, case_number, status, last_working_date, created_at")
+        .eq("person_id", personId ?? "")
+        .order("created_at", { ascending: false }),
+      supabase
+        .schema("hr")
+        .from("clearance_slots")
+        .select("slot_key", { count: "exact", head: true })
+        .eq("is_active", true),
     ]);
+
+  const { data: clearanceCases, error: casesError } = cases;
+  const { count: slotCount, error: slotsError } = slots;
+  const caseIds = (clearanceCases ?? []).map((c) => c.id);
+  const { data: signoffs, error: signoffsError } = caseIds.length
+    ? await supabase.schema("hr").from("clearance_signoffs").select("case_id").in("case_id", caseIds)
+    : { data: [], error: null };
+  const signedByCase = new Map<string, number>();
+  for (const s of signoffs ?? []) signedByCase.set(s.case_id, (signedByCase.get(s.case_id) ?? 0) + 1);
+  const clearanceError = casesError ?? slotsError ?? signoffsError;
 
   const rows: Row[] = [
     ...(hrTickets ?? []).map((t) => ({
@@ -96,7 +131,7 @@ export default async function MyRequestsPage() {
       label: r.request_number,
       status: r.status,
       createdAt: r.created_at,
-      href: `/it/onboarding/${r.id}`,
+      href: "/it/my-onboarding",
     })),
     ...(offboarding ?? []).map((r) => ({
       key: `off-${r.id}`,
@@ -104,7 +139,19 @@ export default async function MyRequestsPage() {
       label: r.request_number,
       status: r.status,
       createdAt: r.created_at,
-      href: `/it/onboarding/${r.id}`,
+      href: "/it/my-offboarding",
+    })),
+    ...(clearanceCases ?? []).map((c) => ({
+      key: `clr-${c.id}`,
+      module: "Offboarding" as const,
+      label: `${c.case_number} · Offboarding clearance – last working date ${formatDay(c.last_working_date)}`,
+      status: c.status,
+      createdAt: c.created_at,
+      href: "/profile",
+      progress:
+        c.status === "In Clearance"
+          ? `${signedByCase.get(c.id) ?? 0} of ${slotCount ?? 0} signed`
+          : undefined,
     })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
@@ -119,6 +166,12 @@ export default async function MyRequestsPage() {
           </Link>
         }
       />
+
+      {clearanceError && (
+        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          Could not load your offboarding requests.
+        </p>
+      )}
 
       {rows.length === 0 ? (
         <div className="rounded-xl border border-slate-200 bg-white p-8 text-center shadow-sm">
@@ -147,6 +200,7 @@ export default async function MyRequestsPage() {
                     <Link href={r.href} className="text-slate-900 hover:underline">
                       {r.label}
                     </Link>
+                    {r.progress && <p className="text-xs text-slate-500">{r.progress}</p>}
                   </td>
                   <td className="px-3 py-3">
                     <StatusPill label={r.status} tone={STATUS_TONE[r.status] ?? "neutral"} />

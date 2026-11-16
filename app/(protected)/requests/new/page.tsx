@@ -27,11 +27,12 @@ export default async function NewRequestPage() {
       permission: "module:hr",
     },
     {
-      href: "/it/my-offboarding/new",
+      // HR clearance flow: the request is the Offboarding card on the profile page.
+      href: "/profile",
       label: "Resignation / offboarding",
-      description: "Filing your own resignation or offboarding request.",
+      description: "Submit your offboarding request from your profile.",
       icon: LogoutIcon,
-      permission: "module:it",
+      permission: "hr.clearance.request_self",
     },
   ].filter((c) => granted.has(c.permission));
 
