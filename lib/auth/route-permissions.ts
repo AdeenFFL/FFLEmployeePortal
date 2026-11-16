@@ -31,6 +31,8 @@ const PROCUREMENT_ACCESS = [
 export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   "/hr/dashboard": "module:hr",
   "/hr/tickets": "module:hr",
+  // HR's read-only onboarding / offboarding list and view: whoever raises them or can read them.
+  "/hr/onboarding": ["hr.onboarding.create", "it.onboarding.read"],
   "/hr/feedback/anonymous": "hr.anonymous_feedback.read",
   "/hr/feedback": "hr.tickets.read",
   "/hr/admin/categories": "hr.categories.update",

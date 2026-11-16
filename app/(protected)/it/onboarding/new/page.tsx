@@ -61,7 +61,7 @@ export default async function NewLifecycleRequestPage({
         title={`New ${kind.toLowerCase()} request`}
         action={
           <Link
-            href={isReplacement ? "/it/inventory" : "/it/onboarding"}
+            href={isReplacement ? "/it/inventory" : "/hr/onboarding"}
             className={secondaryButtonClass}
           >
             {isReplacement ? "Back to Asset Register" : "Back to list"}

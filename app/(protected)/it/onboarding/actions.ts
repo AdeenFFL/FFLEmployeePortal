@@ -45,9 +45,13 @@ function optional(formData: FormData, key: string) {
 function refresh(requestId?: string) {
   queueItEmails(); // notification rows were written by DB triggers; deliver their emails
   revalidatePath("/it/onboarding");
+  revalidatePath("/hr/onboarding");
   revalidatePath("/it/my-onboarding");
   revalidatePath("/it/my-offboarding");
-  if (requestId) revalidatePath(`/it/onboarding/${requestId}`);
+  if (requestId) {
+    revalidatePath(`/it/onboarding/${requestId}`);
+    revalidatePath(`/hr/onboarding/${requestId}`);
+  }
 }
 
 // Type-ahead for the employee picker (javaria_it_0018). it.employee_lookup() does the access
@@ -313,7 +317,9 @@ export async function createLifecycleRequest(formData: FormData) {
   }
 
   refresh();
-  go(`/it/onboarding/${created.id}`, "notice", `${created.request_number} raised. IT has been notified.`);
+  // HR raised an onboarding: back to HR's own view of it. A replacement stays with IT.
+  const raisedPath = kind === "Onboarding" ? `/hr/onboarding/${created.id}` : `/it/onboarding/${created.id}`;
+  go(raisedPath, "notice", `${created.request_number} raised. IT has been notified.`);
 }
 
 // BRD §5.1.4 / §5.2.5 — the IT Executive picks the request up.

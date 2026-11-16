@@ -144,9 +144,9 @@ export function Sidebar({
         { href: "/hr/dashboard", label: "Dashboard", permission: "module:hr" },
         { href: "/hr/feedback", label: "Ticket Queue", permission: "hr.tickets.read" },
         {
-          href: "/it/onboarding/new?kind=Onboarding",
+          href: "/hr/onboarding",
           label: "Onboarding",
-          permission: "hr.onboarding.create",
+          permission: ["hr.onboarding.create", "it.onboarding.read"],
         },
         {
           href: "/hr/feedback/anonymous",
