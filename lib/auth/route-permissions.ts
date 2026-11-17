@@ -16,6 +16,7 @@ export const ROUTE_PERMISSIONS: Record<string, string> = {
   "/hr/admin/roles": "hr.manage_role_permissions",
   "/hr/admin/clearance-signers": "hr.clearance.read_all",
   "/hr/resignations": "hr.clearance.read_all",
+  "/hr/clearance": "hr.clearance.sign",
   // IT module — Service Management track (08-it-service-management-plan.md §4).
   "/it/my-tickets": "module:it",
   "/it/tickets": "it.tickets.read",

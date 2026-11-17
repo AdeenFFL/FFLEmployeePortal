@@ -1469,6 +1469,14 @@ export type Database = {
         Args: { p_case_id: string };
         Returns: undefined;
       };
+      set_clearance_response: {
+        Args: { p_case_id: string; p_line_id: string; p_outcome: "Yes" | "No" | "N/A"; p_remarks?: string | null };
+        Returns: undefined;
+      };
+      sign_clearance: {
+        Args: { p_case_id: string; p_slot_key: string; p_remarks?: string | null };
+        Returns: undefined;
+      };
     };
   };
   // Cross-schema FKs to public.persons / org_units aren't listed in Relationships (same reason
