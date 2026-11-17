@@ -215,3 +215,4 @@ comment block was replaced with a short replicated-from note.
 | `talha/talha_hr_0004_clearance_signer_lookups.sql` | 2026-11-13 | Talha | Clearance signers screen: 6 lookup and management functions (list units, list signers, search people, add, remove, set primary). Not yet in the main sequence |
 | `talha/talha_it_0010_valuation_functions.sql` | 2026-11-13 | Talha | Phase 6 valuation: it.compute_depreciation and it.record_asset_valuation (straight line, completed months). Not yet in the main sequence |
 | `talha/talha_hr_0005_hrbp_inbox_lookups.sql` | 2026-11-16 | Talha | HRBP inbox lookups: hr.clearance_search_employees and hr.refresh_clearance_case_org. Not yet in the main sequence |
+| `talha/talha_hr_0006_hr_roles_can_sign.sql` | 2026-11-17 | Talha | Lets the HR and HRBP roles open the signer inbox (hr.clearance.sign). Not yet in the main sequence |
