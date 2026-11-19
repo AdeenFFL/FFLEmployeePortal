@@ -89,7 +89,6 @@ export async function GET(request: NextRequest) {
         designation: invitation?.designation ?? null,
         date_of_joining: invitation?.date_of_joining ?? onboardingRequest?.joining_date ?? null,
         department_id: invitation?.department_id ?? null,
-        ...(onboardingRequest?.site_id ? { site_id: onboardingRequest.site_id } : {}),
       })
       .select("id, status")
       .single();
@@ -135,7 +134,15 @@ export async function GET(request: NextRequest) {
     }
 
     // Link the new account to its onboarding request, so IT can allocate assets to them and they
-    // get "confirm your IT setup" on My Onboarding. Best effort: IT can still link by hand.
+    // get "confirm your IT setup" on My Onboarding. Best effort, after the account exists, so it
+    // can never stop a sign-in: IT can still link by hand, and Admin can set the site.
+    if (onboardingRequest?.site_id) {
+      const { error: siteError } = await admin
+        .from("persons")
+        .update({ site_id: onboardingRequest.site_id })
+        .eq("id", createdPerson.id);
+      if (siteError) console.error("Setting the new joiner's site failed", siteError);
+    }
     if (onboardingRequest && !onboardingRequest.person_id) {
       const { error: linkError } = await admin
         .schema("it")

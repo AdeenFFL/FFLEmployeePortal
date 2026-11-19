@@ -103,27 +103,50 @@ export const TASK_TYPE_LABELS: Record<ItChecklistTaskType, string> = {
   other: "Other",
 };
 
-// "How to complete" shown on each task to whoever works it. Keep in step with the actions in
-// app/(protected)/it/onboarding/actions.ts.
-export const TASK_GUIDE: Record<ItChecklistTaskType, string> = {
-  email_account:
-    "Create the mailbox in Microsoft 365, then Update task: enter the address and mark Completed. The portal then sends the new joiner a sign-in invite (it appears under User Management → Pending Invitations).",
-  license_assignment: "Assign the licences in the admin centre, list them here and mark Completed.",
-  access_provisioning: "Grant the accesses (Teams, SharePoint, VPN, ERP, folders…), list them here and mark Completed.",
-  software_installation: "Install and configure the software on the device, list it here and mark Completed.",
-  asset_allocation:
-    "Needs the new joiner's portal account (they sign in once with their company email). Then Assign an asset from the register; the task completes itself.",
-  asset_handover:
-    "Waits for the employee to acknowledge the asset on My Assets, then Mark handover confirmed.",
-  portal_account:
-    "After the Email Account task: choose the role they need. Their account is created with that role the first time they sign in, and is linked to this request automatically.",
-  email_backup_closure: "Back up the mailbox, then close it. Enter the backup date and mark Completed.",
-  access_revocation: "Remove every access (Teams, VPN, ERP, folders…), list them here and mark Completed.",
-  hardware_recovery: "Collect the laptop and other equipment, list what came back and mark Completed.",
-  asset_return: "Record each asset's return under Assets to return, then mark this Completed.",
-  license_deactivation: "Remove the licences in the admin centre, list them here and mark Completed.",
-  other: "Do the work described, add a note and mark Completed (or Not Applicable with a reason).",
-};
+// "How to complete", shown on each open task to whoever works it and to whoever runs the request.
+// Each step names the button the page actually shows for that task (see the task list in
+// app/(protected)/it/onboarding/[id]/page.tsx and the actions in ../actions.ts). Not Applicable
+// always needs a note saying why.
+export function taskGuide(
+  taskType: ItChecklistTaskType,
+  kind: ItLifecycleKind,
+  emailRequired: boolean,
+): string {
+  switch (taskType) {
+    case "email_account":
+      return "1. Create the mailbox in Microsoft 365. 2. Update task: enter the address and username, set Completed, Save. The portal then emails the new joiner a sign-in invite (User Management → Pending Invitations).";
+    case "license_assignment":
+      return "Assign the licences in the Microsoft 365 admin centre, then Update task: list them, set Completed, Save.";
+    case "access_provisioning":
+      return "Grant the accesses (Teams, SharePoint, VPN, ERP, shared folders…), then Update task: list them, set Completed, Save.";
+    case "software_installation":
+      return "Install and set up the software on the device, then Update task: list it, set Completed, Save.";
+    case "asset_allocation":
+      return kind === "Replacement"
+        ? "Assign an asset: pick the replacement device from the Asset Register. The task completes itself."
+        : "Wait until the portal account is linked (Employee account, step 3), then Assign an asset from the Asset Register. The task completes itself.";
+    case "asset_handover":
+      return "The employee acknowledges the asset on My Assets. Once they have, Mark handover confirmed.";
+    case "portal_account":
+      return emailRequired
+        ? "After the Email Account task: Create portal account and choose their role (usually Employee). The account is made with that role the first time they sign in, and linked here by itself."
+        : "Create portal account and choose their role (usually Employee). Their account already exists on their personal email; the new role applies straight away.";
+    case "email_backup_closure":
+      return "Back up the mailbox, then block or close it. Update task: enter the backup date and mailbox status, set Completed, Save.";
+    case "access_revocation":
+      return "Remove every access (Teams, VPN, ERP, shared folders…), then Update task: list them, set Completed, Save. Portal access is switched off separately (Portal access panel).";
+    case "hardware_recovery":
+      return "Collect the laptop and other equipment, then Update task: list what came back, set Completed, Save.";
+    case "asset_return":
+      return kind === "Offboarding"
+        ? "Record return for each device under Assets to return (it goes back to stock), then Update task: set Completed, Save."
+        : "Take back the old device and record its return on the Asset Register, then Update task: set Completed, Save.";
+    case "license_deactivation":
+      return "Remove the licences in the Microsoft 365 admin centre, then Update task: list them, set Completed, Save.";
+    default:
+      return "Do the work described, then Update task: add a note, set Completed (or Not Applicable with the reason), Save.";
+  }
+}
 
 export const TASK_DETAIL_FIELDS: Record<ItChecklistTaskType, DetailField[]> = {
   email_account: [

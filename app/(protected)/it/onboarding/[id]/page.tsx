@@ -15,7 +15,7 @@ import {
   CHECKLIST_STATUS_TONE,
   FINISHED_STATUSES,
   TASK_DETAIL_FIELDS,
-  TASK_GUIDE,
+  taskGuide,
 } from "@/lib/it/onboarding";
 import { formatDateTime } from "@/lib/it/tickets";
 import {
@@ -276,11 +276,10 @@ export default async function LifecycleRequestPage({
 
                     {(isMine || isManager) &&
                       !isFinished &&
-                      (item.status === "Pending" || item.status === "In Progress") &&
-                      TASK_GUIDE[item.task_type] && (
+                      (item.status === "Pending" || item.status === "In Progress") && (
                         <p className="mt-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900">
                           <span className="font-semibold">How to complete: </span>
-                          {TASK_GUIDE[item.task_type]}
+                          {taskGuide(item.task_type, request.kind, request.email_required)}
                         </p>
                       )}
 
@@ -669,15 +668,17 @@ export default async function LifecycleRequestPage({
                   </p>
                 </li>
                 <li>
-                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">2 · Sign-in invite</p>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    2 · {request.email_required ? "Sign-in invite" : "Set-password email"}
+                  </p>
                   <p className="text-slate-700">
-                    {request.person_id
-                      ? "Used"
-                      : accountInvite
-                        ? `Sent to ${accountInvite.email} · role ${roleName.get(accountInvite.role_id) ?? "—"}`
-                        : request.email_required
-                          ? "Sent when the Email Account task is completed"
-                          : "Account created when the request was raised"}
+                    {!request.email_required
+                      ? `Sent to ${request.personal_email ?? "their personal email"} when the request was raised`
+                      : request.person_id
+                        ? "Accepted: they have signed in"
+                        : accountInvite
+                          ? `Sent to ${accountInvite.email} · role ${roleName.get(accountInvite.role_id) ?? "—"}`
+                          : "Not sent yet: goes out when the Email Account task is completed with the address"}
                   </p>
                   {accountInvite && !request.person_id && (
                     <p className="text-xs text-slate-500">
@@ -692,7 +693,9 @@ export default async function LifecycleRequestPage({
                       ? `${nameOf(request.person_id)} · ${
                           (accountRoles ?? []).map((r) => roleName.get(r.role_id)).filter(Boolean).join(", ") || "no role"
                         }`
-                      : "Not yet: created the first time they sign in, and linked here automatically"}
+                      : request.email_required
+                        ? "Not yet: created the first time they sign in with the company email, then linked here by itself"
+                        : "Not linked: link the account under Employee Portal Account Creation"}
                   </p>
                 </li>
               </ol>
