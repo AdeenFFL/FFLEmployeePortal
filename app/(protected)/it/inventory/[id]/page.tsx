@@ -106,7 +106,7 @@ export default async function AssetDetailPage({
     .schema("it")
     .from("asset_assignments")
     .select(
-      "id, person_id, assigned_by_person_id, returned_to_person_id, assigned_date, return_date, assigned_condition, returned_condition, acknowledged_at, remarks",
+      "id, person_id, assigned_by_person_id, returned_to_person_id, assigned_date, return_date, assigned_condition, returned_condition, acknowledged_at, remarks, holder_name, holder_employee_code, assigned_by_name, returned_to_name",
     )
     .eq("asset_id", asset.id)
     .order("assigned_date", { ascending: false })
@@ -119,6 +119,14 @@ export default async function AssetDetailPage({
     history.flatMap((a) => [a.person_id, a.assigned_by_person_id, a.returned_to_person_id]),
   );
   const nameOf = (pid: string | null) => (pid && historyNames.get(pid)) || "—";
+  // History rows: the live name while the person exists; once they are deleted the id is null and
+  // the copy saved on the row is shown instead (talha_it_0012).
+  const historyName = (pid: string | null, copied: string | null, code: string | null = null) =>
+    pid
+      ? nameOf(pid)
+      : copied
+        ? `${copied}${code ? ` (${code})` : ""} · deleted user`
+        : "—";
 
   const showAssign = canAssign && asset.status === "Unassigned";
   const showReturn = canAssign && asset.status === "In Use" && openAssignment !== null;
@@ -225,11 +233,13 @@ export default async function AssetDetailPage({
                   <tbody className="divide-y divide-slate-100 align-top">
                     {history.map((a) => (
                       <tr key={a.id}>
-                        <td className="px-5 py-2 font-medium text-slate-900">{nameOf(a.person_id)}</td>
+                        <td className="px-5 py-2 font-medium text-slate-900">
+                          {historyName(a.person_id, a.holder_name, a.holder_employee_code)}
+                        </td>
                         <td className="px-3 py-2 text-slate-700">
                           {formatDate(a.assigned_date)}
                           <span className="block text-xs text-slate-500">
-                            by {nameOf(a.assigned_by_person_id)}
+                            by {historyName(a.assigned_by_person_id, a.assigned_by_name)}
                           </span>
                         </td>
                         <td className="px-3 py-2 text-slate-700">
@@ -237,7 +247,7 @@ export default async function AssetDetailPage({
                             <>
                               {formatDate(a.return_date)}
                               <span className="block text-xs text-slate-500">
-                                to {nameOf(a.returned_to_person_id)}
+                                to {historyName(a.returned_to_person_id, a.returned_to_name)}
                               </span>
                             </>
                           ) : (

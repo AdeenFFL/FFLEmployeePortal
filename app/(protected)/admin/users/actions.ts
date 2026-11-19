@@ -389,6 +389,12 @@ export async function hardDeleteUser(personId: string): Promise<{ error: string 
   // references auth.users, not the other way around), so that's removed separately below.
   const { error } = await supabase.from("persons").delete().eq("id", personId);
   if (error) {
+    // 23514 = talha_it_0012's asset_assignments_holder_needed_while_open: they still hold an asset.
+    if (error.code === "23514" && error.message.includes("asset_assignments_holder_needed_while_open")) {
+      return {
+        error: "This employee still holds IT assets. Return them first, or set them Inactive.",
+      };
+    }
     // 23503 = a row elsewhere still points at this person and has no delete rule.
     if (error.code === "23503" && error.message.includes("asset_assignments_person_id_fkey")) {
       return {
