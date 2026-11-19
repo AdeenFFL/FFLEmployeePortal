@@ -70,6 +70,23 @@ export function orderSlotsHrLast<T extends { slot_key: string }>(slots: T[]) {
   return [...slots.filter((s) => s.slot_key !== "hr"), ...slots.filter((s) => s.slot_key === "hr")];
 }
 
+type SlotKeyed = { slot_key: string };
+
+// One part of a case: signed, skipped for this request (hr.clearance_skips), or still waiting.
+export function slotState(slotKey: string, signoffs: SlotKeyed[], skips: SlotKeyed[]) {
+  if (signoffs.some((s) => s.slot_key === slotKey)) return "signed" as const;
+  if (skips.some((s) => s.slot_key === slotKey)) return "skipped" as const;
+  return "waiting" as const;
+}
+
+// "x of y signed": skipped parts need no signature, so they are left out of both numbers.
+export function signatureProgress(slots: SlotKeyed[], signoffs: SlotKeyed[], skips: SlotKeyed[]) {
+  const skipped = new Set(skips.map((s) => s.slot_key));
+  const signed = new Set(signoffs.map((s) => s.slot_key));
+  const counted = slots.filter((s) => !skipped.has(s.slot_key));
+  return { signed: counted.filter((s) => signed.has(s.slot_key)).length, total: counted.length };
+}
+
 export function signersFor<T extends SignerScope>(
   signers: T[],
   slot: SlotInfo,
@@ -98,6 +115,33 @@ export function readinessProblems(
     .filter((s) => (s.scope === "site" ? !missingSite : !missingDepartment))
     .filter((s) => signersFor(signers, s, siteId, departmentId).length === 0)
     .map((s) => cleanSlotLabel(s.label));
+
+  const messages: string[] = [];
+  if (missingSite) messages.push("No site is set for this employee.");
+  if (missingDepartment) messages.push("No department is set for this employee.");
+  if (slotsWithoutSigner.length > 0) messages.push(`No signer for: ${slotsWithoutSigner.join(", ")}.`);
+
+  return { missingSite, missingDepartment, slotsWithoutSigner, messages, ready: messages.length === 0 };
+}
+
+// Readiness of an existing case, using hr.clearance_missing_for_case (parts with no signer that are
+// not skipped) — the same list hr.forward_clearance_case checks. A missing site/department is
+// reported once, as in readinessProblems; a department only matters if a department part is not skipped.
+export function caseReadiness(
+  siteId: string | null,
+  departmentId: string | null,
+  slots: SlotInfo[],
+  missing: { slot_key: string; label: string }[],
+  skippedKeys: Set<string>,
+) {
+  const missingSite = siteId === null;
+  const missingDepartment =
+    departmentId === null &&
+    slots.some((s) => s.scope === "department" && !skippedKeys.has(s.slot_key));
+  const scopeOf = new Map(slots.map((s) => [s.slot_key, s.scope]));
+  const slotsWithoutSigner = missing
+    .filter((m) => (scopeOf.get(m.slot_key) === "department" ? !missingDepartment : !missingSite))
+    .map((m) => cleanSlotLabel(m.label));
 
   const messages: string[] = [];
   if (missingSite) messages.push("No site is set for this employee.");

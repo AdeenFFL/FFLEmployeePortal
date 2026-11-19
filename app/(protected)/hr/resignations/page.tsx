@@ -32,7 +32,7 @@ export default async function ResignationsPage({ searchParams }: { searchParams:
   let casesQuery = hr
     .from("clearance_cases")
     .select(
-      "id, case_number, employee_name, employee_code, designation, site_id, department_id, last_working_date, status, raised_via, created_at, clearance_signoffs(count)",
+      "id, case_number, employee_name, employee_code, designation, site_id, department_id, last_working_date, status, raised_via, created_at, clearance_signoffs(count), clearance_skips(count)",
     )
     .order("created_at", { ascending: false })
     .limit(PAGE_LIMIT + 1);
@@ -175,7 +175,8 @@ export default async function ResignationsPage({ searchParams }: { searchParams:
                         <StatusPill label={c.status} tone={STATUS_TONE[c.status]} />
                       </td>
                       <td className="px-4 py-3 text-slate-700">
-                        {c.clearance_signoffs[0]?.count ?? 0} of {slots.length}
+                        {c.clearance_signoffs[0]?.count ?? 0} of{" "}
+                        {slots.length - (c.clearance_skips[0]?.count ?? 0)}
                       </td>
                       <td className="px-4 py-3 text-slate-700">
                         {c.raised_via === "self" ? "Employee" : "HR"}

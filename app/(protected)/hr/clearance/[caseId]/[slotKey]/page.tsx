@@ -19,7 +19,12 @@ import {
   loadSignerSetup,
   mySlotsForCase,
 } from "../../signer-work";
+import { HR_DETAIL_GROUPS, formatHrDetail, toHrDetailsValues } from "../../hr-details-fields";
+import { HrDetailsForm } from "./hr-details-form";
 import { SlotForm, type FormLine } from "./slot-form";
+
+const DETAILS_NOT_SAVED =
+  "HR details have not been saved yet. You can still sign, but page one will print with empty fields.";
 
 const LIST_PATH = "/hr/clearance";
 
@@ -49,7 +54,7 @@ export default async function ClearanceSlotPage({
   const { data: c, error: caseError } = await hr
     .from("clearance_cases")
     .select(
-      "id, case_number, person_id, employee_name, employee_code, designation, last_working_date, site_id, department_id, status, forwarded_at, cancelled_reason",
+      "id, case_number, person_id, employee_name, employee_code, designation, last_working_date, site_id, department_id, status, forwarded_at, cancelled_reason, contact_phone, contact_email, postal_address, reporting_manager_name, date_of_joining",
     )
     .eq("id", caseId)
     .maybeSingle();
@@ -77,7 +82,16 @@ export default async function ClearanceSlotPage({
   }
 
   const showAssets = slotKey === "it";
-  const [linesResult, responsesResult, signoffsResult, canReadAssets] = await Promise.all([
+  const isHrSlot = slotKey === "hr";
+  const [
+    linesResult,
+    responsesResult,
+    signoffsResult,
+    canReadAssets,
+    detailsResult,
+    departmentName,
+    skipsResult,
+  ] = await Promise.all([
     hr
       .from("clearance_lines")
       .select("id, description, auto_from_form, sort_order")
@@ -94,6 +108,23 @@ export default async function ClearanceSlotPage({
           .rpc("has_permission", { p_permission_key: "it.assets.read" })
           .then(({ data }) => Boolean(data))
       : Promise.resolve(false),
+    // Readable by the HR signer of this case (RLS on hr.clearance_hr_details).
+    isHrSlot
+      ? hr
+          .from("clearance_hr_details")
+          .select(
+            "resignation_letter_date, resignation_effective_from, unserved_notice_days, overtime_single, overtime_double, overtime_triple, annual_leave_balance, other_outstanding, updated_at",
+          )
+          .eq("case_id", caseId)
+          .maybeSingle()
+      : Promise.resolve({ data: null, error: null }),
+    // clearance_list_units needs manage_signers or read_all: a signer without them just sees "—".
+    isHrSlot && c.department_id
+      ? hr
+          .rpc("clearance_list_units")
+          .then(({ data }) => (data ?? []).find((u) => u.id === c.department_id)?.name ?? null)
+      : Promise.resolve(null),
+    hr.from("clearance_skips").select("slot_key, reason").eq("case_id", caseId),
   ]);
 
   // Without it.assets.read the asset list comes back empty (RLS), which would wrongly read as
@@ -108,11 +139,18 @@ export default async function ClearanceSlotPage({
     }
   }
 
-  const loadError = linesResult.error ?? responsesResult.error ?? signoffsResult.error;
+  const loadError =
+    linesResult.error ??
+    responsesResult.error ??
+    signoffsResult.error ??
+    detailsResult.error ??
+    skipsResult.error;
   const responseByLine = new Map((responsesResult.data ?? []).map((r) => [r.line_id, r]));
   const signoffs = signoffsResult.data ?? [];
   const signoffBySlot = new Map(signoffs.map((s) => [s.slot_key, s]));
   const mySignoff = signoffBySlot.get(slotKey);
+  const skipBySlot = new Map((skipsResult.data ?? []).map((s) => [s.slot_key, s]));
+  const mySkip = skipBySlot.get(slotKey);
   const isOpen = c.status === "In Clearance";
   const labels = ANSWER_LABELS[slot.form_key];
 
@@ -128,13 +166,25 @@ export default async function ClearanceSlotPage({
     };
   });
 
-  // HR signs last: the other active parts still unsigned.
+  // HR signs last: the other active parts still unsigned (skipped parts are not waited for).
   const waitingFor =
     slotKey === "hr"
       ? setup.slots
-          .filter((s) => s.slot_key !== "hr" && !signoffBySlot.has(s.slot_key))
+          .filter(
+            (s) => s.slot_key !== "hr" && !signoffBySlot.has(s.slot_key) && !skipBySlot.has(s.slot_key),
+          )
           .map((s) => cleanSlotLabel(s.label))
       : [];
+
+  const savedDetails = detailsResult.data;
+  const detailValues = toHrDetailsValues(c, savedDetails);
+  const canEdit = isOpen && !mySignoff;
+  const fixedDetails: [string, string][] = [
+    ["Employee P#", c.employee_code ?? "—"],
+    ["Name", c.employee_name],
+    ["Designation", c.designation ?? "—"],
+    ["Department", departmentName ?? "—"],
+  ];
 
   const today = karachiToday();
   const employee: [string, string][] = [
@@ -188,13 +238,16 @@ export default async function ClearanceSlotPage({
         <ul className="flex flex-col gap-2">
           {orderSlotsHrLast(setup.slots).map((s) => {
             const so = signoffBySlot.get(s.slot_key);
+            const skip = skipBySlot.get(s.slot_key);
             return (
               <li key={s.slot_key} className="flex flex-wrap justify-between gap-2 text-sm">
                 <span className="font-medium text-slate-900">{cleanSlotLabel(s.label)}</span>
                 <span className={so ? "text-green-700" : "text-slate-500"}>
                   {so
                     ? `Signed by ${so.signer_name}${so.signer_designation ? ` (${so.signer_designation})` : ""} on ${formatTimestamp(so.signed_at)}`
-                    : "Waiting"}
+                    : skip
+                      ? `Skipped: ${skip.reason}`
+                      : "Waiting"}
                 </span>
               </li>
             );
@@ -231,12 +284,64 @@ export default async function ClearanceSlotPage({
         </section>
       )}
 
+      {isHrSlot && (
+        <section className={card}>
+          <h2 className={cardTitle}>HR details (page one)</h2>
+          {detailsResult.error ? (
+            <p className={errorBox}>Could not load the HR details. Please try again later.</p>
+          ) : (
+            <div className="flex flex-col gap-6">
+              <dl className="grid gap-x-6 gap-y-3 rounded-lg bg-slate-50 p-4 sm:grid-cols-4">
+                {fixedDetails.map(([label, value]) => (
+                  <div key={label}>
+                    <dt className="text-xs text-slate-500">{label}</dt>
+                    <dd className="text-sm text-slate-900">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+              {canEdit ? (
+                <HrDetailsForm
+                  caseId={c.id}
+                  initial={detailValues}
+                  lastSaved={
+                    savedDetails ? `Last saved ${formatTimestamp(savedDetails.updated_at)}` : null
+                  }
+                />
+              ) : (
+                HR_DETAIL_GROUPS.map((group) => (
+                  <div key={group.title}>
+                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                      {group.title}
+                    </h3>
+                    <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                      {group.fields.map((field) => (
+                        <div key={field.key}>
+                          <dt className="text-xs text-slate-500">{field.label}</dt>
+                          <dd className="whitespace-pre-line text-sm text-slate-900">
+                            {formatHrDetail(field, detailValues[field.key]) ?? "—"}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                ))
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
       <section className={card}>
         <h2 className={cardTitle}>{FORM_TITLES[slot.form_key]}</h2>
         {loadError ? (
           <p className={errorBox}>Could not load the form. Please try again later.</p>
-        ) : mySignoff || !isOpen ? (
+        ) : mySignoff || mySkip || !isOpen ? (
           <div className="flex flex-col gap-4">
+            {mySkip && !mySignoff && (
+              <p className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
+                This part was skipped for this request: {mySkip.reason}. Nothing to fill in or sign.
+              </p>
+            )}
             {mySignoff && (
               <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
                 Signed by {mySignoff.signer_name}
@@ -268,6 +373,7 @@ export default async function ClearanceSlotPage({
             lines={lines}
             labels={labels}
             waitingFor={waitingFor}
+            signHint={isHrSlot && !savedDetails ? DETAILS_NOT_SAVED : null}
           />
         )}
       </section>

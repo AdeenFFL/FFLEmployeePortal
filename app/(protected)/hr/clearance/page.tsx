@@ -60,7 +60,7 @@ export default async function ClearanceInboxPage() {
 
   const cases = casesResult.data ?? [];
   const caseIds = cases.map((c) => c.id);
-  const [signoffsResult, responsesResult, linesResult] = caseIds.length
+  const [signoffsResult, responsesResult, linesResult, skipsResult] = caseIds.length
     ? await Promise.all([
         hr.from("clearance_signoffs").select("case_id, slot_key").in("case_id", caseIds),
         // RLS returns only the answers of the parts I sign.
@@ -70,8 +70,10 @@ export default async function ClearanceInboxPage() {
           .select("id, slot_key")
           .eq("is_active", true)
           .is("auto_from_form", null),
+        hr.from("clearance_skips").select("case_id, slot_key").in("case_id", caseIds),
       ])
     : [
+        { data: [], error: null },
         { data: [], error: null },
         { data: [], error: null },
         { data: [], error: null },
@@ -83,9 +85,13 @@ export default async function ClearanceInboxPage() {
     signedResult.error ??
     signoffsResult.error ??
     responsesResult.error ??
-    linesResult.error;
+    linesResult.error ??
+    skipsResult.error;
 
   const signed = new Set((signoffsResult.data ?? []).map((s) => `${s.case_id}:${s.slot_key}`));
+  // A part skipped for one request needs no signature: not waiting, and HR does not wait for it.
+  const skipped = new Set((skipsResult.data ?? []).map((s) => `${s.case_id}:${s.slot_key}`));
+  const done = (key: string) => signed.has(key) || skipped.has(key);
   const lineIdsBySlot = new Map<string, string[]>();
   for (const l of linesResult.data ?? []) {
     lineIdsBySlot.set(l.slot_key, [...(lineIdsBySlot.get(l.slot_key) ?? []), l.id]);
@@ -98,12 +104,12 @@ export default async function ClearanceInboxPage() {
 
   const waiting = cases.flatMap((c) =>
     mySlotsForCase(c, setup.signers, setup.slots)
-      .filter((s) => !signed.has(`${c.id}:${s.slot_key}`))
+      .filter((s) => !done(`${c.id}:${s.slot_key}`))
       .map((s) => {
         const lineIds = lineIdsBySlot.get(s.slot_key) ?? [];
         const othersWaiting =
           s.slot_key === "hr"
-            ? setup.slots.filter((o) => o.slot_key !== "hr" && !signed.has(`${c.id}:${o.slot_key}`))
+            ? setup.slots.filter((o) => o.slot_key !== "hr" && !done(`${c.id}:${o.slot_key}`))
                 .length
             : 0;
         return {

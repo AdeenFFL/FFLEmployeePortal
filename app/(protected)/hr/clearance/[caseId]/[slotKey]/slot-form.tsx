@@ -37,6 +37,7 @@ export function SlotForm({
   lines,
   labels,
   waitingFor,
+  signHint = null,
 }: {
   caseId: string;
   slotKey: string;
@@ -44,6 +45,8 @@ export function SlotForm({
   labels: Record<Outcome, string>;
   // HR signs last: the labels of the other parts that have not signed yet.
   waitingFor: string[];
+  // A soft warning in the Sign box; unlike the blockers it does not disable Sign.
+  signHint?: string | null;
 }) {
   const editable = lines.filter((l) => !l.auto);
   const initial = () =>
@@ -231,6 +234,7 @@ export function SlotForm({
           />
           {CONFIRM_TEXT}
         </label>
+        {signHint && <p className="text-xs text-amber-700">{signHint}</p>}
         {signBlockers.length > 0 && (
           <ul className="list-disc pl-5 text-xs text-slate-500">
             {signBlockers.map((b) => (

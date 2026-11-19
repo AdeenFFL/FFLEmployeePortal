@@ -98,7 +98,7 @@ export function StartClearancePanel({
               <div>
                 <h2 className="text-lg font-semibold text-slate-900">Start clearance</h2>
                 <p className="text-sm text-slate-500">
-                  For an employee who is leaving. It goes straight to the signers.
+                  For an employee who is leaving. It starts as Submitted: skip any part that is not needed, then forward it to the signers.
                 </p>
               </div>
               <button
@@ -188,17 +188,17 @@ export function StartClearancePanel({
 
                 {!readiness.ready && (
                   <div className="rounded-md bg-amber-50 px-3 py-2 text-sm text-amber-800">
-                    <p className="font-medium">Not ready yet:</p>
+                    <p className="font-medium">You can start it, but it cannot be forwarded yet:</p>
                     <ul className="list-disc pl-5">
                       {readiness.messages.map((m) => (
                         <li key={m}>{m}</li>
                       ))}
                     </ul>
                     {(readiness.missingSite || readiness.missingDepartment) && (
-                      <p className="mt-1">Ask Admin to set it in Admin &gt; Users before starting.</p>
+                      <p className="mt-1">Ask Admin to set it in Admin &gt; Users before forwarding.</p>
                     )}
                     {readiness.slotsWithoutSigner.length > 0 && (
-                      <p className="mt-1">Set the missing signers on the Clearance Signers page.</p>
+                      <p className="mt-1">Set the missing signers on the Clearance Signers page, or skip those parts on the request after starting.</p>
                     )}
                   </div>
                 )}
@@ -222,7 +222,7 @@ export function StartClearancePanel({
                 <div>
                   <button
                     type="submit"
-                    disabled={isPending || !readiness.ready}
+                    disabled={isPending}
                     className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
                   >
                     {isPending ? "Starting…" : "Start clearance"}

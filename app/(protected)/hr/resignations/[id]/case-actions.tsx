@@ -1,7 +1,14 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { forwardCase, cancelCase, refreshCaseOrg, type ActionResult } from "../actions";
+import {
+  forwardCase,
+  cancelCase,
+  refreshCaseOrg,
+  skipSlot,
+  unskipSlot,
+  type ActionResult,
+} from "../actions";
 
 const secondaryButton =
   "rounded-md border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
@@ -145,6 +152,101 @@ export function RefreshOrgButton({ caseId }: { caseId: string }) {
         </button>
       </div>
       {error && <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>}
+    </div>
+  );
+}
+
+// Skip (with a reason) or undo the skip of one part, for this request only. The reason is for HR;
+// the employee only sees "Skipped". Undo is blocked while the part has no signer for this
+// site / department, since the request would then be stuck waiting for nobody.
+export function SlotSkipControl({
+  caseId,
+  slotKey,
+  skipped,
+  undoBlockedReason,
+}: {
+  caseId: string;
+  slotKey: string;
+  skipped: boolean;
+  undoBlockedReason: string | null;
+}) {
+  const { error, isPending, run } = useCaseAction();
+  const [skipping, setSkipping] = useState(false);
+  const [reason, setReason] = useState("");
+  const reasonOk = reason.trim().length >= 3 && reason.trim().length <= 300;
+
+  return (
+    <div className="mt-1 flex flex-col gap-2">
+      {skipped ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            disabled={isPending || undoBlockedReason !== null}
+            title={undoBlockedReason ?? undefined}
+            onClick={() => run(() => unskipSlot(caseId, slotKey))}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            {isPending ? "Working…" : "Undo skip"}
+          </button>
+          {undoBlockedReason && <span className="text-xs text-slate-500">{undoBlockedReason}</span>}
+        </div>
+      ) : !skipping ? (
+        <div>
+          <button
+            type="button"
+            disabled={isPending}
+            onClick={() => setSkipping(true)}
+            className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+          >
+            Skip this part
+          </button>
+        </div>
+      ) : (
+        <div className="w-full max-w-sm rounded-lg border border-slate-200 bg-slate-50 p-3">
+          <label className="flex flex-col gap-1 text-xs">
+            <span className="font-medium text-slate-700">
+              Why is this part not needed? (HR only, the employee sees just “Skipped”)
+            </span>
+            <textarea
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              rows={2}
+              maxLength={300}
+              className="rounded-lg border border-slate-300 px-2 py-1 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+            />
+          </label>
+          <div className="mt-2 flex justify-end gap-2">
+            <button
+              type="button"
+              disabled={isPending}
+              onClick={() => {
+                setSkipping(false);
+                setReason("");
+              }}
+              className="rounded-md border border-slate-300 px-2 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
+            >
+              Keep it
+            </button>
+            <button
+              type="button"
+              disabled={isPending || !reasonOk}
+              onClick={() =>
+                run(
+                  () => skipSlot(caseId, slotKey, reason),
+                  () => {
+                    setSkipping(false);
+                    setReason("");
+                  },
+                )
+              }
+              className="rounded-md bg-slate-700 px-2 py-1 text-xs font-medium text-white hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-60"
+            >
+              {isPending ? "Skipping…" : "Skip"}
+            </button>
+          </div>
+        </div>
+      )}
+      {error && <p className="rounded-md bg-red-50 px-2 py-1 text-xs text-red-700">{error}</p>}
     </div>
   );
 }

@@ -1,9 +1,15 @@
 import { createClient } from "@/lib/supabase/server";
-import { cleanSlotLabel, formatTimestamp, orderSlotsHrLast } from "../resignations/clearance-view";
+import {
+  cleanSlotLabel,
+  formatTimestamp,
+  orderSlotsHrLast,
+  signatureProgress,
+} from "../resignations/clearance-view";
 
 // The employee-facing clearance tracker, shared by the profile Offboarding card and
 // /requests/offboarding/[id]. Reads only what RLS lets the employee see: the active slots and
-// the signatures on their own case (never the answers or the expected signers).
+// the signatures on their own case (never the answers or the expected signers). Skipped parts
+// show only "Skipped": the reason is for HR, not the employee.
 
 export const MISSING_SETUP_WARNING =
   "Your site or department is not set in the portal. You can still submit, but HR cannot start your clearance until it is set. Please ask HR or the portal administrator to update your record.";
@@ -18,12 +24,12 @@ export type TrackerCase = {
   completed_at: string | null;
 };
 
-type Step = { key: string; label: string; done: boolean; detail: string };
+type Step = { key: string; label: string; done: boolean; skipped?: boolean; detail: string };
 
 async function loadSlotsAndSignoffs(caseId: string) {
   const supabase = await createClient();
   const hr = supabase.schema("hr");
-  const [slots, signoffs] = await Promise.all([
+  const [slots, signoffs, skips] = await Promise.all([
     hr
       .from("clearance_slots")
       .select("slot_key, label, sort_order")
@@ -33,27 +39,25 @@ async function loadSlotsAndSignoffs(caseId: string) {
       .from("clearance_signoffs")
       .select("slot_key, signer_name, signer_designation, signed_at")
       .eq("case_id", caseId),
+    hr.from("clearance_skips").select("slot_key").eq("case_id", caseId),
   ]);
   return {
     slots: slots.data ?? [],
     signoffs: signoffs.data ?? [],
-    error: slots.error ?? signoffs.error,
+    skips: skips.data ?? [],
+    error: slots.error ?? signoffs.error ?? skips.error,
   };
 }
 
-// "x of y" for the profile card: signatures on the currently active slots. Null on a read error.
+// "x of y" for the profile card: signatures on the active, not skipped slots. Null on a read error.
 export async function getSignatureCount(caseId: string) {
-  const { slots, signoffs, error } = await loadSlotsAndSignoffs(caseId);
+  const { slots, signoffs, skips, error } = await loadSlotsAndSignoffs(caseId);
   if (error) return null;
-  const active = new Set(slots.map((s) => s.slot_key));
-  return {
-    signed: signoffs.filter((s) => active.has(s.slot_key)).length,
-    total: slots.length,
-  };
+  return signatureProgress(slots, signoffs, skips);
 }
 
 export async function ClearanceTracker({ clearanceCase: c }: { clearanceCase: TrackerCase }) {
-  const { slots, signoffs, error } = await loadSlotsAndSignoffs(c.id);
+  const { slots, signoffs, skips, error } = await loadSlotsAndSignoffs(c.id);
   if (error) {
     return (
       <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
@@ -63,6 +67,7 @@ export async function ClearanceTracker({ clearanceCase: c }: { clearanceCase: Tr
   }
 
   const signoffBySlot = new Map(signoffs.map((s) => [s.slot_key, s]));
+  const skipped = new Set(skips.map((s) => s.slot_key));
   const submittedAt = c.employee_signed_at ?? c.created_at;
   const steps: Step[] = [
     {
@@ -81,8 +86,17 @@ export async function ClearanceTracker({ clearanceCase: c }: { clearanceCase: Tr
       detail: c.forwarded_at ? `Forwarded on ${formatTimestamp(c.forwarded_at)}` : "Waiting",
     },
     // HR signs last (the database enforces it), so it is shown last, just before Completed.
-    ...orderSlotsHrLast(slots).map((slot) => {
+    ...orderSlotsHrLast(slots).map((slot): Step => {
       const signoff = signoffBySlot.get(slot.slot_key);
+      if (!signoff && skipped.has(slot.slot_key)) {
+        return {
+          key: slot.slot_key,
+          label: cleanSlotLabel(slot.label),
+          done: false,
+          skipped: true,
+          detail: "Skipped",
+        };
+      }
       const signer = signoff
         ? signoff.signer_designation
           ? `${signoff.signer_name} (${signoff.signer_designation})`
@@ -113,7 +127,7 @@ export async function ClearanceTracker({ clearanceCase: c }: { clearanceCase: Tr
             }`}
             aria-hidden
           >
-            {step.done ? "✓" : "○"}
+            {step.done ? "✓" : step.skipped ? "–" : "○"}
           </span>
           <div>
             <p className="text-sm font-medium text-slate-900">{step.label}</p>

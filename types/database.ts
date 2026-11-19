@@ -1252,6 +1252,9 @@ export type Database = {
           cancelled_reason: string | null;
           created_at: string;
           updated_at: string;
+          line_manager_person_id: string | null;
+          data_received_confirmed_by: string | null;
+          data_received_confirmed_at: string | null;
         };
         Insert: Record<string, never>;
         Update: Record<string, never>;
@@ -1274,6 +1277,47 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "clearance_signoffs_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "clearance_cases";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // Page-one details the HR signer fills in; written only through hr.save_clearance_details.
+      clearance_hr_details: {
+        Row: {
+          case_id: string;
+          resignation_letter_date: string | null;
+          resignation_effective_from: string | null;
+          unserved_notice_days: number | null;
+          overtime_single: number | null;
+          overtime_double: number | null;
+          overtime_triple: number | null;
+          annual_leave_balance: number | null;
+          other_outstanding: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      // Parts skipped for one request; written only through hr.skip_clearance_slot / unskip_.
+      clearance_skips: {
+        Row: {
+          case_id: string;
+          slot_key: string;
+          reason: string;
+          skipped_by: string | null;
+          skipped_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        // Lets /hr/resignations embed clearance_skips(count) on clearance_cases.
+        Relationships: [
+          {
+            foreignKeyName: "clearance_skips_case_id_fkey";
             columns: ["case_id"];
             isOneToOne: false;
             referencedRelation: "clearance_cases";
@@ -1475,6 +1519,91 @@ export type Database = {
       };
       sign_clearance: {
         Args: { p_case_id: string; p_slot_key: string; p_remarks?: string | null };
+        Returns: undefined;
+      };
+      save_clearance_details: {
+        Args: {
+          p_case_id: string;
+          p_contact_phone: string | null;
+          p_contact_email: string | null;
+          p_postal_address: string | null;
+          p_reporting_manager_name: string | null;
+          p_date_of_joining: string | null;
+          p_last_working_date: string;
+          p_resignation_letter_date: string | null;
+          p_resignation_effective_from: string | null;
+          p_unserved_notice_days: number | null;
+          p_overtime_single: number | null;
+          p_overtime_double: number | null;
+          p_overtime_triple: number | null;
+          p_annual_leave_balance: number | null;
+          p_other_outstanding: string | null;
+        };
+        Returns: undefined;
+      };
+      clearance_missing_for_case: {
+        Args: { p_case_id: string };
+        Returns: { slot_key: string; label: string }[];
+      };
+      skip_clearance_slot: {
+        Args: { p_case_id: string; p_slot_key: string; p_reason: string };
+        Returns: undefined;
+      };
+      unskip_clearance_slot: {
+        Args: { p_case_id: string; p_slot_key: string };
+        Returns: undefined;
+      };
+      set_clearance_line_manager: {
+        Args: { p_case_id: string; p_manager_person_id: string | null };
+        Returns: undefined;
+      };
+      clearance_search_managers: {
+        Args: { p_query: string; p_limit?: number };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+        }[];
+      };
+      my_handover_requests: {
+        Args: Record<string, never>;
+        Returns: {
+          case_id: string;
+          case_number: string;
+          employee_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          last_working_date: string;
+          case_status: "Submitted" | "In Clearance" | "Completed" | "Cancelled";
+          confirmed_at: string | null;
+        }[];
+      };
+      confirm_data_received: {
+        Args: { p_case_id: string };
+        Returns: undefined;
+      };
+      clearance_list_open_assets: {
+        Args: { p_case_id: string };
+        Returns: {
+          assignment_id: string;
+          asset_id: string;
+          asset_tag: string;
+          asset_name: string;
+          serial_number: string | null;
+          assigned_date: string;
+          assigned_condition: string | null;
+          asset_status: string;
+        }[];
+      };
+      clearance_return_asset: {
+        Args: {
+          p_case_id: string;
+          p_assignment_id: string;
+          p_returned_condition?: string | null;
+          p_new_status?: "Unassigned" | "Retired" | "Lost";
+          p_remarks?: string | null;
+        };
         Returns: undefined;
       };
     };

@@ -104,9 +104,15 @@ export default async function MyRequestsPage() {
   const { data: signoffs, error: signoffsError } = caseIds.length
     ? await supabase.schema("hr").from("clearance_signoffs").select("case_id").in("case_id", caseIds)
     : { data: [], error: null };
+  // Skipped parts need no signature, so they are left out of "x of y signed".
+  const { data: skips, error: skipsError } = caseIds.length
+    ? await supabase.schema("hr").from("clearance_skips").select("case_id").in("case_id", caseIds)
+    : { data: [], error: null };
   const signedByCase = new Map<string, number>();
   for (const s of signoffs ?? []) signedByCase.set(s.case_id, (signedByCase.get(s.case_id) ?? 0) + 1);
-  const clearanceError = casesError ?? slotsError ?? signoffsError;
+  const skippedByCase = new Map<string, number>();
+  for (const s of skips ?? []) skippedByCase.set(s.case_id, (skippedByCase.get(s.case_id) ?? 0) + 1);
+  const clearanceError = casesError ?? slotsError ?? signoffsError ?? skipsError;
 
   const rows: Row[] = [
     ...(hrTickets ?? []).map((t) => ({
@@ -150,7 +156,7 @@ export default async function MyRequestsPage() {
       href: `/requests/offboarding/${c.id}`,
       progress:
         c.status === "In Clearance"
-          ? `${signedByCase.get(c.id) ?? 0} of ${slotCount ?? 0} signed`
+          ? `${signedByCase.get(c.id) ?? 0} of ${(slotCount ?? 0) - (skippedByCase.get(c.id) ?? 0)} signed`
           : undefined,
     })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));

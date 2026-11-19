@@ -102,6 +102,45 @@ export async function cancelCase(caseId: string, reason: string): Promise<Action
   return { error: null };
 }
 
+// A skip changes what the signers and the employee see, so their pages are refreshed too.
+function revalidateSkip(caseId: string) {
+  revalidateCase(caseId);
+  revalidatePath("/hr/clearance", "layout");
+  revalidatePath("/requests");
+  revalidatePath(`/requests/offboarding/${caseId}`);
+}
+
+export async function skipSlot(caseId: string, slotKey: string, reason: string): Promise<ActionResult> {
+  const supabase = await forwarderClient();
+  if (!supabase) return { error: NOT_ALLOWED };
+
+  const trimmed = reason.trim();
+  if (trimmed.length < 3 || trimmed.length > 300) {
+    return { error: "Please give a short reason (3 to 300 characters)." };
+  }
+
+  const { error } = await supabase
+    .schema("hr")
+    .rpc("skip_clearance_slot", { p_case_id: caseId, p_slot_key: slotKey, p_reason: trimmed });
+  if (error) return { error: error.message };
+
+  revalidateSkip(caseId);
+  return { error: null };
+}
+
+export async function unskipSlot(caseId: string, slotKey: string): Promise<ActionResult> {
+  const supabase = await forwarderClient();
+  if (!supabase) return { error: NOT_ALLOWED };
+
+  const { error } = await supabase
+    .schema("hr")
+    .rpc("unskip_clearance_slot", { p_case_id: caseId, p_slot_key: slotKey });
+  if (error) return { error: error.message };
+
+  revalidateSkip(caseId);
+  return { error: null };
+}
+
 export async function refreshCaseOrg(caseId: string): Promise<ActionResult> {
   const supabase = await forwarderClient();
   if (!supabase) return { error: NOT_ALLOWED };

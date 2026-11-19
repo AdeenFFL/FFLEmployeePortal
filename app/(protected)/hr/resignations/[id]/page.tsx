@@ -2,16 +2,16 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
-import { CaseActions, RefreshOrgButton } from "./case-actions";
+import { CaseActions, RefreshOrgButton, SlotSkipControl } from "./case-actions";
 import {
   STATUS_TONE,
+  caseReadiness,
   cleanSlotLabel,
   daysLeftText,
   formatDay,
   formatTimestamp,
   karachiToday,
   orderSlotsHrLast,
-  readinessProblems,
   signersFor,
   type SlotInfo,
 } from "../clearance-view";
@@ -23,7 +23,16 @@ const FORMS = [
   { key: "it", title: "Information Technology" },
 ] as const;
 
-type Step = { key: string; label: string; done: boolean; detail: string; missing?: boolean };
+type Step = {
+  key: string;
+  label: string;
+  done: boolean;
+  detail: string;
+  missing?: boolean;
+  skipped?: boolean;
+  // Set on a part the HRBP may skip or un-skip (not signed, not HR, request still open).
+  skip?: { undoBlockedReason: string | null };
+};
 
 export default async function ResignationDetailPage({
   params,
@@ -43,6 +52,8 @@ export default async function ResignationDetailPage({
     unitsResult,
     signersResult,
     { data: canForward },
+    skipsResult,
+    missingResult,
   ] = await Promise.all([
     hr.from("clearance_cases").select("*").eq("id", id).maybeSingle(),
     hr
@@ -62,6 +73,9 @@ export default async function ResignationDetailPage({
     hr.rpc("clearance_list_units"),
     hr.rpc("clearance_list_signers"),
     supabase.rpc("has_permission", { p_permission_key: "hr.clearance.forward" }),
+    hr.from("clearance_skips").select("slot_key, reason, skipped_at").eq("case_id", id),
+    // Parts with no signer that are not skipped: the same list Forward checks.
+    hr.rpc("clearance_missing_for_case", { p_case_id: id }),
   ]);
 
   // A malformed id, a case this user can't see, or one that doesn't exist all land here.
@@ -73,13 +87,16 @@ export default async function ResignationDetailPage({
     responsesResult.error ??
     signoffsResult.error ??
     unitsResult.error ??
-    signersResult.error;
+    signersResult.error ??
+    skipsResult.error ??
+    missingResult.error;
 
   const slots: SlotInfo[] = slotsResult.data ?? [];
   const signers = signersResult.data ?? [];
   const unitName = new Map((unitsResult.data ?? []).map((u) => [u.id, u.name]));
   const signoffBySlot = new Map((signoffsResult.data ?? []).map((s) => [s.slot_key, s]));
   const responseByLine = new Map((responsesResult.data ?? []).map((r) => [r.line_id, r]));
+  const skipBySlot = new Map((skipsResult.data ?? []).map((s) => [s.slot_key, s]));
   const today = karachiToday();
 
   const siteName = c.site_id ? (unitName.get(c.site_id) ?? "(inactive site)") : null;
@@ -87,8 +104,16 @@ export default async function ResignationDetailPage({
     ? (unitName.get(c.department_id) ?? "(inactive department)")
     : null;
 
-  const readiness = readinessProblems(c.site_id, c.department_id, slots, signers);
+  const readiness = caseReadiness(
+    c.site_id,
+    c.department_id,
+    slots,
+    missingResult.data ?? [],
+    new Set(skipBySlot.keys()),
+  );
   const showReadiness = c.status === "Submitted";
+  const canSkip =
+    Boolean(canForward) && (c.status === "Submitted" || c.status === "In Clearance");
   const showRefresh =
     showReadiness && Boolean(canForward) && (readiness.missingSite || readiness.missingDepartment);
 
@@ -125,6 +150,20 @@ export default async function ResignationDetailPage({
         };
       }
       const expected = signersFor(signers, slot, c.site_id, c.department_id);
+      const skippable = canSkip && slot.slot_key !== "hr";
+      const skip = skipBySlot.get(slot.slot_key);
+      if (skip) {
+        return {
+          key: slot.slot_key,
+          label: cleanSlotLabel(slot.label),
+          done: false,
+          skipped: true,
+          detail: `Skipped: ${skip.reason} (${formatTimestamp(skip.skipped_at)})`,
+          skip: skippable
+            ? { undoBlockedReason: expected.length === 0 ? "Set a signer for this part first" : null }
+            : undefined,
+        };
+      }
       const primary = expected.find((g) => g.is_primary) ?? expected[0];
       const backups = expected.length - 1;
       return {
@@ -135,6 +174,7 @@ export default async function ResignationDetailPage({
         detail: primary
           ? `Waiting. Expected: ${primary.full_name}${backups > 0 ? ` (+${backups} backup)` : ""}`
           : "Waiting. No signer set",
+        skip: skippable ? { undoBlockedReason: null } : undefined,
       };
     }),
     {
@@ -219,7 +259,7 @@ export default async function ResignationDetailPage({
                 <Link href="/hr/admin/clearance-signers" className="font-medium underline">
                   Clearance Signers
                 </Link>{" "}
-                page.
+                page, or skip a part for this request under Progress below.
               </p>
             )}
             {(readiness.missingSite || readiness.missingDepartment) && (
@@ -260,13 +300,21 @@ export default async function ResignationDetailPage({
                   }`}
                   aria-hidden
                 >
-                  {step.done ? "✓" : "○"}
+                  {step.done ? "✓" : step.skipped ? "–" : "○"}
                 </span>
                 <div>
                   <p className="text-sm font-medium text-slate-900">{step.label}</p>
                   <p className={`text-xs ${step.missing ? "text-red-600" : "text-slate-500"}`}>
                     {step.detail}
                   </p>
+                  {step.skip && (
+                    <SlotSkipControl
+                      caseId={c.id}
+                      slotKey={step.key}
+                      skipped={Boolean(step.skipped)}
+                      undoBlockedReason={step.skip.undoBlockedReason}
+                    />
+                  )}
                 </div>
               </li>
             ))}
