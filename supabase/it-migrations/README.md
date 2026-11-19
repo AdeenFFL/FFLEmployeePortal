@@ -216,3 +216,5 @@ comment block was replaced with a short replicated-from note.
 | `talha/talha_it_0010_valuation_functions.sql` | 2026-11-13 | Talha | Phase 6 valuation: it.compute_depreciation and it.record_asset_valuation (straight line, completed months). Not yet in the main sequence |
 | `talha/talha_hr_0005_hrbp_inbox_lookups.sql` | 2026-11-16 | Talha | HRBP inbox lookups: hr.clearance_search_employees and hr.refresh_clearance_case_org. Not yet in the main sequence |
 | `talha/talha_hr_0006_hr_roles_can_sign.sql` | 2026-11-17 | Talha | Lets the HR and HRBP roles open the signer inbox (hr.clearance.sign). Not yet in the main sequence |
+| `talha/talha_hr_0007_clearance_hr_details.sql` | 2026-11-18 | Talha | Clearance page one: hr.clearance_hr_details and hr.save_clearance_details (details the HR signer fills in). Not yet in the main sequence |
+| `talha/talha_hr_0008_skip_manager_assets.sql` | 2026-11-19 | Talha | Clearance: skip a part per request, line manager confirms data received, IT assets returned from the clearance form; replaces 4 functions. Not yet in the main sequence |
