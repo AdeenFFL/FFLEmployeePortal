@@ -33,6 +33,9 @@ export type HrDetailField = {
   maxLength?: number;
   step?: string;
   required?: boolean;
+  // Set by the Line manager picker, not typed here: shown read-only, and the save keeps the
+  // value already on the case.
+  fromPicker?: boolean;
 };
 
 export const HR_DETAIL_GROUPS: { title: string; fields: HrDetailField[] }[] = [
@@ -46,6 +49,7 @@ export const HR_DETAIL_GROUPS: { title: string; fields: HrDetailField[] }[] = [
         label: "Direct reporting manager",
         kind: "text",
         maxLength: 200,
+        fromPicker: true,
       },
       { key: "postal_address", label: "Postal address", kind: "textarea", maxLength: 500 },
     ],

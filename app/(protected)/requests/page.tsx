@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { primaryButtonClass } from "../it/_components/ticket-ui";
+import { formatTimestamp } from "../hr/resignations/clearance-view";
+import { ConfirmDataReceivedButton } from "./confirm-data-received";
 
 // A single, read-only aggregator across the portal's separate ticket/request systems (HR
 // tickets, IT tickets, IT onboarding/offboarding) — built instead of merging those backends
@@ -114,6 +116,11 @@ export default async function MyRequestsPage() {
   for (const s of skips ?? []) skippedByCase.set(s.case_id, (skippedByCase.get(s.case_id) ?? 0) + 1);
   const clearanceError = casesError ?? slotsError ?? signoffsError ?? skipsError;
 
+  // Clearances where HR chose me as the leaving employee's line manager.
+  const { data: handovers, error: handoversError } = personId
+    ? await supabase.schema("hr").rpc("my_handover_requests")
+    : { data: [], error: null };
+
   const rows: Row[] = [
     ...(hrTickets ?? []).map((t) => ({
       key: `hr-${t.id}`,
@@ -177,6 +184,46 @@ export default async function MyRequestsPage() {
         <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
           Could not load your offboarding requests.
         </p>
+      )}
+
+      {handoversError && (
+        <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+          Could not load the handovers you need to confirm.
+        </p>
+      )}
+
+      {(handovers ?? []).length > 0 && (
+        <section className="mb-6">
+          <h2 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-500">
+            Handover to confirm
+          </h2>
+          <p className="mb-3 text-sm text-slate-500">
+            HR chose you as the line manager of these leaving employees. Confirm once you have
+            received their complete data.
+          </p>
+          <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+            {(handovers ?? []).map((h) => (
+              <li key={h.case_id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium text-slate-900">{h.employee_name}</p>
+                  <p className="text-xs text-slate-500">
+                    {[h.case_number, h.employee_code, h.designation].filter(Boolean).join(" · ")}
+                  </p>
+                  <p className="text-xs text-slate-500">
+                    Last working date {formatDay(h.last_working_date)}
+                  </p>
+                </div>
+                {h.confirmed_at ? (
+                  <p className="text-sm text-green-700">Confirmed on {formatTimestamp(h.confirmed_at)}</p>
+                ) : h.case_status === "In Clearance" ? (
+                  <ConfirmDataReceivedButton caseId={h.case_id} />
+                ) : (
+                  <p className="text-sm text-slate-500">Closed without your confirmation</p>
+                )}
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
 
       {rows.length === 0 ? (

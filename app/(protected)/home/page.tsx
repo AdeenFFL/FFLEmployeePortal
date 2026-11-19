@@ -104,7 +104,7 @@ export default async function EmployeeHomePage() {
           const LinkIcon = link.icon;
           return (
             <Link
-              key={link.href}
+              key={link.label}
               href={link.href}
               className="group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
             >

@@ -909,7 +909,8 @@ export type AssetAssignment = {
   person_id: string;
   company_id: string;
   site_id: string | null;
-  assigned_by_person_id: string;
+  // Nullable from talha_it_0011: set to null when the person who assigned it is deleted.
+  assigned_by_person_id: string | null;
   returned_to_person_id: string | null;
   assigned_date: string;
   return_date: string | null;

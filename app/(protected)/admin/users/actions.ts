@@ -369,11 +369,13 @@ export async function setUserStatus(personId: string, status: UserStatus) {
 // only their own records go" pattern — a ticket assigned to this person is deleted even though
 // someone else filed it. There is no undo. Soft-delete (status-based, no data loss) is a
 // separate, not-yet-built feature — this is the hard-delete-only pass.
-export async function hardDeleteUser(personId: string) {
+// Expected failures are RETURNED (shown inline by <DeleteUserButton>), not thrown: Next.js hides
+// a thrown Server Action error's message in production.
+export async function hardDeleteUser(personId: string): Promise<{ error: string | null }> {
   const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 
   if (personId === adminPersonId) {
-    throw new Error("You cannot delete your own account.");
+    return { error: "You cannot delete your own account." };
   }
 
   const { data: account } = await supabase
@@ -386,7 +388,21 @@ export async function hardDeleteUser(personId: string) {
   // referencing this person — but NOT their Supabase Auth identity (user_accounts.auth_user_id
   // references auth.users, not the other way around), so that's removed separately below.
   const { error } = await supabase.from("persons").delete().eq("id", personId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    // 23503 = a row elsewhere still points at this person and has no delete rule.
+    if (error.code === "23503" && error.message.includes("asset_assignments_person_id_fkey")) {
+      return {
+        error:
+          "This employee has IT asset history (assets assigned to them), so they cannot be deleted. Set them Inactive instead.",
+      };
+    }
+    if (error.code === "23503") {
+      return {
+        error: `This user is still linked to other records, so they cannot be deleted. Set them Inactive instead. (${error.message})`,
+      };
+    }
+    return { error: error.message };
+  }
 
   if (account?.auth_user_id) {
     const admin = createAdminClient();
@@ -410,6 +426,7 @@ export async function hardDeleteUser(personId: string) {
   });
 
   revalidatePath("/admin/users");
+  return { error: null };
 }
 
 export async function revokeInvitation(email: string) {

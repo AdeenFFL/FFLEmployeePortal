@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
-import { listOpenAssignments } from "@/lib/it/assets";
 import {
   STATUS_TONE,
   cleanSlotLabel,
@@ -21,12 +20,16 @@ import {
 } from "../../signer-work";
 import { HR_DETAIL_GROUPS, formatHrDetail, toHrDetailsValues } from "../../hr-details-fields";
 import { HrDetailsForm } from "./hr-details-form";
+import { LineManagerPicker } from "./line-manager-picker";
+import { AssetReturns, type OpenAsset } from "./asset-returns";
 import { SlotForm, type FormLine } from "./slot-form";
 
 const DETAILS_NOT_SAVED =
   "HR details have not been saved yet. You can still sign, but page one will print with empty fields.";
 
 const LIST_PATH = "/hr/clearance";
+// Page-one line "Complete data received by line manager".
+const DATA_RECEIVED_LINE = "p1.data_received";
 
 const errorBox = "rounded-md bg-red-50 px-3 py-2 text-sm text-red-700";
 const card = "rounded-xl border border-slate-200 bg-white p-6 shadow-sm";
@@ -54,7 +57,7 @@ export default async function ClearanceSlotPage({
   const { data: c, error: caseError } = await hr
     .from("clearance_cases")
     .select(
-      "id, case_number, person_id, employee_name, employee_code, designation, last_working_date, site_id, department_id, status, forwarded_at, cancelled_reason, contact_phone, contact_email, postal_address, reporting_manager_name, date_of_joining",
+      "id, case_number, person_id, employee_name, employee_code, designation, last_working_date, site_id, department_id, status, forwarded_at, cancelled_reason, contact_phone, contact_email, postal_address, reporting_manager_name, date_of_joining, line_manager_person_id, data_received_confirmed_at",
     )
     .eq("id", caseId)
     .maybeSingle();
@@ -87,14 +90,14 @@ export default async function ClearanceSlotPage({
     linesResult,
     responsesResult,
     signoffsResult,
-    canReadAssets,
+    assetsResult,
     detailsResult,
     departmentName,
     skipsResult,
   ] = await Promise.all([
     hr
       .from("clearance_lines")
-      .select("id, description, auto_from_form, sort_order")
+      .select("id, line_key, description, auto_from_form, sort_order")
       .eq("slot_key", slotKey)
       .eq("is_active", true)
       .order("sort_order"),
@@ -103,11 +106,10 @@ export default async function ClearanceSlotPage({
       .from("clearance_signoffs")
       .select("slot_key, signer_name, signer_designation, signed_at, remarks")
       .eq("case_id", caseId),
+    // The IT signer of this case can list them without IT Inventory access (security definer).
     showAssets
-      ? supabase
-          .rpc("has_permission", { p_permission_key: "it.assets.read" })
-          .then(({ data }) => Boolean(data))
-      : Promise.resolve(false),
+      ? hr.rpc("clearance_list_open_assets", { p_case_id: caseId })
+      : Promise.resolve({ data: [], error: null }),
     // Readable by the HR signer of this case (RLS on hr.clearance_hr_details).
     isHrSlot
       ? hr
@@ -127,17 +129,15 @@ export default async function ClearanceSlotPage({
     hr.from("clearance_skips").select("slot_key, reason").eq("case_id", caseId),
   ]);
 
-  // Without it.assets.read the asset list comes back empty (RLS), which would wrongly read as
-  // "no assets" — so it is only fetched for people who can see the register.
-  let assets: Awaited<ReturnType<typeof listOpenAssignments>> = [];
-  let assetsError = false;
-  if (showAssets && canReadAssets) {
-    try {
-      assets = await listOpenAssignments(supabase, c.person_id);
-    } catch {
-      assetsError = true;
-    }
-  }
+  const assets: OpenAsset[] = (assetsResult.data ?? []).map((a) => ({
+    assignment_id: a.assignment_id,
+    asset_tag: a.asset_tag,
+    asset_name: a.asset_name,
+    serial_number: a.serial_number,
+    assignedOn: formatDay(a.assigned_date),
+    assigned_condition: a.assigned_condition,
+    asset_status: a.asset_status,
+  }));
 
   const loadError =
     linesResult.error ??
@@ -163,6 +163,11 @@ export default async function ClearanceSlotPage({
       autoFormTitle: l.auto_from_form ? FORM_TITLES[l.auto_from_form] : null,
       outcome: r?.outcome ?? null,
       remarks: r?.remarks ?? null,
+      // While a line manager is chosen, only their confirmation answers this line.
+      lockedNote:
+        l.line_key === DATA_RECEIVED_LINE && c.line_manager_person_id
+          ? "Fills in by itself when the line manager confirms."
+          : null,
     };
   });
 
@@ -179,6 +184,8 @@ export default async function ClearanceSlotPage({
   const savedDetails = detailsResult.data;
   const detailValues = toHrDetailsValues(c, savedDetails);
   const canEdit = isOpen && !mySignoff;
+  // Same rule as setLineManager: saved details + a chosen manager = the manager is locked.
+  const managerLocked = Boolean(savedDetails && c.line_manager_person_id);
   const fixedDetails: [string, string][] = [
     ["Employee P#", c.employee_code ?? "—"],
     ["Name", c.employee_name],
@@ -258,29 +265,20 @@ export default async function ClearanceSlotPage({
       {showAssets && (
         <section className={card}>
           <h2 className={cardTitle}>Assets still assigned (from IT Inventory)</h2>
-          {!canReadAssets ? (
-            <p className="text-sm text-slate-500">
-              You can&apos;t see the IT asset register. Check this employee&apos;s assets in IT
-              Inventory or ask the IT team.
-            </p>
-          ) : assetsError ? (
-            <p className={errorBox}>Could not load the assets.</p>
-          ) : assets.length === 0 ? (
-            <p className="text-sm text-slate-500">No assets are assigned to this employee.</p>
+          {assetsResult.error ? (
+            <p className={errorBox}>Could not load the assets. Please try again later.</p>
           ) : (
-            <ul className="flex flex-col gap-2 text-sm">
-              {assets.map((a) => (
-                <li key={a.id} className="flex flex-wrap justify-between gap-2">
-                  <span className="text-slate-900">
-                    {a.assets?.asset_tag ?? "—"} · {a.assets?.asset_name ?? "—"}
-                    {a.assets?.serial_number ? ` · S/N ${a.assets.serial_number}` : ""}
-                  </span>
-                  <span className="text-slate-500">Since {formatDay(a.assigned_date)}</span>
-                </li>
-              ))}
-            </ul>
+            <AssetReturns
+              caseId={c.id}
+              assets={assets}
+              canReturn={isOpen && !mySignoff && !mySkip}
+            />
           )}
-          <p className="mt-3 text-xs text-slate-400">For help only: it does not answer any line.</p>
+          {assets.length > 0 && (
+            <p className="mt-3 text-xs text-slate-400">
+              Return each asset, or mark it Lost, before signing. This updates IT Inventory at once.
+            </p>
+          )}
         </section>
       )}
 
@@ -331,6 +329,25 @@ export default async function ClearanceSlotPage({
         </section>
       )}
 
+      {isHrSlot && (
+        <section className={card}>
+          <h2 className={cardTitle}>Line manager</h2>
+          <LineManagerPicker
+            caseId={c.id}
+            managerName={c.line_manager_person_id ? c.reporting_manager_name : null}
+            confirmedOn={
+              c.data_received_confirmed_at ? formatTimestamp(c.data_received_confirmed_at) : null
+            }
+            canChange={canEdit && !c.data_received_confirmed_at && !managerLocked}
+            lockedNote={
+              managerLocked && !c.data_received_confirmed_at
+                ? "Locked: the HR details were saved with this line manager."
+                : null
+            }
+          />
+        </section>
+      )}
+
       <section className={card}>
         <h2 className={cardTitle}>{FORM_TITLES[slot.form_key]}</h2>
         {loadError ? (
@@ -368,12 +385,19 @@ export default async function ClearanceSlotPage({
           </div>
         ) : (
           <SlotForm
+            // Choosing or clearing the line manager changes which lines are editable: start fresh.
+            key={c.line_manager_person_id ?? "no-line-manager"}
             caseId={c.id}
             slotKey={slotKey}
             lines={lines}
             labels={labels}
             waitingFor={waitingFor}
             signHint={isHrSlot && !savedDetails ? DETAILS_NOT_SAVED : null}
+            signBlocker={
+              assets.length > 0
+                ? `${assets.length} asset${assets.length === 1 ? " is" : "s are"} still assigned: return ${assets.length === 1 ? "it" : "them"} (or mark Lost) above.`
+                : null
+            }
           />
         )}
       </section>

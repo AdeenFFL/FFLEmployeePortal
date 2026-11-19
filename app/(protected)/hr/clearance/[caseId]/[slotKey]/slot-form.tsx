@@ -14,6 +14,8 @@ export type FormLine = {
   autoFormTitle: string | null;
   outcome: Outcome | null;
   remarks: string | null;
+  // Set when someone else answers this line (the line manager's "data received"): shown only.
+  lockedNote?: string | null;
 };
 
 const OUTCOMES: Outcome[] = ["Yes", "No", "N/A"];
@@ -38,6 +40,7 @@ export function SlotForm({
   labels,
   waitingFor,
   signHint = null,
+  signBlocker = null,
 }: {
   caseId: string;
   slotKey: string;
@@ -47,8 +50,10 @@ export function SlotForm({
   waitingFor: string[];
   // A soft warning in the Sign box; unlike the blockers it does not disable Sign.
   signHint?: string | null;
+  // Something outside this form that must be done first (e.g. assets still assigned): disables Sign.
+  signBlocker?: string | null;
 }) {
-  const editable = lines.filter((l) => !l.auto);
+  const editable = lines.filter((l) => !l.auto && !l.lockedNote);
   const initial = () =>
     new Map<string, Answer>(
       editable.map((l) => [l.id, { outcome: l.outcome, remarks: l.remarks ?? "" }]),
@@ -130,6 +135,10 @@ export function SlotForm({
       `${unansweredCount} line${unansweredCount === 1 ? " still needs" : "s still need"} an answer.`,
     );
   }
+  if (lines.some((l) => l.lockedNote && !l.outcome)) {
+    signBlockers.push("Waiting for the line manager to confirm “Complete data received”.");
+  }
+  if (signBlocker) signBlockers.push(signBlocker);
   if (changedIds.length > 0) signBlockers.push("Save your answers first.");
   const busy = isSaving || isSigning;
 
@@ -150,6 +159,18 @@ export function SlotForm({
                     {line.outcome
                       ? `${labels[line.outcome]} (filled in when the ${line.autoFormTitle} form was signed)`
                       : `Fills in by itself when the ${line.autoFormTitle} form is signed.`}
+                  </p>
+                </li>
+              );
+            }
+            if (line.lockedNote) {
+              return (
+                <li key={line.id} className="py-4">
+                  <p className="text-sm font-medium text-slate-900">{line.description}</p>
+                  <p className="mt-1 text-xs text-slate-500">
+                    {line.outcome
+                      ? `${labels[line.outcome]}${line.remarks ? ` · ${line.remarks}` : ""}`
+                      : line.lockedNote}
                   </p>
                 </li>
               );

@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { saveClearanceDetails } from "./actions";
 import {
   HR_DETAIL_FIELDS,
@@ -24,6 +25,7 @@ export function HrDetailsForm({
   // "Last saved …" text worked out on the server, or null when never saved.
   lastSaved: string | null;
 }) {
+  const router = useRouter();
   const [saved, setSaved] = useState(initial);
   const [draft, setDraft] = useState(initial);
   const [error, setError] = useState<string | null>(null);
@@ -56,6 +58,8 @@ export function HrDetailsForm({
         setSaved(values);
         setSavedOnce(true);
         setJustSaved(true);
+        // Re-read the page: saving can lock the line manager and clears the Sign hint.
+        router.refresh();
       } catch {
         setError("Something went wrong. Please try again.");
       }
@@ -63,6 +67,15 @@ export function HrDetailsForm({
   }
 
   function renderInput(field: HrDetailField) {
+    // Read from the prop, not the draft: it changes when the picker below saves a new manager.
+    if (field.fromPicker) {
+      return (
+        <div id={`hr-${field.key}`}>
+          <p className="text-sm text-slate-900">{initial[field.key] || "—"}</p>
+          <p className="text-xs text-slate-500">Set it with “Line manager” below.</p>
+        </div>
+      );
+    }
     const common = {
       id: `hr-${field.key}`,
       value: draft[field.key],
