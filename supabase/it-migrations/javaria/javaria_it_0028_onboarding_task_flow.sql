@@ -14,7 +14,8 @@
 --                 own action.
 -- Depends on:  0048_it_task_type_owners.sql, 0052_it_onboarding_site_scoping.sql,
 --              javaria_it_0003_notifications.sql
--- Applied to live DB: NO
+-- Applied to live DB: first version YES (2026-11-19); this version is safe to run again on top of it
+-- (every function is "create or replace", every trigger is dropped first).
 --
 -- Functions REPLACED: it.auto_assign_checklist_item, it.notify_checklist_assignment.
 -- New: it.assign_open_tasks_to_executive, it.notify_checklist_done (+ their triggers).
@@ -72,7 +73,7 @@ $$;
 --    message for the request.
 -- ===========================================================================
 
-create function it.assign_open_tasks_to_executive()
+create or replace function it.assign_open_tasks_to_executive()
 returns trigger
 language plpgsql
 security definer
@@ -147,7 +148,7 @@ $$;
 -- 3. Task done → tell the IT Executive.
 -- ===========================================================================
 
-create function it.notify_checklist_done()
+create or replace function it.notify_checklist_done()
 returns trigger
 language plpgsql
 security definer
