@@ -15,6 +15,7 @@ import {
   CHECKLIST_STATUS_TONE,
   FINISHED_STATUSES,
   TASK_DETAIL_FIELDS,
+  TASK_GUIDE,
 } from "@/lib/it/onboarding";
 import { formatDateTime } from "@/lib/it/tickets";
 import {
@@ -101,6 +102,7 @@ export default async function LifecycleRequestPage({
     canApprove,
     canUpdate,
     canAssignAssets,
+    canManageUsers,
   ] = await Promise.all([
     supabase
       .schema("it")
@@ -122,6 +124,7 @@ export default async function LifecycleRequestPage({
     hasItPermission(supabase, "it.onboarding.approve"),
     hasItPermission(supabase, "it.onboarding.update"),
     hasItPermission(supabase, "it.assets.assign"),
+    hasItPermission(supabase, "route:/admin/users"),
   ]);
 
   const checklist = items ?? [];
@@ -133,10 +136,14 @@ export default async function LifecycleRequestPage({
     !isFinished &&
     (canAssign || (portalTask && portalTask.assigned_to_person_id === personId));
 
-  // The checklist is IT's own work. HR (who raise the request and can read it) see only how far it
-  // has got; the tasks themselves are for whoever can assign or work them, or holds one.
-  const showChecklist =
-    canAssign || canUpdate || checklist.some((i) => Boolean(personId) && i.assigned_to_person_id === personId);
+  // Who sees what on the checklist:
+  //   * whoever runs the request (can assign onboarding work, or is its IT Executive): every task;
+  //   * IT staff holding tasks on it: only their own tasks, with how to complete each one;
+  //   * anyone else who can read the request (HR): just how far IT has got.
+  const isManager = canAssign || (Boolean(personId) && request.it_executive_person_id === personId);
+  const myTasks = checklist.filter((i) => Boolean(personId) && i.assigned_to_person_id === personId);
+  const showChecklist = isManager || myTasks.length > 0;
+  const visibleTasks = isManager ? checklist : myTasks;
 
   const assignmentIds = checklist
     .map((i) => i.assignment_id)
@@ -177,6 +184,28 @@ export default async function LifecycleRequestPage({
       ? supabase.from("roles").select("id, name").order("name")
       : Promise.resolve({ data: null }),
   ]);
+  // Employee account (onboarding): the staged sign-in invite and, once they have signed in, their
+  // role. invited_users / user_roles are admin-only under RLS; read here only for the request's
+  // managers, same justification as the leaver-account read above.
+  const showAccount = request.kind === "Onboarding" && isManager;
+  const accountAdmin = showAccount ? createAdminClient() : null;
+  const [{ data: accountInvite }, { data: accountRoles }, { data: allRoles }] = accountAdmin
+    ? await Promise.all([
+        accountAdmin
+          .from("invited_users")
+          .select("email, role_id, invited_at")
+          .eq("onboarding_request_id", request.id)
+          .maybeSingle(),
+        request.person_id
+          ? accountAdmin.from("user_roles").select("role_id").eq("person_id", request.person_id)
+          : Promise.resolve({ data: null }),
+        accountAdmin.from("roles").select("id, name"),
+      ])
+    : [{ data: null }, { data: null }, { data: null }];
+  const roleName = new Map((allRoles ?? []).map((r) => [r.id, r.name]));
+  const emailTask = checklist.find((i) => i.task_type === "email_account");
+  const companyEmail = emailTask?.details?.email_address ?? null;
+
   const assetByAssignmentId = new Map(
     (assignedAssets ?? []).map((a) => [a.id, a.assets as unknown as { asset_tag: string; asset_name: string } | null]),
   );
@@ -215,14 +244,16 @@ export default async function LifecycleRequestPage({
           {showChecklist ? (
           <section className={`${cardClass} p-6`}>
             <div className="mb-4 flex items-baseline justify-between">
-              <h2 className="text-base font-semibold text-slate-900">Checklist</h2>
+              <h2 className="text-base font-semibold text-slate-900">{isManager ? "Checklist" : "Your tasks"}</h2>
               <span className="text-sm text-slate-500">
-                {done.length}/{checklist.length} done
+                {isManager
+                  ? `${done.length}/${checklist.length} done`
+                  : `${myTasks.filter((i) => i.status === "Completed" || i.status === "Not Applicable").length}/${myTasks.length} of yours done · ${done.length}/${checklist.length} overall`}
               </span>
             </div>
 
             <ul className="space-y-3">
-              {checklist.map((item) => {
+              {visibleTasks.map((item) => {
                 const isMine = Boolean(personId) && item.assigned_to_person_id === personId;
                 const canWork = !isFinished && (canAssign || (canUpdate && isMine));
                 const fields = TASK_DETAIL_FIELDS[item.task_type] ?? [];
@@ -242,6 +273,16 @@ export default async function LifecycleRequestPage({
                       </div>
                       <StatusPill label={item.status} tone={CHECKLIST_STATUS_TONE[item.status]} />
                     </div>
+
+                    {(isMine || isManager) &&
+                      !isFinished &&
+                      (item.status === "Pending" || item.status === "In Progress") &&
+                      TASK_GUIDE[item.task_type] && (
+                        <p className="mt-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                          <span className="font-semibold">How to complete: </span>
+                          {TASK_GUIDE[item.task_type]}
+                        </p>
+                      )}
 
                     {item.task_type === "asset_allocation" && item.assignment_id && (
                       <p className="mt-2 text-xs text-emerald-700">
@@ -403,7 +444,7 @@ export default async function LifecycleRequestPage({
               })}
             </ul>
 
-            {checklist.map((item) => {
+            {visibleTasks.map((item) => {
               if (sp.updateTask !== item.id) return null;
 
               if (item.task_type === "asset_allocation") {
@@ -550,6 +591,9 @@ export default async function LifecycleRequestPage({
                 </span>
               </div>
               <p className="mt-1 text-xs text-slate-500">IT works through its checklist; the status above shows when it is finished.</p>
+              {canUpdate && (
+                <p className="mt-2 text-xs text-slate-500">No task on this request is assigned to you.</p>
+              )}
             </section>
           )}
 
@@ -610,6 +654,55 @@ export default async function LifecycleRequestPage({
                 </form>
               )}
           </Panel>
+
+          {showAccount && (
+            <Panel title="Employee account">
+              <ol className="space-y-3 text-sm">
+                <li>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">1 · Company email</p>
+                  <p className="text-slate-700">
+                    {!request.email_required
+                      ? `Not needed: signs in with ${request.personal_email ?? "their personal email"}`
+                      : companyEmail
+                        ? companyEmail
+                        : "Not created yet (Email Account task)"}
+                  </p>
+                </li>
+                <li>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">2 · Sign-in invite</p>
+                  <p className="text-slate-700">
+                    {request.person_id
+                      ? "Used"
+                      : accountInvite
+                        ? `Sent to ${accountInvite.email} · role ${roleName.get(accountInvite.role_id) ?? "—"}`
+                        : request.email_required
+                          ? "Sent when the Email Account task is completed"
+                          : "Account created when the request was raised"}
+                  </p>
+                  {accountInvite && !request.person_id && (
+                    <p className="text-xs text-slate-500">
+                      The role is set by the Portal Account task. Listed under User Management → Pending Invitations.
+                    </p>
+                  )}
+                </li>
+                <li>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">3 · Portal account</p>
+                  <p className="text-slate-700">
+                    {request.person_id
+                      ? `${nameOf(request.person_id)} · ${
+                          (accountRoles ?? []).map((r) => roleName.get(r.role_id)).filter(Boolean).join(", ") || "no role"
+                        }`
+                      : "Not yet: created the first time they sign in, and linked here automatically"}
+                  </p>
+                </li>
+              </ol>
+              {canManageUsers && (
+                <Link href="/admin/users" className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline">
+                  Open User Management
+                </Link>
+              )}
+            </Panel>
+          )}
 
           {request.kind === "Onboarding" && (
             <Panel title="Employee confirmation">

@@ -31,3 +31,18 @@ export async function requirePermission(permissionKey: string) {
   const actorLabel = account.persons?.full_name ?? account.persons?.personal_email ?? "Unknown";
   return { supabase, personId: account.person_id as string, actorLabel };
 }
+
+// Same, but any one of the keys is enough (e.g. IT staff who only work their own onboarding tasks
+// hold it.onboarding.update, not it.onboarding.read).
+export async function requireAnyPermission(permissionKeys: string[]) {
+  let lastError: unknown;
+  for (const key of permissionKeys) {
+    try {
+      return await requirePermission(key);
+    } catch (e) {
+      lastError = e;
+      if (!(e instanceof Error) || !e.message.startsWith("Forbidden: ")) throw e;
+    }
+  }
+  throw lastError ?? new Error("Forbidden");
+}

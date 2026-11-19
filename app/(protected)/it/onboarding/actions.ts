@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requirePermission } from "@/lib/auth/require-permission";
+import { requireAnyPermission, requirePermission } from "@/lib/auth/require-permission";
 import { requireActiveUser } from "@/lib/auth/require-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -369,7 +369,7 @@ export async function assignChecklistItem(requestId: string, itemId: string, for
 // The assignee records what was done (BRD §5.1.6–5.1.11, §5.2.7–5.2.10) and the item's status.
 export async function updateChecklistItem(requestId: string, itemId: string, formData: FormData) {
   const path = `/it/onboarding/${requestId}`;
-  const { supabase } = await requirePermission("it.onboarding.read");
+  const { supabase } = await requireAnyPermission(["it.onboarding.read", "it.onboarding.update"]);
 
   const status = text(formData, "status") as ItChecklistStatus;
   if (!CHECKLIST_STATUSES.includes(status)) go(path, "error", "Invalid task status.");
@@ -413,7 +413,7 @@ export async function updateChecklistItem(requestId: string, itemId: string, for
 // flow already does.
 export async function completeEmailAccountTask(requestId: string, itemId: string, formData: FormData) {
   const path = `/it/onboarding/${requestId}`;
-  const { supabase } = await requirePermission("it.onboarding.read");
+  const { supabase } = await requireAnyPermission(["it.onboarding.read", "it.onboarding.update"]);
 
   const status = text(formData, "status") as ItChecklistStatus;
   if (!CHECKLIST_STATUSES.includes(status)) go(path, "error", "Invalid task status.");

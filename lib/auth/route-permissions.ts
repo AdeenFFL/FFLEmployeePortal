@@ -58,7 +58,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // "any of"; gated loosely at module:it here, same shape as /it/settings, and the page itself
   // enforces the per-kind permission on submit.
   "/it/onboarding/new": ["hr.onboarding.create", "hr.replacement.create"],
-  "/it/onboarding": "it.onboarding.read",
+  // IT staff who only work their own onboarding tasks hold it.onboarding.update (RLS shows them
+  // just the requests they have tasks on).
+  "/it/onboarding": ["it.onboarding.read", "it.onboarding.update"],
   // Consumable stock (javaria_it_0022) — before the /it/inventory prefix.
   "/it/inventory/stock": "it.stock.read",
   "/it/inventory/settings": "it.inventory_settings.update",

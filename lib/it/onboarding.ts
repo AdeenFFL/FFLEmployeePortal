@@ -103,6 +103,28 @@ export const TASK_TYPE_LABELS: Record<ItChecklistTaskType, string> = {
   other: "Other",
 };
 
+// "How to complete" shown on each task to whoever works it. Keep in step with the actions in
+// app/(protected)/it/onboarding/actions.ts.
+export const TASK_GUIDE: Record<ItChecklistTaskType, string> = {
+  email_account:
+    "Create the mailbox in Microsoft 365, then Update task: enter the address and mark Completed. The portal then sends the new joiner a sign-in invite (it appears under User Management → Pending Invitations).",
+  license_assignment: "Assign the licences in the admin centre, list them here and mark Completed.",
+  access_provisioning: "Grant the accesses (Teams, SharePoint, VPN, ERP, folders…), list them here and mark Completed.",
+  software_installation: "Install and configure the software on the device, list it here and mark Completed.",
+  asset_allocation:
+    "Needs the new joiner's portal account (they sign in once with their company email). Then Assign an asset from the register; the task completes itself.",
+  asset_handover:
+    "Waits for the employee to acknowledge the asset on My Assets, then Mark handover confirmed.",
+  portal_account:
+    "After the Email Account task: choose the role they need. Their account is created with that role the first time they sign in, and is linked to this request automatically.",
+  email_backup_closure: "Back up the mailbox, then close it. Enter the backup date and mark Completed.",
+  access_revocation: "Remove every access (Teams, VPN, ERP, folders…), list them here and mark Completed.",
+  hardware_recovery: "Collect the laptop and other equipment, list what came back and mark Completed.",
+  asset_return: "Record each asset's return under Assets to return, then mark this Completed.",
+  license_deactivation: "Remove the licences in the admin centre, list them here and mark Completed.",
+  other: "Do the work described, add a note and mark Completed (or Not Applicable with a reason).",
+};
+
 export const TASK_DETAIL_FIELDS: Record<ItChecklistTaskType, DetailField[]> = {
   email_account: [
     { key: "email_address", label: "Company email address", placeholder: `name@${COMPANY_EMAIL_DOMAIN}` },
