@@ -13,21 +13,38 @@ import {
 const inputClass =
   "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
 
+// "2024-03-31" → "2024-04-01", so the Last working date calendar starts after the joining date.
+// Returns undefined for an empty or invalid date.
+function dayAfter(date: string): string | undefined {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return undefined;
+  const d = new Date(`${date}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return undefined;
+  d.setUTCDate(d.getUTCDate() + 1);
+  return d.toISOString().slice(0, 10);
+}
+
 // The HR signer's page-one details: one form, ONE "Save details" button. The database function
 // overwrites every field at once, so the whole form is always sent. Errors stay inline.
 export function HrDetailsForm({
   caseId,
   initial,
+  prefill,
+  prefillNote,
   lastSaved,
 }: {
   caseId: string;
   initial: HrDetailsValues;
+  // Suggested values (e.g. the joining date from onboarding): they start in the form as unsaved
+  // changes, so "Save details" stores them.
+  prefill?: Partial<HrDetailsValues>;
+  // Shown under a prefilled field while it still holds the suggested value.
+  prefillNote?: string;
   // "Last saved …" text worked out on the server, or null when never saved.
   lastSaved: string | null;
 }) {
   const router = useRouter();
   const [saved, setSaved] = useState(initial);
-  const [draft, setDraft] = useState(initial);
+  const [draft, setDraft] = useState<HrDetailsValues>({ ...initial, ...prefill });
   const [error, setError] = useState<string | null>(null);
   const [justSaved, setJustSaved] = useState(false);
   const [savedOnce, setSavedOnce] = useState(false);
@@ -72,7 +89,7 @@ export function HrDetailsForm({
       return (
         <div id={`hr-${field.key}`}>
           <p className="text-sm text-slate-900">{initial[field.key] || "—"}</p>
-          <p className="text-xs text-slate-500">Set it with “Line manager” below.</p>
+          <p className="text-xs text-slate-500">Set it with “Line manager” above.</p>
         </div>
       );
     }
@@ -106,7 +123,7 @@ export function HrDetailsForm({
         type={type}
         required={field.required}
         maxLength={field.maxLength}
-        min={type === "number" ? 0 : undefined}
+        min={type === "number" ? 0 : field.key === "last_working_date" ? dayAfter(draft.date_of_joining) : undefined}
         max={field.kind === "whole" ? 365 : undefined}
         step={field.kind === "whole" ? 1 : field.step}
         inputMode={field.kind === "decimal" ? "decimal" : undefined}
@@ -134,6 +151,12 @@ export function HrDetailsForm({
                   {field.required && <span className="text-red-600"> *</span>}
                 </label>
                 {renderInput(field)}
+                {prefillNote &&
+                  prefill?.[field.key] !== undefined &&
+                  draft[field.key] === prefill[field.key] &&
+                  draft[field.key] !== saved[field.key] && (
+                    <p className="text-xs text-blue-700">{prefillNote}</p>
+                  )}
               </div>
             ))}
           </div>

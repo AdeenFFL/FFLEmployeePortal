@@ -56,12 +56,12 @@ export async function OffboardingCard({
   return (
     <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
       <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
-        Offboarding
+        Clearance
       </h2>
 
       {caseError ? (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
-          Could not load your offboarding request. Please try again later.
+          Could not load your clearance request. Please try again later.
         </p>
       ) : (
         <div className="flex flex-col gap-4">

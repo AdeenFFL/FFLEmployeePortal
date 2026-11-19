@@ -137,6 +137,11 @@ export async function saveClearanceDetails(
     }
     text[field.key] = raw;
   }
+  // App rule (not in the database): the last working date comes after the date of joining.
+  // Both are YYYY-MM-DD here, so comparing the text compares the dates.
+  if (text.date_of_joining && text.last_working_date && text.last_working_date <= text.date_of_joining) {
+    return { error: "Last working date must be after the date of joining." };
+  }
 
   const supabase = await signerClient();
   if (!supabase) return { error: NOT_ALLOWED };
@@ -146,10 +151,14 @@ export async function saveClearanceDetails(
   const { data: current, error: caseError } = await supabase
     .schema("hr")
     .from("clearance_cases")
-    .select("reporting_manager_name")
+    .select("reporting_manager_name, line_manager_person_id")
     .eq("id", caseId)
     .maybeSingle();
   if (caseError || !current) return { error: "Request not found." };
+  // App rule (not in the database): the line manager is chosen before the details are saved.
+  if (!current.line_manager_person_id) {
+    return { error: "First choose the line manager (in “Line manager” above), then save the details." };
+  }
 
   const { error } = await supabase.schema("hr").rpc("save_clearance_details", {
     p_case_id: caseId,

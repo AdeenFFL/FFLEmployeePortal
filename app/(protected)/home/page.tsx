@@ -69,8 +69,8 @@ export default async function EmployeeHomePage() {
       // The HR clearance flow replaced the old IT self-offboarding: the request is now the
       // Offboarding card on the profile page.
       href: "/profile",
-      label: "Resignation / Offboarding",
-      description: "Leaving the company? Submit your offboarding request from your profile.",
+      label: "Clearance",
+      description: "Leaving the company? Submit your clearance request from your profile.",
       icon: LogoutIcon,
       permission: "hr.clearance.request_self",
     },

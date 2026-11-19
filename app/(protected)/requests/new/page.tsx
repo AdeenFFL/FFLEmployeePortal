@@ -29,8 +29,8 @@ export default async function NewRequestPage() {
     {
       // HR clearance flow: the request is the Offboarding card on the profile page.
       href: "/profile",
-      label: "Resignation / offboarding",
-      description: "Submit your offboarding request from your profile.",
+      label: "Clearance",
+      description: "Submit your clearance request from your profile.",
       icon: LogoutIcon,
       permission: "hr.clearance.request_self",
     },

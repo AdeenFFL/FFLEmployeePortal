@@ -26,7 +26,7 @@ export function OffboardingForm({ minDate, maxDate }: { minDate: string; maxDate
   return (
     <form onSubmit={handleSubmit} className="flex flex-col gap-4">
       <p className="text-sm text-slate-600">
-        Leaving the company? Submit your offboarding request here. HR will review it and start
+        Leaving the company? Submit your clearance request here. HR will review it and start
         your clearance.
       </p>
 

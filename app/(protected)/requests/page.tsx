@@ -15,7 +15,7 @@ import { ConfirmDataReceivedButton } from "./confirm-data-received";
 
 type Row = {
   key: string;
-  module: "HR" | "IT" | "Onboarding" | "Offboarding";
+  module: "HR" | "IT" | "Onboarding" | "Offboarding" | "Clearance";
   label: string;
   status: string;
   createdAt: string;
@@ -28,6 +28,7 @@ const MODULE_BADGE: Record<Row["module"], string> = {
   IT: "bg-blue-50 text-blue-700",
   Onboarding: "bg-emerald-50 text-emerald-700",
   Offboarding: "bg-amber-50 text-amber-700",
+  Clearance: "bg-amber-50 text-amber-700",
 };
 
 const STATUS_TONE: Record<string, "positive" | "neutral" | "warning" | "negative" | "info"> = {
@@ -156,8 +157,8 @@ export default async function MyRequestsPage() {
     })),
     ...(clearanceCases ?? []).map((c) => ({
       key: `clr-${c.id}`,
-      module: "Offboarding" as const,
-      label: `${c.case_number} · Offboarding clearance – last working date ${formatDay(c.last_working_date)}`,
+      module: "Clearance" as const,
+      label: `${c.case_number} · Clearance – last working date ${formatDay(c.last_working_date)}`,
       status: c.status,
       createdAt: c.created_at,
       href: `/requests/offboarding/${c.id}`,
@@ -182,7 +183,7 @@ export default async function MyRequestsPage() {
 
       {clearanceError && (
         <p className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
-          Could not load your offboarding requests.
+          Could not load your clearance requests.
         </p>
       )}
 

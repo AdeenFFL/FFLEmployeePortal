@@ -18,6 +18,7 @@ export function LineManagerPicker({
   confirmedOn,
   canChange,
   lockedNote = null,
+  suggestion = null,
 }: {
   caseId: string;
   // Name of the chosen line manager, or null when none is chosen.
@@ -27,6 +28,9 @@ export function LineManagerPicker({
   canChange: boolean;
   // Why the manager can no longer be changed (e.g. the HR details are saved), or null.
   lockedNote?: string | null;
+  // The reporting manager from the employee's onboarding request. personId is null when that
+  // person is no longer an active employee (then it is shown as a note, not offered).
+  suggestion?: { personId: string | null; name: string; detail: string | null } | null;
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
@@ -115,6 +119,30 @@ export function LineManagerPicker({
 
       {canChange && (
         <div className="flex flex-col gap-3">
+          {suggestion && !managerName && (
+            suggestion.personId ? (
+              <div className="flex max-w-md items-start justify-between gap-3 rounded-lg border border-blue-200 bg-blue-50 p-3">
+                <div className="min-w-0">
+                  <p className="text-xs text-blue-700">From the onboarding request</p>
+                  <p className="text-sm font-medium text-slate-900">{suggestion.name}</p>
+                  {suggestion.detail && <p className="text-xs text-slate-500">{suggestion.detail}</p>}
+                </div>
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => choose(suggestion.personId)}
+                  className={smallButton}
+                >
+                  Choose
+                </button>
+              </div>
+            ) : (
+              <p className="max-w-md text-xs text-slate-500">
+                The onboarding request names {suggestion.name}, who is no longer an active
+                employee. Search for the current line manager.
+              </p>
+            )
+          )}
           <form onSubmit={handleSearch} className="flex max-w-md gap-2">
             <input
               value={query}

@@ -1558,6 +1558,18 @@ export type Database = {
         Args: { p_case_id: string; p_manager_person_id: string | null };
         Returns: undefined;
       };
+      // talha_hr_0010 (staged): the joining date and reporting manager from the onboarding request.
+      clearance_onboarding_defaults: {
+        Args: { p_case_id: string };
+        Returns: {
+          joining_date: string | null;
+          manager_person_id: string | null;
+          manager_name: string | null;
+          manager_employee_code: string | null;
+          manager_designation: string | null;
+          manager_is_active: boolean;
+        }[];
+      };
       clearance_search_managers: {
         Args: { p_query: string; p_limit?: number };
         Returns: {

@@ -94,6 +94,7 @@ export default async function ClearanceSlotPage({
     detailsResult,
     departmentName,
     skipsResult,
+    onboardingResult,
   ] = await Promise.all([
     hr
       .from("clearance_lines")
@@ -127,7 +128,13 @@ export default async function ClearanceSlotPage({
           .then(({ data }) => (data ?? []).find((u) => u.id === c.department_id)?.name ?? null)
       : Promise.resolve(null),
     hr.from("clearance_skips").select("slot_key, reason").eq("case_id", caseId),
+    // Suggestions from the onboarding request (talha_hr_0010). Until that function is live this
+    // fails, and the page simply shows no suggestions.
+    isHrSlot
+      ? hr.rpc("clearance_onboarding_defaults", { p_case_id: caseId })
+      : Promise.resolve({ data: [], error: null }),
   ]);
+  const onboarding = onboardingResult.error ? null : (onboardingResult.data?.[0] ?? null);
 
   const assets: OpenAsset[] = (assetsResult.data ?? []).map((a) => ({
     assignment_id: a.assignment_id,
@@ -186,6 +193,20 @@ export default async function ClearanceSlotPage({
   const canEdit = isOpen && !mySignoff;
   // Same rule as setLineManager: saved details + a chosen manager = the manager is locked.
   const managerLocked = Boolean(savedDetails && c.line_manager_person_id);
+  // No joining date on the case (the profile had none): suggest the onboarding one. It is a
+  // prefill only; it is stored when HR saves the details.
+  const joiningPrefill =
+    !c.date_of_joining && onboarding?.joining_date ? onboarding.joining_date : null;
+  const managerSuggestion = onboarding?.manager_name
+    ? {
+        personId: onboarding.manager_is_active ? onboarding.manager_person_id : null,
+        name: onboarding.manager_name,
+        detail:
+          [onboarding.manager_employee_code, onboarding.manager_designation]
+            .filter(Boolean)
+            .join(" · ") || null,
+      }
+    : null;
   const fixedDetails: [string, string][] = [
     ["Employee P#", c.employee_code ?? "—"],
     ["Name", c.employee_name],
@@ -282,6 +303,27 @@ export default async function ClearanceSlotPage({
         </section>
       )}
 
+      {/* The line manager comes first: the HR details can only be saved once one is chosen. */}
+      {isHrSlot && (
+        <section className={card}>
+          <h2 className={cardTitle}>Line manager</h2>
+          <LineManagerPicker
+            caseId={c.id}
+            managerName={c.line_manager_person_id ? c.reporting_manager_name : null}
+            confirmedOn={
+              c.data_received_confirmed_at ? formatTimestamp(c.data_received_confirmed_at) : null
+            }
+            canChange={canEdit && !c.data_received_confirmed_at && !managerLocked}
+            lockedNote={
+              managerLocked && !c.data_received_confirmed_at
+                ? "Locked: the HR details were saved with this line manager."
+                : null
+            }
+            suggestion={managerSuggestion}
+          />
+        </section>
+      )}
+
       {isHrSlot && (
         <section className={card}>
           <h2 className={cardTitle}>HR details (page one)</h2>
@@ -301,6 +343,8 @@ export default async function ClearanceSlotPage({
                 <HrDetailsForm
                   caseId={c.id}
                   initial={detailValues}
+                  prefill={joiningPrefill ? { date_of_joining: joiningPrefill } : undefined}
+                  prefillNote="Filled from the onboarding request. Check it, then save."
                   lastSaved={
                     savedDetails ? `Last saved ${formatTimestamp(savedDetails.updated_at)}` : null
                   }
@@ -326,25 +370,6 @@ export default async function ClearanceSlotPage({
               )}
             </div>
           )}
-        </section>
-      )}
-
-      {isHrSlot && (
-        <section className={card}>
-          <h2 className={cardTitle}>Line manager</h2>
-          <LineManagerPicker
-            caseId={c.id}
-            managerName={c.line_manager_person_id ? c.reporting_manager_name : null}
-            confirmedOn={
-              c.data_received_confirmed_at ? formatTimestamp(c.data_received_confirmed_at) : null
-            }
-            canChange={canEdit && !c.data_received_confirmed_at && !managerLocked}
-            lockedNote={
-              managerLocked && !c.data_received_confirmed_at
-                ? "Locked: the HR details were saved with this line manager."
-                : null
-            }
-          />
         </section>
       )}
 
