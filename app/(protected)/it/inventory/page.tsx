@@ -103,8 +103,13 @@ export default async function AssetRegisterPage({
         .in("asset_id", heldIds)
         .is("return_date", null)
     : { data: [] as { asset_id: string; person_id: string }[] };
-  const holderNames = await fetchAssetPersonNames(supabase, (openAssignments ?? []).map((a) => a.person_id));
-  const holderOf = new Map((openAssignments ?? []).map((a) => [a.asset_id, holderNames.get(a.person_id) ?? "—"]));
+  const holderNames = await fetchAssetPersonNames(
+    supabase,
+    (openAssignments ?? []).flatMap((a) => (a.person_id ? [a.person_id] : [])),
+  );
+  const holderOf = new Map(
+    (openAssignments ?? []).map((a) => [a.asset_id, (a.person_id && holderNames.get(a.person_id)) ?? "—"]),
+  );
 
   // Where each listed In Repair asset stands: its open repair and the demand behind it.
   const repairingIds = rows.filter((a) => a.status === "In Repair").map((a) => a.id);

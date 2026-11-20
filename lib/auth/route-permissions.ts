@@ -37,14 +37,18 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   "/hr/feedback": "hr.tickets.read",
   "/hr/admin/categories": "hr.categories.update",
   "/hr/admin/roles": "hr.manage_role_permissions",
+  "/hr/admin/clearance-signers": "hr.clearance.read_all",
+  "/hr/resignations": "hr.clearance.read_all",
+  "/hr/clearance": "hr.clearance.sign",
   // IT module — Service Management track (08-it-service-management-plan.md §4).
   "/it/my-tickets": "module:it",
   "/it/tickets": "it.tickets.read",
   "/it/my-onboarding": "module:it",
-  // More specific prefixes first — permissionKeyForPath returns the first match.
-  "/it/my-offboarding/new-for-employee": "hr.offboarding.create_for_site_users",
-  "/it/my-offboarding/new": "hr.offboarding.create_self",
-  "/it/my-offboarding": ["module:it", "hr.offboarding.create_self", "hr.offboarding.create_for_site_users"],
+  // More specific prefixes first — permissionKeyForPath returns the first match. The two /new
+  // routes are now only redirects into the HR clearance flow, gated on its keys.
+  "/it/my-offboarding/new-for-employee": "hr.clearance.read_all",
+  "/it/my-offboarding/new": "hr.clearance.request_self",
+  "/it/my-offboarding": "module:it",
   // Unified staff queue (tickets + onboarding/offboarding/replacement) — needs either
   // it.tickets.read or it.onboarding.read, which this single-key map can't express as "any of".
   // Gated at module:it here; the page itself only queries/shows each half the viewer actually
@@ -52,11 +56,10 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // below), same as sidebar.tsx's "Requests" nav entry decides visibility the same way.
   "/it/requests": ["it.tickets.read", "it.onboarding.read"],
   // More specific prefix first — permissionKeyForPath returns the first match. The two kinds
-  // left on this route (Onboarding, Replacement — Offboarding moved to its own dedicated,
-  // permission-split screens under /it/my-offboarding/) each have their own permission,
-  // hr.onboarding.create / hr.replacement.create, which this single-key map can't express as
-  // "any of"; gated loosely at module:it here, same shape as /it/settings, and the page itself
-  // enforces the per-kind permission on submit.
+  // left on this route (Onboarding, Replacement — Offboarding moved to the HR clearance flow,
+  // hr.clearance.*) each have their own permission, hr.onboarding.create / hr.replacement.create,
+  // which this single-key map can't express as "any of"; gated loosely at module:it here, same
+  // shape as /it/settings, and the page itself enforces the per-kind permission on submit.
   "/it/onboarding/new": ["hr.onboarding.create", "hr.replacement.create"],
   // IT staff who only work their own onboarding tasks hold it.onboarding.update (RLS shows them
   // just the requests they have tasks on).

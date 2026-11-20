@@ -155,7 +155,7 @@ export default async function AssetDetailPage({
     .schema("it")
     .from("asset_assignments")
     .select(
-      "id, person_id, assigned_by_person_id, returned_to_person_id, assigned_date, return_date, assigned_condition, returned_condition, acknowledged_at, remarks, created_at, updated_at",
+      "id, person_id, assigned_by_person_id, returned_to_person_id, assigned_date, return_date, assigned_condition, returned_condition, acknowledged_at, remarks, created_at, updated_at, holder_name, holder_employee_code, assigned_by_name, returned_to_name",
     )
     .eq("asset_id", asset.id)
     .order("assigned_date", { ascending: false })
@@ -168,6 +168,14 @@ export default async function AssetDetailPage({
     history.flatMap((a) => [a.person_id, a.assigned_by_person_id, a.returned_to_person_id]),
   );
   const nameOf = (pid: string | null) => (pid && historyNames.get(pid)) || "—";
+  // History rows: the live name while the person exists; once they are deleted the id is null and
+  // the copy saved on the row is shown instead (talha_it_0012).
+  const historyName = (pid: string | null, copied: string | null, code: string | null = null) =>
+    pid
+      ? nameOf(pid)
+      : copied
+        ? `${copied}${code ? ` (${code})` : ""} · deleted user`
+        : "—";
 
   const showAssign = canAssign && asset.status === "Unassigned";
   const showReturn = canAssign && asset.status === "In Use" && openAssignment !== null;
@@ -269,9 +277,12 @@ export default async function AssetDetailPage({
         at: a.assigned_date,
         seq: a.created_at,
         tone: "emerald",
-        title: `Assigned to ${nameOf(a.person_id)}`,
+        title: `Assigned to ${historyName(a.person_id, a.holder_name, a.holder_employee_code)}`,
         lines: [
-          [`by ${nameOf(a.assigned_by_person_id)}`, a.assigned_condition && `condition ${a.assigned_condition}`]
+          [
+            `by ${historyName(a.assigned_by_person_id, a.assigned_by_name)}`,
+            a.assigned_condition && `condition ${a.assigned_condition}`,
+          ]
             .filter(Boolean)
             .join(" · "),
           a.acknowledged_at ? `Acknowledged ${formatDateTime(a.acknowledged_at)}` : "Not acknowledged yet",
@@ -284,9 +295,12 @@ export default async function AssetDetailPage({
               at: a.return_date,
               seq: a.updated_at,
               tone: "blue" as const,
-              title: `Returned by ${nameOf(a.person_id)}`,
+              title: `Returned by ${historyName(a.person_id, a.holder_name, a.holder_employee_code)}`,
               lines: [
-                [`to ${nameOf(a.returned_to_person_id)}`, a.returned_condition && `condition ${a.returned_condition}`]
+                [
+                  `to ${historyName(a.returned_to_person_id, a.returned_to_name)}`,
+                  a.returned_condition && `condition ${a.returned_condition}`,
+                ]
                   .filter(Boolean)
                   .join(" · "),
                 ...(a.remarks ? [a.remarks] : []),

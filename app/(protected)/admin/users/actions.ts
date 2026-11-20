@@ -9,14 +9,17 @@ import type { UserStatus, AuthMethod, EmploymentType } from "@/types/database";
 
 const MIN_PASSWORD_LENGTH = 6; // Supabase's own GoTrue default minimum
 
-// persons.company_id/site_id are proper FKs this pass doesn't wire a picker for yet (see
-// 0008_org_hierarchy_fix_and_identity_split.sql step B.4 comment) — department_id now has one
-// (0054_it_department_based_staff.sql), since the IT module needs it to determine IT staff.
+// persons.company_id is a proper FK this pass doesn't wire a picker for yet (see
+// 0008_org_hierarchy_fix_and_identity_split.sql step B.4 comment) — department_id has one
+// (0054_it_department_based_staff.sql), since the IT module needs it to determine IT staff, and
+// site_id has one too. The Microsoft invite path doesn't carry site_id yet (invited_users has no
+// such column — that needs a migration), so a Microsoft user's site is set after first sign-in.
 function readUserFormFields(formData: FormData) {
   return {
     full_name: String(formData.get("display_name") ?? "").trim() || null,
     role_id: String(formData.get("role_id") ?? ""),
     department_id: String(formData.get("department_id") ?? "").trim() || null,
+    site_id: String(formData.get("site_id") ?? "").trim() || null,
     status: (String(formData.get("status") ?? "Active") as UserStatus) ?? "Active",
     notes: String(formData.get("notes") ?? "").trim() || null,
     employee_code: String(formData.get("employee_code") ?? "").trim() || null,
@@ -135,6 +138,7 @@ export async function inviteOrUpdateUser(formData: FormData): Promise<string> {
         date_of_joining: fields.date_of_joining,
         employment_type: fields.employment_type,
         department_id: fields.department_id,
+        site_id: fields.site_id,
       })
       .select("id")
       .single();
@@ -366,11 +370,13 @@ export async function setUserStatus(personId: string, status: UserStatus) {
 // only their own records go" pattern — a ticket assigned to this person is deleted even though
 // someone else filed it. There is no undo. Soft-delete (status-based, no data loss) is a
 // separate, not-yet-built feature — this is the hard-delete-only pass.
-export async function hardDeleteUser(personId: string) {
+// Expected failures are RETURNED (shown inline by <DeleteUserButton>), not thrown: Next.js hides
+// a thrown Server Action error's message in production.
+export async function hardDeleteUser(personId: string): Promise<{ error: string | null }> {
   const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 
   if (personId === adminPersonId) {
-    throw new Error("You cannot delete your own account.");
+    return { error: "You cannot delete your own account." };
   }
 
   const { data: account } = await supabase
@@ -383,7 +389,27 @@ export async function hardDeleteUser(personId: string) {
   // referencing this person — but NOT their Supabase Auth identity (user_accounts.auth_user_id
   // references auth.users, not the other way around), so that's removed separately below.
   const { error } = await supabase.from("persons").delete().eq("id", personId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    // 23514 = talha_it_0012's asset_assignments_holder_needed_while_open: they still hold an asset.
+    if (error.code === "23514" && error.message.includes("asset_assignments_holder_needed_while_open")) {
+      return {
+        error: "This employee still holds IT assets. Return them first, or set them Inactive.",
+      };
+    }
+    // 23503 = a row elsewhere still points at this person and has no delete rule.
+    if (error.code === "23503" && error.message.includes("asset_assignments_person_id_fkey")) {
+      return {
+        error:
+          "This employee has IT asset history (assets assigned to them), so they cannot be deleted. Set them Inactive instead.",
+      };
+    }
+    if (error.code === "23503") {
+      return {
+        error: `This user is still linked to other records, so they cannot be deleted. Set them Inactive instead. (${error.message})`,
+      };
+    }
+    return { error: error.message };
+  }
 
   if (account?.auth_user_id) {
     const admin = createAdminClient();
@@ -407,6 +433,7 @@ export async function hardDeleteUser(personId: string) {
   });
 
   revalidatePath("/admin/users");
+  return { error: null };
 }
 
 export async function revokeInvitation(email: string) {

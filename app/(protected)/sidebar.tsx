@@ -148,6 +148,8 @@ export function Sidebar({
           label: "Onboarding",
           permission: ["hr.onboarding.create", "it.onboarding.read"],
         },
+        { href: "/hr/resignations", label: "Resignations", permission: "hr.clearance.read_all" },
+        { href: "/hr/clearance", label: "Clearance to sign", permission: "hr.clearance.sign" },
         {
           href: "/hr/feedback/anonymous",
           label: "Anonymous Feedback",
@@ -157,6 +159,11 @@ export function Sidebar({
           href: "/hr/admin/categories",
           label: "Ticket Categories",
           permission: "hr.categories.update",
+        },
+        {
+          href: "/hr/admin/clearance-signers",
+          label: "Clearance Signers",
+          permission: "hr.clearance.read_all",
         },
         {
           href: "/hr/admin/roles",
