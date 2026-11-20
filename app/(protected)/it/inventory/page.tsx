@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { fetchAssetPersonNames, fetchOrgUnits } from "@/lib/it/ticket-data";
+import { fetchAssetPersonNames, fetchOrgUnits, hasItPermission } from "@/lib/it/ticket-data";
 import { ProductIcon, productKind } from "../procurement/_components/product-icon";
 import { ASSET_STATUSES, ASSET_STATUS_TONES, formatDate, type AssetStatus } from "./asset-status";
 import { bookValue, formatPkr } from "./valuation";
@@ -79,6 +79,7 @@ export default async function AssetRegisterPage({
     { data: canCreate },
     { data: statusRows },
     { data: canRequestReplacement },
+    canAssign,
   ] = await Promise.all([
     query.order("updated_at", { ascending: false }).limit(MAX_ROWS),
     supabase.schema("it").from("asset_types").select("id, name, classification").order("name"),
@@ -87,6 +88,7 @@ export default async function AssetRegisterPage({
     supabase.rpc("has_permission", { p_permission_key: "it.assets.create" }),
     supabase.schema("it").from("assets").select("status, receiving_id").is("deleted_at", null),
     supabase.rpc("has_permission", { p_permission_key: "hr.replacement.create" }),
+    hasItPermission(supabase, "it.assets.assign"),
   ]);
   const rows = assets ?? [];
   const statusCount = new Map<string, number>();
@@ -103,8 +105,13 @@ export default async function AssetRegisterPage({
         .in("asset_id", heldIds)
         .is("return_date", null)
     : { data: [] as { asset_id: string; person_id: string }[] };
-  const holderNames = await fetchAssetPersonNames(supabase, (openAssignments ?? []).map((a) => a.person_id));
-  const holderOf = new Map((openAssignments ?? []).map((a) => [a.asset_id, holderNames.get(a.person_id) ?? "—"]));
+  const holderNames = await fetchAssetPersonNames(
+    supabase,
+    (openAssignments ?? []).flatMap((a) => (a.person_id ? [a.person_id] : [])),
+  );
+  const holderOf = new Map(
+    (openAssignments ?? []).map((a) => [a.asset_id, (a.person_id && holderNames.get(a.person_id)) ?? "—"]),
+  );
 
   // Where each listed In Repair asset stands: its open repair and the demand behind it.
   const repairingIds = rows.filter((a) => a.status === "In Repair").map((a) => a.id);
@@ -329,6 +336,7 @@ export default async function AssetRegisterPage({
               <th className="px-4 py-3 text-right font-medium">Book value</th>
               <th className="px-4 py-3 font-medium">Site</th>
               <th className="px-5 py-3 text-right font-medium">Updated</th>
+              {canAssign && <th className="px-5 py-3 text-right font-medium">Actions</th>}
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-100">
@@ -373,6 +381,27 @@ export default async function AssetRegisterPage({
                 <td className="whitespace-nowrap px-5 py-3 text-right text-xs text-slate-500">
                   {formatDate(asset.updated_at)}
                 </td>
+                {canAssign && (
+                  <td className="relative whitespace-nowrap px-5 py-3 text-right text-xs">
+                    {asset.status === "Unassigned" ? (
+                      <Link
+                        href={`/it/inventory/${asset.id}?assign=1`}
+                        className="relative z-10 font-medium text-blue-700 hover:underline"
+                      >
+                        Assign
+                      </Link>
+                    ) : asset.status === "In Use" ? (
+                      <Link
+                        href={`/it/inventory/${asset.id}?return=1`}
+                        className="relative z-10 font-medium text-blue-700 hover:underline"
+                      >
+                        Return
+                      </Link>
+                    ) : (
+                      <span className="text-slate-300">—</span>
+                    )}
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

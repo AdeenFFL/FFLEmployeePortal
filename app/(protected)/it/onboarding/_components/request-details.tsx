@@ -1,17 +1,23 @@
 import { StatusPill } from "@/components/status-pill";
-import { KIND_TONE, LIFECYCLE_STATUS_TONE } from "@/lib/it/onboarding";
+import { KIND_TONE, LIFECYCLE_STATUS_TONE, type DetailField } from "@/lib/it/onboarding";
 import { formatDate } from "@/lib/it/tickets";
 import type { ItLifecycleRequest } from "@/types/database";
 import { cardClass, Fact, PriorityBadge } from "../../_components/ticket-ui";
 
+type TaskResponse = { id: string; label: string; recorded: DetailField[]; details: Record<string, string> };
+
 // The request as HR raised it. Shared by the IT page (/it/onboarding/[id]) and HR's read-only
-// view (/hr/onboarding/[id]).
+// view (/hr/onboarding/[id]) — taskResponses is IT-only (undefined on the HR view), promoting
+// each completed task's structured response fields up into this summary instead of leaving them
+// only visible under the task itself (Unified Ticket/Task Tracker, Phase 2).
 export function RequestDetails({
   request,
   nameById,
+  taskResponses,
 }: {
   request: ItLifecycleRequest;
   nameById: Map<string, string>;
+  taskResponses?: TaskResponse[];
 }) {
   const orgUnits = { nameById };
   return (
@@ -55,6 +61,11 @@ export function RequestDetails({
             <Fact label="Laptop required">{request.laptop_required ? "Yes" : "No"}</Fact>
           </>
         )}
+        {(taskResponses ?? []).map((t) => (
+          <Fact key={t.id} label={t.label}>
+            {t.recorded.map((f) => `${f.label}: ${t.details[f.key]}`).join(" · ")}
+          </Fact>
+        ))}
       </dl>
       {(request.access_required ||
         request.software_required ||

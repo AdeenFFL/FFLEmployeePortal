@@ -763,6 +763,11 @@ export type ItTicketUpdate = {
   created_at: string;
 };
 
+// Nullable, single value today (0091_it_ticket_task_details.sql) — most tasks stay plain free
+// text (task_kind null); a task_kind drives the extra structured fields in
+// lib/it/ticket-tasks.ts's TASK_KIND_DETAIL_FIELDS, stored in `details`.
+export type ItTicketTaskKind = "device_check";
+
 export type ItTicketTask = {
   id: string;
   ticket_id: string;
@@ -770,6 +775,8 @@ export type ItTicketTask = {
   task_type: string;
   description: string | null;
   status: ItTicketTaskStatus;
+  task_kind: ItTicketTaskKind | null;
+  details: Record<string, string>;
   created_by: string | null;
   created_at: string;
   updated_at: string;
@@ -953,11 +960,18 @@ export type Asset = {
 export type AssetAssignment = {
   id: string;
   asset_id: string;
-  person_id: string;
+  // Nullable from talha_it_0012: set to null when the holder is deleted (only on a returned row).
+  person_id: string | null;
   company_id: string;
   site_id: string | null;
-  assigned_by_person_id: string;
+  // Nullable from talha_it_0011: set to null when the person who assigned it is deleted.
+  assigned_by_person_id: string | null;
   returned_to_person_id: string | null;
+  // talha_it_0012: copies of the names, kept after the person is deleted.
+  holder_name: string | null;
+  holder_employee_code: string | null;
+  assigned_by_name: string | null;
+  returned_to_name: string | null;
   assigned_date: string;
   return_date: string | null;
   assigned_condition: string | null;
@@ -1253,6 +1267,207 @@ export type Database = {
           },
         ];
       };
+      // talha_hr_0001_clearance_system.sql — only what /hr/admin/clearance-signers reads. Signers
+      // are written through the hr.*_clearance_signer functions below, never directly.
+      clearance_slots: {
+        Row: {
+          slot_key: string;
+          form_key: string;
+          label: string;
+          scope: "site" | "department";
+          sort_order: number;
+          is_active: boolean;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      clearance_signers: {
+        Row: {
+          id: string;
+          slot_key: string;
+          site_id: string | null;
+          department_id: string | null;
+          person_id: string;
+          is_primary: boolean;
+          created_at: string;
+          updated_at: string;
+          created_by: string | null;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      // Read by the profile Offboarding card; written only through the hr.* clearance functions.
+      clearance_cases: {
+        Row: {
+          id: string;
+          case_number: string;
+          person_id: string;
+          employee_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          department_id: string | null;
+          site_id: string | null;
+          company_id: string | null;
+          date_of_joining: string | null;
+          contact_phone: string | null;
+          contact_email: string | null;
+          postal_address: string | null;
+          reporting_manager_name: string | null;
+          last_working_date: string;
+          raised_by_person_id: string | null;
+          raised_via: "self" | "hrbp";
+          status: "Submitted" | "In Clearance" | "Completed" | "Cancelled";
+          hrbp_person_id: string | null;
+          forwarded_at: string | null;
+          employee_signed_at: string | null;
+          completed_at: string | null;
+          cancelled_reason: string | null;
+          created_at: string;
+          updated_at: string;
+          line_manager_person_id: string | null;
+          data_received_confirmed_by: string | null;
+          data_received_confirmed_at: string | null;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      clearance_signoffs: {
+        Row: {
+          id: string;
+          case_id: string;
+          slot_key: string;
+          signed_by_person_id: string | null;
+          signer_name: string;
+          signer_designation: string | null;
+          signed_at: string;
+          remarks: string | null;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        // Lets /hr/clearance-requests embed clearance_signoffs(count) on clearance_cases.
+        Relationships: [
+          {
+            foreignKeyName: "clearance_signoffs_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "clearance_cases";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // Page-one details the HR signer fills in; written only through hr.save_clearance_details.
+      clearance_hr_details: {
+        Row: {
+          case_id: string;
+          resignation_letter_date: string | null;
+          resignation_effective_from: string | null;
+          unserved_notice_days: number | null;
+          overtime_single: number | null;
+          overtime_double: number | null;
+          overtime_triple: number | null;
+          annual_leave_balance: number | null;
+          other_outstanding: string | null;
+          updated_by: string | null;
+          updated_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      // Parts skipped for one request; written only through hr.skip_clearance_slot / unskip_.
+      clearance_skips: {
+        Row: {
+          case_id: string;
+          slot_key: string;
+          reason: string;
+          skipped_by: string | null;
+          skipped_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        // Lets /hr/clearance-requests embed clearance_skips(count) on clearance_cases.
+        Relationships: [
+          {
+            foreignKeyName: "clearance_skips_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "clearance_cases";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
+      // talha_hr_0011: which line of a case was handed to which IT staff member.
+      clearance_line_assignments: {
+        Row: {
+          case_id: string;
+          line_id: string;
+          assignee_person_id: string;
+          assignee_name: string;
+          assigned_by: string | null;
+          assigned_by_name: string | null;
+          assigned_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      // talha_hr_0012: which open asset of the leaving employee was handed to which IT staff member.
+      clearance_asset_tasks: {
+        Row: {
+          case_id: string;
+          asset_assignment_id: string;
+          assignee_person_id: string;
+          assignee_name: string;
+          assigned_by: string | null;
+          assigned_by_name: string | null;
+          assigned_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      // Read by the HRBP inbox (/hr/clearance-requests); written only through the hr.* clearance functions.
+      clearance_lines: {
+        Row: {
+          id: string;
+          line_key: string;
+          form_key: "page_one" | "admin" | "accounts" | "it";
+          slot_key: string;
+          description: string;
+          auto_from_form: "admin" | "accounts" | "it" | null;
+          sort_order: number;
+          is_active: boolean;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      clearance_responses: {
+        Row: {
+          id: string;
+          case_id: string;
+          line_id: string;
+          outcome: "Yes" | "No" | "N/A" | null;
+          remarks: string | null;
+          responded_by: string | null;
+          responded_at: string | null;
+          updated_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [
+          {
+            foreignKeyName: "clearance_responses_case_id_fkey";
+            columns: ["case_id"];
+            isOneToOne: false;
+            referencedRelation: "clearance_cases";
+            referencedColumns: ["id"];
+          },
+        ];
+      };
       hrbp_departments: {
         Row: HrbpDepartment;
         Insert: HrbpDepartment;
@@ -1312,6 +1527,263 @@ export type Database = {
     Functions: {
       reply_to_anonymous_conversation: {
         Args: { p_conversation_id: string; p_body: string };
+        Returns: undefined;
+      };
+      // talha_hr_0004_clearance_signer_lookups.sql
+      clearance_list_units: {
+        Args: Record<string, never>;
+        Returns: { id: string; name: string; type: OrgUnitType }[];
+      };
+      clearance_list_signers: {
+        Args: Record<string, never>;
+        Returns: {
+          id: string;
+          slot_key: string;
+          site_id: string | null;
+          department_id: string | null;
+          person_id: string;
+          is_primary: boolean;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          person_status: string;
+          unit_name: string | null;
+          unit_is_active: boolean | null;
+          can_open_inbox: boolean;
+        }[];
+      };
+      clearance_search_people: {
+        Args: { p_query: string; p_limit?: number };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          site_name: string | null;
+          department_name: string | null;
+        }[];
+      };
+      add_clearance_signer: {
+        Args: {
+          p_slot_key: string;
+          p_site_id: string | null;
+          p_department_id: string | null;
+          p_person_id: string;
+        };
+        Returns: string;
+      };
+      remove_clearance_signer: {
+        Args: { p_signer_id: string };
+        Returns: undefined;
+      };
+      set_clearance_primary_signer: {
+        Args: { p_signer_id: string };
+        Returns: undefined;
+      };
+      // talha_hr_0001_clearance_system.sql
+      submit_clearance_self: {
+        Args: { p_last_working_date: string };
+        Returns: string;
+      };
+      raise_clearance_for: {
+        Args: { p_person_id: string; p_last_working_date: string };
+        Returns: string;
+      };
+      forward_clearance_case: {
+        Args: { p_case_id: string };
+        Returns: undefined;
+      };
+      cancel_clearance_case: {
+        Args: { p_case_id: string; p_reason: string };
+        Returns: undefined;
+      };
+      // talha_hr_0005_hrbp_inbox_lookups.sql
+      clearance_search_employees: {
+        Args: { p_query: string; p_limit?: number };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          person_status: string;
+          site_id: string | null;
+          site_name: string | null;
+          department_id: string | null;
+          department_name: string | null;
+          has_open_case: boolean;
+        }[];
+      };
+      refresh_clearance_case_org: {
+        Args: { p_case_id: string };
+        Returns: undefined;
+      };
+      set_clearance_response: {
+        Args: { p_case_id: string; p_line_id: string; p_outcome: "Yes" | "No" | "N/A"; p_remarks?: string | null };
+        Returns: undefined;
+      };
+      sign_clearance: {
+        Args: { p_case_id: string; p_slot_key: string; p_remarks?: string | null };
+        Returns: undefined;
+      };
+      save_clearance_details: {
+        Args: {
+          p_case_id: string;
+          p_contact_phone: string | null;
+          p_contact_email: string | null;
+          p_postal_address: string | null;
+          p_reporting_manager_name: string | null;
+          p_date_of_joining: string | null;
+          p_last_working_date: string;
+          p_resignation_letter_date: string | null;
+          p_resignation_effective_from: string | null;
+          p_unserved_notice_days: number | null;
+          p_overtime_single: number | null;
+          p_overtime_double: number | null;
+          p_overtime_triple: number | null;
+          p_annual_leave_balance: number | null;
+          p_other_outstanding: string | null;
+        };
+        Returns: undefined;
+      };
+      clearance_missing_for_case: {
+        Args: { p_case_id: string };
+        Returns: { slot_key: string; label: string }[];
+      };
+      skip_clearance_slot: {
+        Args: { p_case_id: string; p_slot_key: string; p_reason: string };
+        Returns: undefined;
+      };
+      unskip_clearance_slot: {
+        Args: { p_case_id: string; p_slot_key: string };
+        Returns: undefined;
+      };
+      set_clearance_line_manager: {
+        Args: { p_case_id: string; p_manager_person_id: string | null };
+        Returns: undefined;
+      };
+      // talha_hr_0010 (staged): the joining date and reporting manager from the onboarding request.
+      clearance_onboarding_defaults: {
+        Args: { p_case_id: string };
+        Returns: {
+          joining_date: string | null;
+          manager_person_id: string | null;
+          manager_name: string | null;
+          manager_employee_code: string | null;
+          manager_designation: string | null;
+          manager_is_active: boolean;
+        }[];
+      };
+      clearance_search_managers: {
+        Args: { p_query: string; p_limit?: number };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+        }[];
+      };
+      // talha_hr_0011: the IT Team Lead hands out IT lines to IT staff.
+      clearance_search_it_staff: {
+        Args: { p_query: string; p_limit?: number };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+        }[];
+      };
+      assign_clearance_line: {
+        Args: { p_case_id: string; p_line_id: string; p_person_id: string | null };
+        Returns: undefined;
+      };
+      my_clearance_tasks: {
+        Args: Record<string, never>;
+        Returns: {
+          case_id: string;
+          case_number: string;
+          employee_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          last_working_date: string;
+          case_status: string;
+          part_locked: boolean;
+          line_id: string;
+          line_description: string;
+          sort_order: number;
+          outcome: "Yes" | "No" | "N/A" | null;
+          remarks: string | null;
+          responded_at: string | null;
+          answered_by_me: boolean;
+          assigned_by_name: string | null;
+          assigned_at: string;
+        }[];
+      };
+      // talha_hr_0012
+      assign_clearance_asset: {
+        Args: { p_case_id: string; p_assignment_id: string; p_person_id: string | null };
+        Returns: undefined;
+      };
+      my_clearance_asset_tasks: {
+        Args: Record<string, never>;
+        Returns: {
+          case_id: string;
+          case_number: string;
+          employee_name: string;
+          employee_code: string | null;
+          last_working_date: string;
+          case_status: string;
+          part_locked: boolean;
+          assignment_id: string;
+          asset_tag: string;
+          asset_name: string;
+          serial_number: string | null;
+          assigned_date: string;
+          assigned_condition: string | null;
+          asset_status: string;
+          returned: boolean;
+          return_date: string | null;
+          assigned_by_name: string | null;
+          assigned_at: string;
+        }[];
+      };
+      my_handover_requests: {
+        Args: Record<string, never>;
+        Returns: {
+          case_id: string;
+          case_number: string;
+          employee_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          last_working_date: string;
+          case_status: "Submitted" | "In Clearance" | "Completed" | "Cancelled";
+          confirmed_at: string | null;
+        }[];
+      };
+      confirm_data_received: {
+        Args: { p_case_id: string };
+        Returns: undefined;
+      };
+      clearance_list_open_assets: {
+        Args: { p_case_id: string };
+        Returns: {
+          assignment_id: string;
+          asset_id: string;
+          asset_tag: string;
+          asset_name: string;
+          serial_number: string | null;
+          assigned_date: string;
+          assigned_condition: string | null;
+          asset_status: string;
+        }[];
+      };
+      clearance_return_asset: {
+        Args: {
+          p_case_id: string;
+          p_assignment_id: string;
+          p_returned_condition?: string | null;
+          p_new_status?: "Unassigned" | "Retired" | "Lost";
+          p_remarks?: string | null;
+        };
         Returns: undefined;
       };
     };

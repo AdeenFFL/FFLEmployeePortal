@@ -66,11 +66,13 @@ export default async function EmployeeHomePage() {
       count: assetCount,
     },
     {
-      href: "/it/my-offboarding",
-      label: "Resignation / Offboarding",
-      description: "Leaving the company? Let IT know so they can prepare.",
+      // The HR clearance flow replaced the old IT self-offboarding: the request is now the
+      // Offboarding card on the profile page.
+      href: "/profile",
+      label: "Clearance",
+      description: "Leaving the company? Submit your clearance request from your profile.",
       icon: LogoutIcon,
-      permission: "module:it",
+      permission: "hr.clearance.request_self",
     },
     {
       href: "/hr/dashboard",
@@ -102,7 +104,7 @@ export default async function EmployeeHomePage() {
           const LinkIcon = link.icon;
           return (
             <Link
-              key={link.href}
+              key={link.label}
               href={link.href}
               className="group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
             >

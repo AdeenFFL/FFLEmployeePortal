@@ -5,6 +5,7 @@ import { Sidebar } from "./sidebar";
 import { TopBar } from "./topbar";
 import { getCurrentUserNav } from "./current-user";
 import { getRecentNotifications } from "./notification-actions";
+import { CLEARANCE_SIGNER_NAV_KEY, isClearanceSigner } from "./hr/clearance/clearance-nav";
 
 // Route group (URL-invisible) wrapping every page that requires a signed-in, role-assigned
 // user: /home, /hr/dashboard, /it/dashboard, /admin/*, /profile/*. /login, /pending-setup,
@@ -14,11 +15,13 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ displayName, permissions, homePath }, { unreadCount, notifications }] =
-    await Promise.all([getCurrentUserNav(), getRecentNotifications()]);
+  const [{ displayName, permissions, homePath }, { unreadCount, notifications }, clearanceSigner] =
+    await Promise.all([getCurrentUserNav(), getRecentNotifications(), isClearanceSigner()]);
+  // Menu-only flag: show HR Management > Clearance to real signers (see clearance-nav.ts).
+  const navKeys = clearanceSigner ? [...permissions, CLEARANCE_SIGNER_NAV_KEY] : permissions;
 
   return (
-    <div className="flex min-h-screen bg-slate-50">
+    <div className="flex h-screen overflow-hidden bg-slate-50">
       {/* Stops double clicks from saving a form twice, on every page. */}
       <Suspense fallback={null}>
         <SubmitGuard />
@@ -26,13 +29,16 @@ export default async function ProtectedLayout({
         <FormFeedback />
       </Suspense>
       {/* Sidebar sits in normal flex flow (not fixed) so its own width transition pushes/pulls
-          this content area as it expands and collapses on hover. */}
-      <Sidebar permissions={permissions} homePath={homePath} />
+          this content area as it expands and collapses on hover. It's already its own h-screen,
+          independently scrolling column (see sidebar.tsx) — the outer h-screen + overflow-hidden
+          here is what stops the *page* from scrolling, so the sidebar and TopBar stay put and
+          only <main> scrolls. */}
+      <Sidebar permissions={navKeys} homePath={homePath} />
       {/* min-w-0: without it this column grows to fit its widest content (a wide table), pushing
           the page wider than the window: sideways scrolling and a white strip past the grey. */}
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">
         <TopBar displayName={displayName} unreadCount={unreadCount} notifications={notifications} />
-        <main className="flex-1 px-8 pb-10">{children}</main>
+        <main className="flex-1 overflow-y-auto px-8 pb-10">{children}</main>
       </div>
     </div>
   );

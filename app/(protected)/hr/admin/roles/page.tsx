@@ -26,6 +26,18 @@ const HR_PERMISSION_SECTIONS: { label: string; keys: string[] }[] = [
   },
   { label: "Onboarding Requests", keys: ["hr.onboarding.create"] },
   { label: "Replacement Requests", keys: ["hr.replacement.create"] },
+  {
+    label: "Offboarding Clearance",
+    keys: [
+      "hr.clearance.request_self",
+      "hr.clearance.read_all",
+      "hr.clearance.forward",
+      "hr.clearance.sign",
+      "hr.clearance.print",
+      "hr.clearance.manage_signers",
+      "hr.clearance.manage_forms",
+    ],
+  },
   { label: "Administration", keys: ["hr.manage_role_permissions"] },
 ];
 const ALL_HR_PERMISSION_KEYS = HR_PERMISSION_SECTIONS.flatMap((s) => s.keys);
@@ -62,8 +74,8 @@ export default async function HrRolesAdminPage({
       <div className="py-6">
         <PageHeader title="HR Role Permissions" />
         <p className="rounded-xl border border-dashed border-slate-300 bg-white p-6 text-sm text-slate-400">
-          HR's permissions haven't been fully seeded yet
-          (supabase/migrations/0017_hr_crud_permissions.sql). Run that migration first.
+          HR's permissions haven't been fully seeded yet. Run the HR migrations (0017,
+          talha_hr_0002) first.
         </p>
       </div>
     );

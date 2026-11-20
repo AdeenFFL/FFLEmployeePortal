@@ -1,14 +1,13 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
-import { checked, fetchCategoryMaps, hasItPermission } from "@/lib/it/ticket-data";
+import { checked, fetchCategoryMaps } from "@/lib/it/ticket-data";
 import { formatDate } from "@/lib/it/tickets";
 import {
   cardClass,
   FormMessage,
   PriorityBadge,
   primaryButtonClass,
-  secondaryButtonClass,
   StatusBadge,
 } from "../_components/ticket-ui";
 
@@ -22,7 +21,7 @@ export default async function MyItTicketsPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const [{ data: tickets }, { categoryNameById }, { count: onboardingCount }, canSelfOffboard, canOffboardSiteUsers] =
+  const [{ data: tickets }, { categoryNameById }, { count: onboardingCount }] =
     await Promise.all([
       supabase
         .schema("it")
@@ -39,8 +38,6 @@ export default async function MyItTicketsPage({
         .select("id", { count: "exact", head: true })
         .eq("kind", "Onboarding")
         .eq("person_id", personId ?? ""),
-      hasItPermission(supabase, "hr.offboarding.create_self"),
-      hasItPermission(supabase, "hr.offboarding.create_for_site_users"),
     ]);
 
   const rows = tickets ?? [];
@@ -52,16 +49,7 @@ export default async function MyItTicketsPage({
         description="Raise an IT support request and track its progress."
         action={
           <div className="flex gap-2">
-            {canOffboardSiteUsers && (
-              <Link href="/it/my-offboarding/new-for-employee" className={secondaryButtonClass}>
-                Submit Offboarding (for an Employee)
-              </Link>
-            )}
-            {canSelfOffboard && (
-              <Link href="/it/my-offboarding/new" className={secondaryButtonClass}>
-                Submit Offboarding Request
-              </Link>
-            )}
+            {/* Offboarding requests moved to the HR clearance flow (profile page). */}
             <Link href="/it/my-tickets/new" className={primaryButtonClass}>
               Raise IT Ticket
             </Link>
