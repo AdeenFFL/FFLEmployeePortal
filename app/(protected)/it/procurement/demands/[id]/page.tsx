@@ -3,7 +3,7 @@ import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { checked, fetchOrgUnits } from "@/lib/it/ticket-data";
+import { checked, fetchOrgUnits, hasItPermission } from "@/lib/it/ticket-data";
 import { formatDateTime } from "@/lib/it/tickets";
 import {
   DEMAND_CATEGORIES,
@@ -14,7 +14,8 @@ import {
   DOCUMENT_BUCKET,
   formatMoney,
 } from "@/lib/it/procurement";
-import { DeliverySection, ReceivingPanel, VendorPanel } from "./delivery-panels";
+import { fixedAssetTypeIds, isFixedAsset, stockAtSite } from "@/lib/it/stock";
+import { DeliverySection, DeviceBackPanel, ReceivingPanel, VendorPanel, type ReceiptAsset } from "./delivery-panels";
 import type { ItDemand } from "@/types/database";
 import {
   addDemandComment,
@@ -40,7 +41,7 @@ import {
 import { BackLink } from "../../_components/ui";
 
 // Step tracker: done / current / upcoming along the path this demand takes.
-function Steps({ demand }: { demand: Pick<ItDemand, "status" | "demand_category"> }) {
+function Steps({ demand }: { demand: Pick<ItDemand, "status" | "demand_category" | "asset_id"> }) {
   if (demand.status === "Cancelled" || demand.status === "Rejected") {
     return null;
   }
@@ -87,7 +88,7 @@ function Steps({ demand }: { demand: Pick<ItDemand, "status" | "demand_category"
                 state === "current" ? "font-semibold text-blue-700" : state === "done" ? "text-slate-700" : "text-slate-400"
               }`}
             >
-              {step}
+              {demand.asset_id && step === "Received" ? "Device back" : step}
             </span>
           </li>
         );
@@ -217,6 +218,41 @@ export default async function DemandPage({
   ]);
   const payments = paymentsRes.data ?? [];
   const documents = documentsRes.data ?? [];
+
+  // Receiving → assets (javaria_it_0021): fixed-asset products get a "Register assets" step per
+  // delivery. Assets are RLS-limited to it.assets.read holders; others just don't see the list.
+  const fixedTypeId = productsRes.data?.find((p) => p.id === demand.product_id)?.asset_type_id ?? null;
+  const [assetTypeRes, assetsRes, { data: canRegisterAssets }, companiesRes] = await Promise.all([
+    fixedTypeId
+      ? supabase.schema("it").from("asset_types").select("classification").eq("id", fixedTypeId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    fixedTypeId && receivings.length
+      ? supabase
+          .schema("it")
+          .from("assets")
+          .select("id, asset_tag, serial_number, status, receiving_id")
+          .in("receiving_id", receivings.map((r) => r.id))
+          .is("deleted_at", null)
+          .order("asset_tag")
+      : Promise.resolve({ data: [] as ReceiptAsset[] }),
+    supabase.rpc("has_permission", { p_permission_key: "it.assets.create" }),
+    supabase.from("companies").select("id, name").eq("is_active", true).order("name"),
+  ]);
+  const assetRegistration =
+    assetTypeRes.data?.classification === "Fixed"
+      ? {
+          assets: (assetsRes.data ?? []) as ReceiptAsset[],
+          canRegister: Boolean(canRegisterAssets),
+          companies: companiesRes.data ?? [],
+        }
+      : null;
+
+  // Consumable path (javaria_it_0022): what the demand's site has on hand. null = the viewer can't
+  // read stock (no it.stock.read) — the issue form then just tries and reports a shortage.
+  const onHand =
+    demand.demand_category === "Consumable" && demand.status === "Categorized"
+      ? ((await stockAtSite(supabase, demand.site_id, [demand.product_id]))?.get(demand.product_id) ?? null)
+      : null;
   const docPaths = documents.map((d) => d.storage_path);
   const { data: signed } = docPaths.length
     ? await supabase.storage.from(DOCUMENT_BUCKET).createSignedUrls(docPaths, 600)
@@ -254,6 +290,30 @@ export default async function DemandPage({
     .rpc("demand_person_names", { p_person_ids: [...new Set(peopleIds)] });
   const names = new Map((people ?? []).map((p) => [p.person_id, p.full_name]));
 
+  // The device this demand repairs or replaces, or whose repair the part is for (javaria_it_0023). RLS
+  // hides it from people without asset access; the page then shows the plain label.
+  const linkedAssetId =
+    demand.asset_id ??
+    demand.replaces_asset_id ??
+    (demand.maintenance_id
+      ? (await supabase.schema("it").from("asset_maintenance").select("asset_id").eq("id", demand.maintenance_id).maybeSingle())
+          .data?.asset_id
+      : null);
+  const [showAmounts, { data: linkedAsset }, { count: earlierRepairs }] = await Promise.all([
+    hasItPermission(supabase, "it.amounts.read"),
+    linkedAssetId
+      ? supabase.schema("it").from("assets").select("id, asset_tag").eq("id", linkedAssetId).maybeSingle()
+      : Promise.resolve({ data: null }),
+    demand.asset_id
+      ? supabase
+          .schema("it")
+          .from("asset_maintenance")
+          .select("id", { count: "exact", head: true })
+          .eq("asset_id", demand.asset_id)
+          .neq("demand_id", demand.id)
+      : Promise.resolve({ count: null }),
+  ]);
+
   const total =
     demand.estimated_unit_price === null ? null : Number(demand.estimated_unit_price) * demand.quantity;
   const canEdit = demand.status === "Open" && (isOwner || Boolean(canProcess));
@@ -266,6 +326,13 @@ export default async function DemandPage({
   const canAssignVendor =
     Boolean(canProcess) &&
     ["Approved", "Partially Approved", "Assigned to Vendor", "Partially Received"].includes(demand.status);
+  // Spare parts a repair can take from this site's stock at Device back (javaria_it_0023).
+  const [repairStock, fixedTypes] = demand.asset_id
+    ? await Promise.all([stockAtSite(supabase, demand.site_id), fixedAssetTypeIds(supabase)])
+    : [null, new Set<string>()];
+  const partChoices = (productsRes.data ?? [])
+    .filter((p) => p.is_active && !isFixedAsset(p, fixedTypes) && (repairStock?.get(p.id) ?? 0) > 0)
+    .map((p) => ({ id: p.id, name: p.product_name, unit: p.unit, onHand: repairStock?.get(p.id) ?? 0 }));
   const canReceive =
     Boolean(canProcess) && (demand.status === "Assigned to Vendor" || demand.status === "Partially Received");
   const showDelivery =
@@ -318,7 +385,7 @@ export default async function DemandPage({
                 tone={demand.demand_category ? "info" : "neutral"}
               />
               {product && (
-                <StatusPill label={product.asset_type_id ? "Fixed asset" : "Consumable / service"} tone="neutral" />
+                <StatusPill label={assetRegistration ? "Fixed asset" : "Consumable / service"} tone="neutral" />
               )}
             </div>
             <dl className="grid gap-4 sm:grid-cols-2">
@@ -332,10 +399,43 @@ export default async function DemandPage({
                   <span className="text-slate-500"> · approved {demand.approved_quantity}</span>
                 )}
               </Fact>
-              <Fact label="Estimated unit price">{formatMoney(demand.estimated_unit_price)}</Fact>
-              <Fact label="Estimated total">{formatMoney(total)}</Fact>
+              {showAmounts && <Fact label="Estimated unit price">{formatMoney(demand.estimated_unit_price)}</Fact>}
+              {showAmounts && <Fact label="Estimated total">{formatMoney(total)}</Fact>}
               <Fact label="Department">{orgUnits.nameById.get(demand.department_id) ?? "—"}</Fact>
               <Fact label="Site">{orgUnits.nameById.get(demand.site_id) ?? "—"}</Fact>
+              {demand.asset_id && (
+                <Fact label="Device">
+                  {linkedAsset ? (
+                    <Link href={`/it/inventory/${linkedAsset.id}`} className="text-blue-700 hover:underline">
+                      {linkedAsset.asset_tag}
+                    </Link>
+                  ) : (
+                    "—"
+                  )}
+                  {Boolean(earlierRepairs) && (
+                    <span className="text-slate-500"> · repaired {earlierRepairs} time{earlierRepairs === 1 ? "" : "s"} before</span>
+                  )}
+                </Fact>
+              )}
+              {demand.issue_type && <Fact label="Problem">{demand.issue_type}</Fact>}
+              {demand.replaces_asset_id && (
+                <Fact label="Replaces">
+                  <Link href={`/it/inventory/${demand.replaces_asset_id}`} className="text-blue-700 hover:underline">
+                    {linkedAsset?.asset_tag ?? "Old device"}
+                  </Link>
+                </Fact>
+              )}
+              {demand.maintenance_id && (
+                <Fact label="Spare part for">
+                  {linkedAsset ? (
+                    <Link href={`/it/inventory/${linkedAsset.id}`} className="text-blue-700 hover:underline">
+                      Repair of {linkedAsset.asset_tag}
+                    </Link>
+                  ) : (
+                    "A repair"
+                  )}
+                </Fact>
+              )}
               <Fact label="Requested by">{names.get(demand.requested_by_person_id) ?? "—"}</Fact>
               <Fact label="Raised">{formatDateTime(demand.created_at)}</Fact>
               {demand.categorized_at && (
@@ -461,6 +561,7 @@ export default async function DemandPage({
 
           {showDelivery && (
             <DeliverySection
+              showAmounts={showAmounts}
               demand={demand}
               unit={product?.unit ?? ""}
               vendorName={vendorRes.data?.vendor_name ?? null}
@@ -476,6 +577,8 @@ export default async function DemandPage({
               payments={payments}
               isFinance={Boolean(isFinance)}
               vendorHasEmail={Boolean(vendorRes.data?.email)}
+              productName={product?.product_name ?? "Item"}
+              assetRegistration={assetRegistration}
             />
           )}
 
@@ -549,20 +652,33 @@ export default async function DemandPage({
             <section className={`${cardClass} p-6`}>
               <h2 className="mb-1 text-base font-semibold text-slate-900">Issue from stock</h2>
               <p className="mb-4 text-xs text-slate-500">
-                Consumable — no approval or vendor needed. Record what was issued; the stock register
-                link arrives with the inventory module.
+                Consumable — no approval or vendor needed. {demand.quantity} {product?.unit ?? ""} are taken out of
+                stock at this site and issued to the requester.
               </p>
+              {onHand !== null && (
+                <p
+                  className={`mb-3 rounded-lg px-3 py-2 text-sm ${
+                    onHand >= demand.quantity ? "bg-emerald-50 text-emerald-800" : "bg-amber-50 text-amber-800"
+                  }`}
+                >
+                  {onHand} in stock at this site
+                  {onHand < demand.quantity && " — not enough. Add stock first, or send it for approval to buy."}
+                </p>
+              )}
               <form action={markStockUpdated.bind(null, demand.id)} className="space-y-3">
                 <textarea
                   name="stockNote"
-                  rows={3}
-                  required
-                  placeholder="e.g. 2 toner cartridges issued from the Bhalwal store"
+                  rows={2}
+                  placeholder="Note (optional) — e.g. handed over at the IT store"
                   aria-label="Stock note"
                   className={inputClass}
                 />
-                <button type="submit" className={primaryButtonClass}>
-                  Record stock issue
+                <button
+                  type="submit"
+                  disabled={onHand !== null && onHand < demand.quantity}
+                  className={`${primaryButtonClass} disabled:cursor-not-allowed disabled:opacity-50`}
+                >
+                  Issue {demand.quantity} from stock
                 </button>
               </form>
             </section>
@@ -616,29 +732,36 @@ export default async function DemandPage({
             <section className={`${cardClass} border-amber-300 p-6`}>
               <h2 className="mb-1 text-base font-semibold text-slate-900">Your decision</h2>
               <p className="mb-4 text-xs text-slate-500">
-                Requested {demand.quantity} {product?.unit ?? ""} · est. {formatMoney(total)}. The time
-                and your name are recorded with the decision.
+                Requested {demand.quantity} {product?.unit ?? ""}
+                {showAmounts && ` · est. ${formatMoney(total)}`}. The time and your name are recorded with the
+                decision.
               </p>
               <form action={decideDemand.bind(null, demand.id)} className="space-y-3">
                 <fieldset className="space-y-2">
                   <legend className="sr-only">Decision</legend>
-                  {(["Approved", "Partially Approved", "Rejected"] as const).map((d) => (
+                  {/* A repair is for one device: approve or reject, no part (javaria_it_0027). */}
+                  {(demand.asset_id
+                    ? (["Approved", "Rejected"] as const)
+                    : (["Approved", "Partially Approved", "Rejected"] as const)
+                  ).map((d) => (
                     <label key={d} className="flex items-center gap-2 text-sm text-slate-800">
                       <input type="radio" name="decision" value={d} required defaultChecked={d === "Approved"} />
                       {d === "Approved" ? `Approve all ${demand.quantity}` : d === "Partially Approved" ? "Approve part" : "Reject"}
                     </label>
                   ))}
                 </fieldset>
-                <label className="block">
-                  <span className={labelClass}>Quantity approved (for “Approve part”)</span>
-                  <input
-                    type="number"
-                    name="approvedQuantity"
-                    min={1}
-                    max={Math.max(1, demand.quantity - 1)}
-                    className={inputClass}
-                  />
-                </label>
+                {!demand.asset_id && (
+                  <label className="block">
+                    <span className={labelClass}>Quantity approved (for “Approve part”)</span>
+                    <input
+                      type="number"
+                      name="approvedQuantity"
+                      min={1}
+                      max={Math.max(1, demand.quantity - 1)}
+                      className={inputClass}
+                    />
+                  </label>
+                )}
                 <label className="block">
                   <span className={labelClass}>Comments (required to reject or approve part)</span>
                   <textarea name="comments" rows={3} className={inputClass} />
@@ -658,18 +781,23 @@ export default async function DemandPage({
                 automatically. The rejection stays in the history.
               </p>
               <form action={reviseRejectedDemand.bind(null, demand.id)} className="space-y-3">
-                <label className="block">
-                  <span className={labelClass}>Quantity</span>
-                  <input
-                    type="number"
-                    name="quantity"
-                    min={1}
-                    max={100000}
-                    required
-                    defaultValue={demand.quantity}
-                    className={inputClass}
-                  />
-                </label>
+                {demand.asset_id ? (
+                  // A repair is always for one device (javaria_it_0027).
+                  <input type="hidden" name="quantity" value="1" />
+                ) : (
+                  <label className="block">
+                    <span className={labelClass}>Quantity</span>
+                    <input
+                      type="number"
+                      name="quantity"
+                      min={1}
+                      max={100000}
+                      required
+                      defaultValue={demand.quantity}
+                      className={inputClass}
+                    />
+                  </label>
+                )}
                 <label className="block">
                   <span className={labelClass}>Justification</span>
                   <textarea
@@ -693,9 +821,12 @@ export default async function DemandPage({
 
           {canAssignVendor && <VendorPanel demand={demand} vendors={vendorsRes.data ?? []} />}
 
-          {canReceive && (
-            <ReceivingPanel demand={demand} unit={product?.unit ?? ""} isFixedAsset={Boolean(product?.asset_type_id)} />
-          )}
+          {canReceive &&
+            (demand.asset_id ? (
+              <DeviceBackPanel demandId={demand.id} parts={partChoices} />
+            ) : (
+              <ReceivingPanel demand={demand} unit={product?.unit ?? ""} isFixedAsset={Boolean(assetRegistration)} />
+            ))}
 
           {canClose && (
             <section className={`${cardClass} p-6`}>

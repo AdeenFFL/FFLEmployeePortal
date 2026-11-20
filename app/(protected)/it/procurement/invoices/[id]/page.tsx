@@ -232,8 +232,9 @@ export default async function InvoicePackagePage({ params }: { params: Promise<{
               />
               <Check
                 ok={hasGatePass}
+                optional={Boolean(demand?.asset_id)}
                 label="Inward Gate Pass"
-                detail={hasGatePass ? (receiving?.gate_pass_no ? `No. ${receiving.gate_pass_no}` : "Picture attached") : "Number or picture needed"}
+                detail={hasGatePass ? (receiving?.gate_pass_no ? `No. ${receiving.gate_pass_no}` : "Picture attached") : demand?.asset_id ? "Not needed for a repair" : "Number or picture needed"}
               />
               <Check
                 ok={Boolean(demandDecision && demandDecision.decision !== "Rejected")}

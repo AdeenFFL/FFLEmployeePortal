@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { PageHeader } from "@/components/page-header";
 import { createClient } from "@/lib/supabase/server";
@@ -48,7 +49,14 @@ export default async function NewSelfOffboardingPage({
       />
       <FormMessage error={error} />
 
-      <form action={createSelfOffboardingRequest} className={`${cardClass} space-y-6 p-6`}>
+      {/* key: a fresh, empty form on every visit (no date or name left over from the last
+          request); autoComplete off so the browser doesn't fill in old values either. */}
+      <form
+        key={randomUUID()}
+        action={createSelfOffboardingRequest}
+        autoComplete="off"
+        className={`${cardClass} space-y-6 p-6`}
+      >
         {me && (
           <section className="rounded-lg border border-slate-200 bg-slate-50 p-4">
             <p className="text-base font-semibold text-slate-900">{me.full_name}</p>

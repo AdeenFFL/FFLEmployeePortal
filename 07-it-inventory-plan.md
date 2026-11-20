@@ -342,6 +342,28 @@ current value / accumulated depreciation from the value type (straight-line and 
 **Code**: `registerAssetsFromReceipt()` for her receiving step; INV-03 Origin tab (receipt →
 demand trail, read-only).
 
+✅ Receiving → assets built by Javaria on `IT/javaria` with Talha's agreement (2026-11-05):
+`javaria_it_0021_register_assets_from_receipt.sql` adds the `assets.vendor_id` / `assets.receiving_id`
+FKs and `it.register_assets_from_receipt(receiving, company, items)` (needs `it.assets.create`; only
+tag + serial typed per item; Fixed-classified types only). Register step on each delivery of the
+demand page; INV-02 shows "delivered items waiting to be registered"; INV-03 now has a lifecycle
+stepper, a "Next step" card, a "Where it came from" section and one combined History. INV-01 got
+tabs (Asset types / Value & depreciation), a slide-over form, and actions that redirect with
+?notice / ?error instead of throwing. Still open here: `asset_maintenance.vendor_id` FK.
+
+✅ Phase 5 built by Javaria (2026-11-05), `javaria_it_0022_consumable_stock.sql` (Applied: NO):
+`it.stock_movements` ledger (Opening / Received / Issued / Adjustment, signed qty, never below 0),
+`it.stock_levels` view, `it.record_stock_movement()`, receiving trigger (consumable deliveries add
+stock), `it.issue_demand_from_stock()` for the consumable demand path, `products.reorder_level`,
+and `it.product_is_fixed_asset()` — **fixed asset = asset type classified Fixed**, used by
+procurement and inventory alike. Screen INV-07 `/it/inventory/stock`. Deviation from the ERD: no
+`asset_id` on stock_movements (asset moves are assignments).
+
+✅ Phase 6 built by Javaria (2026-11-05), no migration: book value is calculated in the app
+(`inventory/valuation.ts`) from the latest `it.asset_values` row + the New / Old rule; "Set value /
+Revalue" on INV-03 adds a row (`it.valuation.update`); INV-02 shows book value per asset. Assets
+registered from a delivery get their first value (New, demand price) in `javaria_it_0021`.
+
 ### Phase 8 — Dashboard and reports
 **Screens**: `<InventoryKpis>` for SCR-06 (total, in use, unassigned, in repair, retired,
 warranty expiring in 30/60/90 days), INV-08 reports with CSV export (same pattern as
@@ -396,3 +418,25 @@ function call between the two IT tracks (same module, same schema), not an event
 | 5 | Asset tag format (`FFL-LAP-000123`)? | **Decided 2026-10-14: asset tags are entered manually** (no enforced format; unique ignoring case; `talha_it_0007_asset_tag_manual.sql` removes the database default) |
 | 6 | Who writes the shared foundation migration? | **Decided: Talha** (`talha_it_0001` → `0024`) |
 | 7 | Can Javeria ship vendors + products early, so Phases 4–5 aren't blocked? | Open: Javeria |
+
+## Inventory and Procurement as one — 2026-11-06 (`javaria_it_0023_repairs_and_guides.sql`, IT/javaria)
+
+Decision (2026-11-06): repairs are done in Procurement and their status shows in Inventory. This
+replaces the "repairs are not demands" design in the guides of the same date. Inventory is now part
+of the Procurement track's work.
+
+- **No Repairs page.** The Repair Log is gone; `/it/inventory/maintenance` redirects to the register
+  filtered to In Repair. Each asset shows its repair, the demand behind it and its history.
+- **Status follows the demand.** The asset goes In Repair when the demand is raised, and back when
+  Device back is recorded. Rejected or cancelled demands release it.
+- **Free fixes** stay on the ticket (Fixed it) and raise no demand.
+- **Service:** Book a service on the asset raises a Maintenance demand.
+- **Replace device** raises a demand linked to the old asset; assigning the new asset retires the
+  old one and resolves the ticket.
+- **Stock:** minimum per product per site (`it.stock_minimums`), set in Inventory Settings;
+  `products.reorder_level` is the fallback.
+- **Asset tags:** `AST-` plus six digits, applied by a database trigger.
+- **Site scoping:** `it.assets.read_all` sees every site; without it, assets, repairs and stock are
+  limited to the person's sites.
+- **Delete:** an asset with assignments or repairs can't be deleted, only retired.
+- **Offboarding:** the request page lists the leaver's assets with a Record return form.

@@ -15,6 +15,7 @@ export type DemandProduct = {
   fixedAsset: boolean;
 };
 type Option = { id: string; name: string };
+type RepairAsset = { id: string; asset_tag: string; asset_name: string };
 type Category = { value: string; label: string; hint: string };
 
 const fieldClass =
@@ -35,8 +36,24 @@ export function DemandForm({
   consumablePath,
   canManageApprovers,
   canAddProducts,
+  showAmounts,
+  repairId,
+  assets,
+  canRaiseRepairs,
+  defaultAsset,
+  defaultCategory,
+  repairCategories,
 }: {
   action: (formData: FormData) => void | Promise<void>;
+  showAmounts: boolean;
+  // Set when ordering a spare part from an open repair (javaria_it_0023).
+  repairId?: string;
+  // Repair, Maintenance and Fix name a device instead of a product (javaria_it_0023).
+  assets: RepairAsset[];
+  canRaiseRepairs: boolean;
+  defaultAsset?: string;
+  defaultCategory?: string;
+  repairCategories: string[];
   products: DemandProduct[];
   categories: Category[];
   departments: Option[];
@@ -51,7 +68,11 @@ export function DemandForm({
   const initial = products.find((p) => p.id === defaultProduct);
   const [query, setQuery] = useState("");
   const [productId, setProductId] = useState(initial?.id ?? "");
-  const [category, setCategory] = useState(initial ? suggested(initial) : "");
+  const [category, setCategory] = useState(defaultCategory ?? (initial ? suggested(initial) : ""));
+  const [assetId, setAssetId] = useState(defaultAsset ?? "");
+  const [assetQuery, setAssetQuery] = useState("");
+  const [issueType, setIssueType] = useState("");
+  const [estimate, setEstimate] = useState("");
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [quantity, setQuantity] = useState(1);
   const [departmentId, setDepartmentId] = useState("");
@@ -70,7 +91,14 @@ export function DemandForm({
   const siteName = sites.find((s) => s.id === siteId)?.name;
   const approverNames = approvers[departmentId] ?? [];
   const fromStock = category === "Consumable" && consumablePath;
-  const ready = Boolean(productId && category && departmentId && siteId && justification.trim() && quantity >= 1);
+  const isRepair = repairCategories.includes(category);
+  const device = assets.find((a) => a.id === assetId);
+  const visibleAssets = assets
+    .filter((a) => `${a.asset_tag} ${a.asset_name}`.toLowerCase().includes(assetQuery.trim().toLowerCase()))
+    .slice(0, 30);
+  const ready = isRepair
+    ? Boolean(assetId && issueType.trim() && departmentId && justification.trim())
+    : Boolean(productId && category && departmentId && siteId && justification.trim() && quantity >= 1);
 
   function pickProduct(p: DemandProduct) {
     setProductId(p.id);
@@ -84,9 +112,82 @@ export function DemandForm({
     <form action={action} className="grid gap-6 lg:grid-cols-3">
       <input type="hidden" name="productId" value={productId} />
       <input type="hidden" name="category" value={category} />
+      {repairId && <input type="hidden" name="repairId" value={repairId} />}
+      <input type="hidden" name="assetId" value={isRepair ? assetId : ""} />
 
       <div className="space-y-6 lg:col-span-2">
+        {/* 1 — Device, for a repair */}
+        {isRepair && (
+          <Section step={1} title="Which device?" done={Boolean(device && issueType.trim())}>
+            {!canRaiseRepairs ? (
+              <p className="rounded-lg bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                Repairs are raised by IT. Raise a ticket and IT will send the device for repair.
+              </p>
+            ) : (
+              <>
+                <input
+                  type="search"
+                  value={assetQuery}
+                  onChange={(e) => setAssetQuery(e.target.value)}
+                  placeholder="Search by tag or name…"
+                  aria-label="Search devices"
+                  className={`${fieldClass} mb-3`}
+                />
+                <div role="radiogroup" aria-label="Device" className="grid max-h-64 gap-2 overflow-y-auto p-0.5 sm:grid-cols-2">
+                  {visibleAssets.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={a.id === assetId}
+                      onClick={() => setAssetId(a.id)}
+                      className={`rounded-xl border p-3 text-left transition ${
+                        a.id === assetId
+                          ? "border-blue-500 bg-blue-50/60 ring-2 ring-blue-500/20"
+                          : "border-slate-200 bg-white hover:border-slate-300 hover:bg-slate-50"
+                      }`}
+                    >
+                      <span className="block font-mono text-xs font-semibold text-slate-900">{a.asset_tag}</span>
+                      <span className="block truncate text-sm text-slate-600">{a.asset_name}</span>
+                    </button>
+                  ))}
+                </div>
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <div>
+                    <label htmlFor="issueType" className="mb-1 block text-sm font-medium text-slate-700">
+                      What&apos;s wrong <span className="text-red-500">*</span>
+                    </label>
+                    <input
+                      id="issueType"
+                      name="issueType"
+                      value={issueType}
+                      onChange={(e) => setIssueType(e.target.value)}
+                      placeholder="e.g. Screen, UPS battery check"
+                      className={fieldClass}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="estimate" className="mb-1 block text-sm font-medium text-slate-700">
+                      Estimated cost (Rs)
+                    </label>
+                    <input
+                      id="estimate"
+                      name="estimate"
+                      inputMode="decimal"
+                      value={estimate}
+                      onChange={(e) => setEstimate(e.target.value)}
+                      placeholder="Optional"
+                      className={fieldClass}
+                    />
+                  </div>
+                </div>
+              </>
+            )}
+          </Section>
+        )}
+
         {/* 1 — Product */}
+        {!isRepair && (
         <Section step={1} title="What do you need?" done={Boolean(product)}>
           <div className="relative mb-3">
             <svg
@@ -145,7 +246,9 @@ export function DemandForm({
                         {[p.category, `per ${p.unit}`].filter(Boolean).join(" · ")}
                       </span>
                       <span className="mt-1.5 flex flex-wrap items-center gap-1.5">
-                        <span className="text-sm font-medium tabular-nums text-slate-800">{formatMoney(p.price)}</span>
+                        {showAmounts && (
+                          <span className="text-sm font-medium tabular-nums text-slate-800">{formatMoney(p.price)}</span>
+                        )}
                         {p.fixedAsset && (
                           <span className="rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700">
                             Fixed asset
@@ -170,6 +273,7 @@ export function DemandForm({
             )}
           </p>
         </Section>
+        )}
 
         {/* 2 — Category */}
         <Section step={2} title="What kind of request is it?" done={Boolean(category)}>
@@ -210,8 +314,9 @@ export function DemandForm({
         </Section>
 
         {/* 3 — Quantity, department, site */}
-        <Section step={3} title="How many, and for whom?" done={Boolean(departmentId && siteId)}>
+        <Section step={3} title={isRepair ? "For whom?" : "How many, and for whom?"} done={Boolean(departmentId && (isRepair || siteId))}>
           <div className="grid gap-4 sm:grid-cols-3">
+            {!isRepair && (
             <div>
               <label htmlFor="quantity" className="mb-1 block text-sm font-medium text-slate-700">
                 Quantity <span className="text-red-500">*</span>
@@ -265,6 +370,7 @@ export function DemandForm({
                 {product && <span className="self-center text-xs text-slate-400">{product.unit}</span>}
               </div>
             </div>
+            )}
             <div>
               <label htmlFor="departmentId" className="mb-1 block text-sm font-medium text-slate-700">
                 Department <span className="text-red-500">*</span>
@@ -287,6 +393,7 @@ export function DemandForm({
                 ))}
               </select>
             </div>
+            {!isRepair && (
             <div>
               <label htmlFor="siteId" className="mb-1 block text-sm font-medium text-slate-700">
                 Site <span className="text-red-500">*</span>
@@ -306,6 +413,7 @@ export function DemandForm({
                 ))}
               </select>
             </div>
+            )}
           </div>
         </Section>
 
@@ -342,18 +450,33 @@ export function DemandForm({
       <aside className="lg:sticky lg:top-6 lg:self-start">
         <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
           <div className="bg-gradient-to-br from-blue-600 to-indigo-600 px-5 py-4 text-white">
-            <p className="text-xs font-medium uppercase tracking-wide text-blue-100">Estimated total</p>
-            <p className="mt-1 text-3xl font-semibold tabular-nums">{formatMoney(total ?? (product ? null : 0))}</p>
-            <p className="mt-1 text-xs text-blue-100">
-              {product ? `${quantity} × ${formatMoney(product.price)} per ${product.unit}` : "Pick a product to see the cost"}
-            </p>
+            {isRepair ? (
+              <>
+                <p className="text-xs font-medium uppercase tracking-wide text-blue-100">Repair</p>
+                <p className="mt-1 text-xl font-semibold">{device ? device.asset_tag : "Choose the device"}</p>
+                {showAmounts && estimate && <p className="mt-1 text-xs text-blue-100">Estimated Rs {estimate}</p>}
+              </>
+            ) : showAmounts ? (
+              <>
+                <p className="text-xs font-medium uppercase tracking-wide text-blue-100">Estimated total</p>
+                <p className="mt-1 text-3xl font-semibold tabular-nums">{formatMoney(total ?? (product ? null : 0))}</p>
+                <p className="mt-1 text-xs text-blue-100">
+                  {product ? `${quantity} × ${formatMoney(product.price)} per ${product.unit}` : "Pick a product to see the cost"}
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-xs font-medium uppercase tracking-wide text-blue-100">Your demand</p>
+                <p className="mt-1 text-xl font-semibold">{product ? `${quantity} × ${product.name}` : "Pick a product"}</p>
+              </>
+            )}
           </div>
 
           <dl className="divide-y divide-slate-100 px-5 text-sm">
-            <SummaryRow label="Product" value={product?.name} />
+            <SummaryRow label={isRepair ? "Device" : "Product"} value={isRepair ? device?.asset_name : product?.name} />
             <SummaryRow label="Category" value={categories.find((c) => c.value === category)?.label} />
             <SummaryRow label="Department" value={departmentName} />
-            <SummaryRow label="Site" value={siteName} />
+            {!isRepair && <SummaryRow label="Site" value={siteName} />}
           </dl>
 
           <div className="border-t border-slate-100 px-5 py-4">
@@ -387,7 +510,9 @@ export function DemandForm({
             <ol className="mt-4 space-y-2 text-xs text-slate-500">
               {(fromStock
                 ? ["Procurement issues it from stock", "You're notified when it's done"]
-                : ["Department head approves", "Procurement orders from a vendor", "Delivery received, invoice paid"]
+                : isRepair
+                  ? ["Department head approves", "Procurement assigns the vendor", "Device back, invoice paid"]
+                  : ["Department head approves", "Procurement orders from a vendor", "Delivery received, invoice paid"]
               ).map((s, i) => (
                 <li key={s} className="flex items-center gap-2">
                   <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-slate-100 text-[11px] font-semibold text-slate-600">

@@ -3,7 +3,7 @@ import type { ItProduct } from "@/types/database";
 import { inputClass, labelClass } from "../../_components/ticket-ui";
 import { FormGroup } from "../_components/ui";
 
-export type AssetTypeOption = { id: string; name: string; is_active: boolean };
+export type AssetTypeOption = { id: string; name: string; is_active: boolean; classification: string };
 
 // One set of fields for both Add and Edit, grouped into short sections (title + hint on the
 // left, fields on the right). Inactive asset types are only offered when the product already
@@ -65,18 +65,34 @@ export function ProductFields({
         <MoneyInput name="currentPrice" label="Current price" value={product?.current_price} />
       </FormGroup>
 
-      <FormGroup title="Tracking" hint="Pick an asset type if each unit received should be registered as an asset.">
+      <FormGroup
+        title="Tracking"
+        hint="A Fixed asset type registers each unit received as an asset. Anything else is counted as stock."
+      >
         <label className="block sm:col-span-2">
           <span className={labelClass}>Asset type</span>
           <select name="assetTypeId" defaultValue={product?.asset_type_id ?? ""} className={inputClass}>
-            <option value="">None — consumable / service (goes into stock)</option>
+            <option value="">None — consumable / service (counted as stock)</option>
             {options.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.name}
+                {t.name} · {t.classification === "Fixed" ? "fixed asset" : "consumable"}
                 {t.is_active ? "" : " (inactive)"}
               </option>
             ))}
           </select>
+        </label>
+        <label className="block">
+          <span className={labelClass}>Reorder level</span>
+          <input
+            name="reorderLevel"
+            type="number"
+            min={0}
+            step={1}
+            defaultValue={product?.reorder_level ?? ""}
+            placeholder="e.g. 5"
+            className={`${inputClass} tabular-nums`}
+          />
+          <span className="mt-1 block text-xs text-slate-400">Consumables: warn when stock at a site drops to this.</span>
         </label>
       </FormGroup>
 

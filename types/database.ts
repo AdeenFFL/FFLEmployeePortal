@@ -338,10 +338,50 @@ export type ItProduct = {
   description: string | null;
   asset_type_id: string | null;
   is_active: boolean;
+  // javaria_it_0022: low-stock warning threshold (null = none).
+  reorder_level: number | null;
+  // Set on the hidden products behind repair demands (javaria_it_0023).
+  service_category: string | null;
   created_at: string;
   updated_at: string;
   created_by: string | null;
   updated_by: string | null;
+};
+
+// it.stock_movements (javaria_it_0022): append-only ledger, signed quantity (+ in, - out).
+export type ItStockMovementType = "Opening" | "Received" | "Issued" | "Adjustment";
+export type ItStockMovement = {
+  id: string;
+  product_id: string;
+  site_id: string;
+  company_id: string | null;
+  movement_type: ItStockMovementType;
+  quantity: number;
+  movement_date: string;
+  receiving_id: string | null;
+  demand_id: string | null;
+  issued_to_person_id: string | null;
+  reason: string | null;
+  // Spare part used in this repair (javaria_it_0023).
+  maintenance_id: string | null;
+  created_at: string;
+  created_by: string | null;
+};
+
+// it.stock_minimums (javaria_it_0023): minimum per site; products.reorder_level is the fallback.
+export type ItStockMinimum = {
+  product_id: string;
+  site_id: string;
+  min_quantity: number;
+  updated_at: string;
+  updated_by: string | null;
+};
+
+export type ItStockLevel = {
+  product_id: string;
+  site_id: string;
+  on_hand: number;
+  last_movement_at: string;
 };
 
 export type ItProcurementSettings = {
@@ -422,6 +462,13 @@ export type ItDemand = {
   // javaria_it_0013_procurement_improvements.sql
   agreed_unit_price: number | null;
   approval_follow_up_on: string | null;
+  // javaria_it_0023: repair demands, Replace device, and the repair a spare part is for.
+  // asset_id set = a repair demand: it is for this device, and Device back replaces the delivery.
+  asset_id: string | null;
+  issue_type: string | null;
+  replaces_asset_id: string | null;
+  ticket_id: string | null;
+  maintenance_id: string | null;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -925,13 +972,17 @@ export type AssetAssignment = {
 };
 
 // it.asset_maintenance (talha_it_0005). Read-only for the app: written only through
-// it.open_maintenance / it.close_maintenance (Phase 4).
+// it.demands_open_repair / it.record_device_back (javaria_it_0023); repairs from before that
+// migration close with it.close_maintenance.
 export type AssetMaintenance = {
   id: string;
   asset_id: string;
   company_id: string;
   site_id: string | null;
   vendor_id: string | null;
+  kind: "Repair" | "Service";
+  ticket_id: string | null;
+  demand_id: string | null;
   issue_type: string;
   description: string | null;
   service_date: string;
@@ -1152,6 +1203,15 @@ export type Database = {
           permission_ok: boolean;
         }[];
       };
+      // javaria_it_0026: User Management's role change, in one transaction.
+      set_person_role: {
+        Args: { p_person_id: string; p_role_id: string };
+        Returns: boolean; // whether the role changed (the person is notified when it did)
+      };
+      notify_role_access_changed: {
+        Args: { p_role_id: string; p_summary: string };
+        Returns: number;
+      };
       update_own_biodata: {
         Args: {
           p_display_name: string | null;
@@ -1335,6 +1395,18 @@ export type Database = {
         Relationships: [];
       };
       // javaria_it_0012_receiving_documents.sql — written only through functions.
+      stock_movements: {
+        Row: ItStockMovement;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
+      stock_minimums: {
+        Row: ItStockMinimum;
+        Insert: never;
+        Update: never;
+        Relationships: [];
+      };
       receiving_records: {
         Row: ItReceivingRecord;
         Insert: Partial<ItReceivingRecord>;
@@ -1607,7 +1679,12 @@ export type Database = {
         ];
       };
     };
-    Views: Record<string, never>;
+    Views: {
+      stock_levels: {
+        Row: ItStockLevel;
+        Relationships: [];
+      };
+    };
     Functions: {
       confirm_onboarding: {
         Args: {
@@ -1877,6 +1954,82 @@ export type Database = {
           p_remarks: string | null;
         };
         Returns: string;
+      };
+      // javaria_it_0022: consumable stock.
+      record_stock_movement: {
+        Args: {
+          p_product_id: string;
+          p_site_id: string;
+          p_type: ItStockMovementType;
+          p_quantity: number;
+          p_issued_to: string | null;
+          p_reason: string | null;
+          p_date: string | null;
+        };
+        Returns: string;
+      };
+      issue_demand_from_stock: {
+        Args: { p_demand_id: string; p_note: string | null };
+        Returns: undefined;
+      };
+      // javaria_it_0023: repairs, repair bills, replacements, minimum stock.
+      raise_repair_demand: {
+        Args: {
+          p_asset_id: string;
+          p_category: string;
+          p_issue_type: string;
+          p_justification: string | null;
+          p_department_id: string;
+          p_estimate: number | null;
+          p_ticket_id: string | null;
+        };
+        Returns: string;
+      };
+      record_device_back: {
+        Args: {
+          p_demand_id: string;
+          p_resolution: string;
+          p_returned_date: string | null;
+          p_condition: string;
+          p_gate_pass_no: string | null;
+          p_remarks: string | null;
+          p_parts: { product_id: string; quantity: number }[];
+          p_no_bill: boolean;
+          p_beyond_repair: boolean; // javaria_it_0025
+        };
+        Returns: string;
+      };
+      raise_replacement_demand: {
+        Args: {
+          p_ticket_id: string;
+          p_product_id: string;
+          p_department_id: string;
+          p_justification: string | null;
+        };
+        Returns: string;
+      };
+      set_stock_minimum: {
+        Args: { p_product_id: string; p_site_id: string; p_min_quantity: number | null };
+        Returns: undefined;
+      };
+      product_is_fixed_asset: {
+        Args: { p_product_id: string };
+        Returns: boolean;
+      };
+      // javaria_it_0021: register a receipt's accepted fixed-asset items as it.assets rows.
+      register_assets_from_receipt: {
+        Args: {
+          p_receiving_id: string;
+          p_company_id: string | null;
+          p_items: {
+            asset_tag: string;
+            serial_number: string;
+            manufacturer?: string | null;
+            model_number?: string | null;
+            warranty_expiry?: string | null;
+          }[];
+        };
+        Returns: number;
       };
       update_receiving_refs: {
         Args: { p_receiving_id: string; p_challan_no: string | null; p_gate_pass_no: string | null };

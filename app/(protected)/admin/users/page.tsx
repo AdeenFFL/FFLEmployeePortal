@@ -85,6 +85,14 @@ export default async function AdminUsersPage({
   const pendingInvitations = (invitations ?? []).filter(
     (invite) => !existingEmails.has(invite.email),
   );
+  // Invites staged by an IT onboarding request (Email Account task): show which one.
+  const onboardingIds = pendingInvitations
+    .map((i) => i.onboarding_request_id)
+    .filter((id): id is string => Boolean(id));
+  const { data: onboardingRequests } = onboardingIds.length
+    ? await supabase.schema("it").from("onboarding_offboarding").select("id, request_number").in("id", onboardingIds)
+    : { data: [] };
+  const requestNumberById = new Map((onboardingRequests ?? []).map((r) => [r.id, r.request_number]));
 
   let panel: { mode: "new" | "edit" } & {
     initialValues: {
@@ -130,10 +138,13 @@ export default async function AdminUsersPage({
       .maybeSingle();
 
     if (existingAccount?.persons) {
+      // limit(1): a person left with two role rows by the old save made maybeSingle() fail.
       const { data: roleRow } = await supabase
         .from("user_roles")
         .select("role_id")
         .eq("person_id", existingAccount.person_id)
+        .order("granted_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       panel = {
@@ -344,7 +355,17 @@ export default async function AdminUsersPage({
           <tbody className="divide-y divide-slate-100">
             {pendingInvitations.map((invite) => (
               <tr key={invite.email}>
-                <td className="px-4 py-3">{invite.display_name ?? "—"}</td>
+                <td className="px-4 py-3">
+                  {invite.display_name ?? "—"}
+                  {invite.onboarding_request_id && (
+                    <Link
+                      href={`/it/onboarding/${invite.onboarding_request_id}`}
+                      className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700 hover:underline"
+                    >
+                      Onboarding {requestNumberById.get(invite.onboarding_request_id) ?? ""}
+                    </Link>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-slate-500">{invite.email}</td>
                 <td className="px-4 py-3">{roleNameById.get(invite.role_id)}</td>
                 <td className="px-4 py-3 text-slate-500">{formatDate(invite.invited_at)}</td>

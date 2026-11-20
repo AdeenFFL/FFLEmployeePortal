@@ -6,16 +6,18 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { Modal } from "@/components/modal";
 import { AssetAllocationForm } from "../_components/asset-allocation-form";
+import { RequestDetails } from "../_components/request-details";
+import { AssetReturnForm } from "../../inventory/_components/asset-return-form";
+import { listOpenAssignments } from "@/lib/it/assets";
 import { checked, fetchOrgUnits, fetchPersonNames, hasItPermission } from "@/lib/it/ticket-data";
 import {
   CHECKLIST_STATUSES,
   CHECKLIST_STATUS_TONE,
   FINISHED_STATUSES,
-  KIND_TONE,
-  LIFECYCLE_STATUS_TONE,
   TASK_DETAIL_FIELDS,
+  taskGuide,
 } from "@/lib/it/onboarding";
-import { formatDate, formatDateTime } from "@/lib/it/tickets";
+import { formatDateTime } from "@/lib/it/tickets";
 import {
   addChecklistItem,
   addLifecycleUpdate,
@@ -33,11 +35,9 @@ import {
 } from "../actions";
 import {
   cardClass,
-  Fact,
   FormMessage,
   inputClass,
   labelClass,
-  PriorityBadge,
   primaryButtonClass,
   secondaryButtonClass,
   Timeline,
@@ -74,6 +74,7 @@ export default async function LifecycleRequestPage({
     q?: string;
     updateTask?: string;
     cancel?: string;
+    returnAsset?: string;
   }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
@@ -101,6 +102,7 @@ export default async function LifecycleRequestPage({
     canApprove,
     canUpdate,
     canAssignAssets,
+    canManageUsers,
   ] = await Promise.all([
     supabase
       .schema("it")
@@ -122,6 +124,7 @@ export default async function LifecycleRequestPage({
     hasItPermission(supabase, "it.onboarding.approve"),
     hasItPermission(supabase, "it.onboarding.update"),
     hasItPermission(supabase, "it.assets.assign"),
+    hasItPermission(supabase, "route:/admin/users"),
   ]);
 
   const checklist = items ?? [];
@@ -132,6 +135,15 @@ export default async function LifecycleRequestPage({
     !request.person_id &&
     !isFinished &&
     (canAssign || (portalTask && portalTask.assigned_to_person_id === personId));
+
+  // Who sees what on the checklist:
+  //   * whoever runs the request (can assign onboarding work, or is its IT Executive): every task;
+  //   * IT staff holding tasks on it: only their own tasks, with how to complete each one;
+  //   * anyone else who can read the request (HR): just how far IT has got.
+  const isManager = canAssign || (Boolean(personId) && request.it_executive_person_id === personId);
+  const myTasks = checklist.filter((i) => Boolean(personId) && i.assigned_to_person_id === personId);
+  const showChecklist = isManager || myTasks.length > 0;
+  const visibleTasks = isManager ? checklist : myTasks;
 
   const assignmentIds = checklist
     .map((i) => i.assignment_id)
@@ -172,6 +184,28 @@ export default async function LifecycleRequestPage({
       ? supabase.from("roles").select("id, name").order("name")
       : Promise.resolve({ data: null }),
   ]);
+  // Employee account (onboarding): the staged sign-in invite and, once they have signed in, their
+  // role. invited_users / user_roles are admin-only under RLS; read here only for the request's
+  // managers, same justification as the leaver-account read above.
+  const showAccount = request.kind === "Onboarding" && isManager;
+  const accountAdmin = showAccount ? createAdminClient() : null;
+  const [{ data: accountInvite }, { data: accountRoles }, { data: allRoles }] = accountAdmin
+    ? await Promise.all([
+        accountAdmin
+          .from("invited_users")
+          .select("email, role_id, invited_at")
+          .eq("onboarding_request_id", request.id)
+          .maybeSingle(),
+        request.person_id
+          ? accountAdmin.from("user_roles").select("role_id").eq("person_id", request.person_id)
+          : Promise.resolve({ data: null }),
+        accountAdmin.from("roles").select("id, name"),
+      ])
+    : [{ data: null }, { data: null }, { data: null }];
+  const roleName = new Map((allRoles ?? []).map((r) => [r.id, r.name]));
+  const emailTask = checklist.find((i) => i.task_type === "email_account");
+  const companyEmail = emailTask?.details?.email_address ?? null;
+
   const assetByAssignmentId = new Map(
     (assignedAssets ?? []).map((a) => [a.id, a.assets as unknown as { asset_tag: string; asset_name: string } | null]),
   );
@@ -179,6 +213,11 @@ export default async function LifecycleRequestPage({
     (assignedAssets ?? []).map((a) => [a.id, a.acknowledged_at as string | null]),
   );
   const allocationAssignmentId = checklist.find((i) => i.task_type === "asset_allocation")?.assignment_id ?? null;
+
+  // What the leaver still holds; each return goes back to stock with its condition.
+  const leaverAssets =
+    request.kind === "Offboarding" && request.person_id ? await listOpenAssignments(supabase, request.person_id) : [];
+  const returning = leaverAssets.find((a) => a.id === sp.returnAsset);
 
   const nameOf = (pid: string | null) => (pid ? (names.get(pid) ?? "—") : "—");
   const done = checklist.filter((i) => i.status === "Completed" || i.status === "Not Applicable");
@@ -199,94 +238,25 @@ export default async function LifecycleRequestPage({
       <div className="grid gap-6 xl:grid-cols-3">
         {/* ---------------- Main column ---------------- */}
         <div className="space-y-6 xl:col-span-2">
-          <section className={`${cardClass} p-6`}>
-            <div className="mb-4 flex flex-wrap items-center gap-2">
-              <StatusPill label={request.kind} tone={KIND_TONE[request.kind]} />
-              <StatusPill label={request.status} tone={LIFECYCLE_STATUS_TONE[request.status]} />
-              <PriorityBadge priority={request.priority} />
-              <StatusPill label={request.routing_team} tone="neutral" />
-            </div>
-            <dl className="grid gap-4 sm:grid-cols-3">
-              <Fact label="Employee">
-                {request.employee_name}
-                {request.employee_code && ` (${request.employee_code})`}
-              </Fact>
-              <Fact label="Designation">{request.designation ?? "—"}</Fact>
-              {request.grade && <Fact label="Grade">{request.grade}</Fact>}
-              <Fact label="Department">
-                {(request.department_id && orgUnits.nameById.get(request.department_id)) ?? "—"}
-              </Fact>
-              <Fact label="Location">
-                {(request.site_id && orgUnits.nameById.get(request.site_id)) ?? "—"}
-              </Fact>
-              <Fact label="Reporting manager">{request.reporting_manager_name ?? "—"}</Fact>
-              {request.employee_category && (
-                <Fact label="Category">{request.employee_category}</Fact>
-              )}
-              {request.joining_date && (
-                <Fact label="Joining date">{formatDate(request.joining_date)}</Fact>
-              )}
-              {request.last_working_date && (
-                <Fact label="Last working date">{formatDate(request.last_working_date)}</Fact>
-              )}
-              <Fact label="Due">{formatDate(request.due_date)}</Fact>
-              {request.personal_email && (
-                <Fact label="Personal email">{request.personal_email}</Fact>
-              )}
-              {request.kind === "Onboarding" && (
-                <>
-                  <Fact label="Email required">{request.email_required ? "Yes" : "No"}</Fact>
-                  <Fact label="Laptop required">{request.laptop_required ? "Yes" : "No"}</Fact>
-                </>
-              )}
-            </dl>
-            {(request.access_required ||
-              request.software_required ||
-              request.known_assets_accesses ||
-              request.remarks) && (
-              <div className="mt-4 space-y-3 border-t border-slate-100 pt-4 text-sm">
-                {request.access_required && (
-                  <p>
-                    <span className="font-medium text-slate-600">Access required: </span>
-                    {request.access_required}
-                  </p>
-                )}
-                {request.software_required && (
-                  <p>
-                    <span className="font-medium text-slate-600">Software: </span>
-                    {request.software_required}
-                  </p>
-                )}
-                {request.known_assets_accesses && (
-                  <p>
-                    <span className="font-medium text-slate-600">Known assets / accesses: </span>
-                    {request.known_assets_accesses}
-                  </p>
-                )}
-                {request.remarks && (
-                  <p>
-                    <span className="font-medium text-slate-600">Remarks: </span>
-                    {request.remarks}
-                  </p>
-                )}
-              </div>
-            )}
-          </section>
+          <RequestDetails request={request} nameById={orgUnits.nameById} />
 
           {/* Checklist */}
+          {showChecklist ? (
           <section className={`${cardClass} p-6`}>
             <div className="mb-4 flex items-baseline justify-between">
-              <h2 className="text-base font-semibold text-slate-900">Checklist</h2>
+              <h2 className="text-base font-semibold text-slate-900">{isManager ? "Checklist" : "Your tasks"}</h2>
               <span className="text-sm text-slate-500">
-                {done.length}/{checklist.length} done
+                {isManager
+                  ? `${done.length}/${checklist.length} done`
+                  : `${myTasks.filter((i) => i.status === "Completed" || i.status === "Not Applicable").length}/${myTasks.length} of yours done · ${done.length}/${checklist.length} overall`}
               </span>
             </div>
 
             <ul className="space-y-3">
-              {checklist.map((item) => {
+              {visibleTasks.map((item) => {
                 const isMine = Boolean(personId) && item.assigned_to_person_id === personId;
                 const canWork = !isFinished && (canAssign || (canUpdate && isMine));
-                const fields = TASK_DETAIL_FIELDS[item.task_type];
+                const fields = TASK_DETAIL_FIELDS[item.task_type] ?? [];
                 const recorded = fields.filter((f) => item.details?.[f.key]);
                 return (
                   <li key={item.id} className="rounded-lg border border-slate-200 p-4">
@@ -303,6 +273,15 @@ export default async function LifecycleRequestPage({
                       </div>
                       <StatusPill label={item.status} tone={CHECKLIST_STATUS_TONE[item.status]} />
                     </div>
+
+                    {(isMine || isManager) &&
+                      !isFinished &&
+                      (item.status === "Pending" || item.status === "In Progress") && (
+                        <p className="mt-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900">
+                          <span className="font-semibold">How to complete: </span>
+                          {taskGuide(item.task_type, request.kind, request.email_required)}
+                        </p>
+                      )}
 
                     {item.task_type === "asset_allocation" && item.assignment_id && (
                       <p className="mt-2 text-xs text-emerald-700">
@@ -464,7 +443,7 @@ export default async function LifecycleRequestPage({
               })}
             </ul>
 
-            {checklist.map((item) => {
+            {visibleTasks.map((item) => {
               if (sp.updateTask !== item.id) return null;
 
               if (item.task_type === "asset_allocation") {
@@ -509,7 +488,7 @@ export default async function LifecycleRequestPage({
 
               const isMine = Boolean(personId) && item.assigned_to_person_id === personId;
               const canWork = !isFinished && (canAssign || (canUpdate && isMine));
-              const fields = TASK_DETAIL_FIELDS[item.task_type];
+              const fields = TASK_DETAIL_FIELDS[item.task_type] ?? [];
               if (!canWork) return null;
               // Completing this with a real address also stages the new hire's portal invite
               // (completeEmailAccountTask) — same fields, different action, so the fallback
@@ -602,6 +581,20 @@ export default async function LifecycleRequestPage({
               </form>
             )}
           </section>
+          ) : (
+            <section className={`${cardClass} p-6`}>
+              <div className="flex items-baseline justify-between">
+                <h2 className="text-base font-semibold text-slate-900">IT progress</h2>
+                <span className="text-sm text-slate-500">
+                  {done.length}/{checklist.length} tasks done
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-slate-500">IT works through its checklist; the status above shows when it is finished.</p>
+              {canUpdate && (
+                <p className="mt-2 text-xs text-slate-500">No task on this request is assigned to you.</p>
+              )}
+            </section>
+          )}
 
           {/* Timeline */}
           <section className={`${cardClass} p-6`}>
@@ -660,6 +653,59 @@ export default async function LifecycleRequestPage({
                 </form>
               )}
           </Panel>
+
+          {showAccount && (
+            <Panel title="Employee account">
+              <ol className="space-y-3 text-sm">
+                <li>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">1 · Company email</p>
+                  <p className="text-slate-700">
+                    {!request.email_required
+                      ? `Not needed: signs in with ${request.personal_email ?? "their personal email"}`
+                      : companyEmail
+                        ? companyEmail
+                        : "Not created yet (Email Account task)"}
+                  </p>
+                </li>
+                <li>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
+                    2 · {request.email_required ? "Sign-in invite" : "Set-password email"}
+                  </p>
+                  <p className="text-slate-700">
+                    {!request.email_required
+                      ? `Sent to ${request.personal_email ?? "their personal email"} when the request was raised`
+                      : request.person_id
+                        ? "Accepted: they have signed in"
+                        : accountInvite
+                          ? `Sent to ${accountInvite.email} · role ${roleName.get(accountInvite.role_id) ?? "—"}`
+                          : "Not sent yet: goes out when the Email Account task is completed with the address"}
+                  </p>
+                  {accountInvite && !request.person_id && (
+                    <p className="text-xs text-slate-500">
+                      The role is set by the Portal Account task. Listed under User Management → Pending Invitations.
+                    </p>
+                  )}
+                </li>
+                <li>
+                  <p className="text-xs font-medium uppercase tracking-wide text-slate-400">3 · Portal account</p>
+                  <p className="text-slate-700">
+                    {request.person_id
+                      ? `${nameOf(request.person_id)} · ${
+                          (accountRoles ?? []).map((r) => roleName.get(r.role_id)).filter(Boolean).join(", ") || "no role"
+                        }`
+                      : request.email_required
+                        ? "Not yet: created the first time they sign in with the company email, then linked here by itself"
+                        : "Not linked: link the account under Employee Portal Account Creation"}
+                  </p>
+                </li>
+              </ol>
+              {canManageUsers && (
+                <Link href="/admin/users" className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline">
+                  Open User Management
+                </Link>
+              )}
+            </Panel>
+          )}
 
           {request.kind === "Onboarding" && (
             <Panel title="Employee confirmation">
@@ -754,6 +800,44 @@ export default async function LifecycleRequestPage({
                 </div>
               )}
             </Panel>
+          )}
+
+          {request.kind === "Offboarding" && request.person_id && (canAssignAssets || leaverAssets.length > 0) && (
+            <Panel title="Assets to return">
+              {leaverAssets.length === 0 ? (
+                <p className="text-sm text-slate-500">Nothing left to return.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {leaverAssets.map((a) => {
+                    const asset = a.assets as unknown as { asset_tag: string; asset_name: string } | null;
+                    return (
+                      <li key={a.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                        <Link href={`/it/inventory/${a.asset_id}`} className="min-w-0 hover:underline">
+                          <span className="font-mono text-xs text-slate-500">{asset?.asset_tag}</span>{" "}
+                          <span className="text-slate-900">{asset?.asset_name}</span>
+                        </Link>
+                        {canAssignAssets && !isFinished && (
+                          <Link href={`${basePath}?returnAsset=${a.id}`} className="shrink-0 font-medium text-blue-700 hover:underline">
+                            Record return
+                          </Link>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </Panel>
+          )}
+          {canAssignAssets && returning && !isFinished && (
+            <Modal key={Date.now()} closeHref={basePath} title="Return asset">
+              <AssetReturnForm
+                assetId={returning.asset_id}
+                assignedDate={returning.assigned_date}
+                assignedCondition={returning.assigned_condition}
+                holderName={nameOf(request.person_id)}
+                returnTo={basePath}
+              />
+            </Modal>
           )}
 
           {request.kind === "Offboarding" && request.person_id && canAssign && (

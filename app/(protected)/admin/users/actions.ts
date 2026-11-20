@@ -27,7 +27,8 @@ function readUserFormFields(formData: FormData) {
   };
 }
 
-export async function inviteOrUpdateUser(formData: FormData) {
+// Returns the message the panel shows on success.
+export async function inviteOrUpdateUser(formData: FormData): Promise<string> {
   const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 
   const email = String(formData.get("email") ?? "")
@@ -53,26 +54,25 @@ export async function inviteOrUpdateUser(formData: FormData) {
     // never read on this branch. persons.full_name is NOT NULL (unlike the old
     // profiles.display_name) — fall back to email if the admin clears the display name field.
     const { role_id, ...personFields } = fields;
-    const { error } = await supabase
+    // .select() so an update RLS silently filtered out (0 rows) is reported, not ignored.
+    const { data: updated, error } = await supabase
       .from("persons")
       .update({ ...personFields, full_name: personFields.full_name ?? email })
-      .eq("id", existingAccount.person_id);
+      .eq("id", existingAccount.person_id)
+      .select("id");
     if (error) throw new Error(error.message);
+    if (!updated?.length) throw new Error("You don't have permission to edit this user.");
 
     // The UI still assigns exactly one role per person for now (schema supports multi-role;
-    // see 04-claude-code-refactor-instructions.md Section 6) — delete-then-insert the one row.
-    const { error: roleDeleteError } = await supabase
-      .from("user_roles")
-      .delete()
-      .eq("person_id", existingAccount.person_id);
-    if (roleDeleteError) throw new Error(roleDeleteError.message);
-
-    const { error: roleInsertError } = await supabase.from("user_roles").insert({
-      person_id: existingAccount.person_id,
-      role_id,
-      granted_by: adminPersonId,
+    // see 04-claude-code-refactor-instructions.md Section 6). set_person_role
+    // (javaria_it_0026) swaps it in one transaction: the old delete-then-insert could leave the
+    // old role in place when the delete silently matched nothing.
+    // The person gets a notification when the role actually changed.
+    const { data: roleChanged, error: roleError } = await supabase.rpc("set_person_role", {
+      p_person_id: existingAccount.person_id,
+      p_role_id: role_id,
     });
-    if (roleInsertError) throw new Error(roleInsertError.message);
+    if (roleError) throw new Error(roleError.message);
 
     await logAuditEvent({
       supabase,
@@ -84,7 +84,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
     });
 
     revalidatePath("/admin/users");
-    return;
+    return roleChanged ? "Saved. The role changed and they've been notified." : "Saved.";
   }
 
   const authMethod = String(formData.get("auth_method") ?? "microsoft") as AuthMethod;
@@ -189,7 +189,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
     });
 
     revalidatePath("/admin/users");
-    return;
+    return emailResult.sent ? "Account created and the invite email sent." : "Account created, but the invite email failed to send.";
   }
 
   // Microsoft path — new invite, or editing a still-pending one. Upsert on the email PK covers
@@ -247,6 +247,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
   });
 
   revalidatePath("/admin/users");
+  return existingInvite ? "Invitation updated." : emailResult?.sent ? "Invitation sent." : "Invited, but the email failed to send.";
 }
 
 // Lets an admin re-send the invite notification for a pending Microsoft invitation without

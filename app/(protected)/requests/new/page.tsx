@@ -31,7 +31,8 @@ export default async function NewRequestPage() {
       label: "Resignation / offboarding",
       description: "Filing your own resignation or offboarding request.",
       icon: LogoutIcon,
-      permission: "module:it",
+      // Same key the page itself needs (lib/auth/route-permissions.ts).
+      permission: "hr.offboarding.create_self",
     },
   ].filter((c) => granted.has(c.permission));
 

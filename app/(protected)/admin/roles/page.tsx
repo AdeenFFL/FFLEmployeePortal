@@ -31,8 +31,8 @@ export default async function AdminRolesPage({
   // `<module>.*` fine-grained permissions are hidden from this screen entirely once that module
   // ships its own config screen — see 01-platform-design-and-sop.md §11's module-onboarding
   // convention. Add a module's key prefix here once it ships its own "<module>.*" config screen
-  // (e.g. /hr/admin/roles).
-  const MODULE_OWNED_PREFIXES = ["hr."];
+  // (e.g. /hr/admin/roles). IT's are set on IT Roles & Permissions (/it/admin/roles).
+  const MODULE_OWNED_PREFIXES = ["hr.", "it."];
 
   const moduleAccessPermissions: Permission[] = [];
   const visiblePermissions: Permission[] = [];

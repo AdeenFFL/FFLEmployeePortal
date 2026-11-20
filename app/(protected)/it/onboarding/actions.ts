@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requirePermission } from "@/lib/auth/require-permission";
+import { requireAnyPermission, requirePermission } from "@/lib/auth/require-permission";
 import { requireActiveUser } from "@/lib/auth/require-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -29,7 +29,9 @@ import type {
 // status moves are allowed. Messages come back as ?error= / ?notice=.
 
 function go(path: string, kind: "error" | "notice", message: string): never {
-  redirect(`${path}?${kind}=${encodeURIComponent(message)}`);
+  // "&" when the path already has a query (e.g. /it/onboarding/new?kind=Onboarding): a second "?"
+  // broke the URL, so the error never showed and the form just came back empty.
+  redirect(`${path}${path.includes("?") ? "&" : "?"}${kind}=${encodeURIComponent(message)}`);
 }
 
 function text(formData: FormData, key: string) {
@@ -43,9 +45,13 @@ function optional(formData: FormData, key: string) {
 function refresh(requestId?: string) {
   queueItEmails(); // notification rows were written by DB triggers; deliver their emails
   revalidatePath("/it/onboarding");
+  revalidatePath("/hr/onboarding");
   revalidatePath("/it/my-onboarding");
   revalidatePath("/it/my-offboarding");
-  if (requestId) revalidatePath(`/it/onboarding/${requestId}`);
+  if (requestId) {
+    revalidatePath(`/it/onboarding/${requestId}`);
+    revalidatePath(`/hr/onboarding/${requestId}`);
+  }
 }
 
 // Type-ahead for the employee picker (javaria_it_0018). it.employee_lookup() does the access
@@ -123,7 +129,13 @@ export async function createLifecycleRequest(formData: FormData) {
 
   if (kind === "Onboarding") {
     if (!employeeName) go(back, "error", "Enter the new joiner's name.");
-    if (!text(formData, "joiningDate")) go(back, "error", "Enter the joining date.");
+    // Every field marked * on the form, checked here too so nothing half-filled is ever raised.
+    if (!optional(formData, "designation")) go(back, "error", "Enter the designation.");
+    if (!optional(formData, "departmentId")) go(back, "error", "Choose the department.");
+    if (!optional(formData, "siteId")) go(back, "error", "Choose the work location.");
+    if (!reportingManagerId) go(back, "error", "Choose the reporting manager.");
+    if (category !== "Permanent" && category !== "Contractual") go(back, "error", "Choose the employee category.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text(formData, "joiningDate"))) go(back, "error", "Select the joining date.");
     // No company email means their portal account gets auto-created on their personal address
     // (see below) — there's nowhere else to send it.
     if (!emailRequired && !personalEmail) {
@@ -131,6 +143,28 @@ export async function createLifecycleRequest(formData: FormData) {
     }
   } else {
     if (!personId) go(back, "error", "Select the employee.");
+  }
+
+  // Double submit / raised twice: an open request of this kind for the same employee is the one
+  // already made, so show that instead of creating a copy.
+  const existing = supabase
+    .schema("it")
+    .from("onboarding_offboarding")
+    .select("id, request_number")
+    .eq("request_type_id", requestType.id)
+    .not("status", "in", "(Completed,Closed,Cancelled)");
+  const { data: alreadyRaised } = await (kind === "Onboarding"
+    ? existing.ilike("employee_name", employeeName).eq("joining_date", text(formData, "joiningDate"))
+    : existing.eq("person_id", personId ?? "")
+  )
+    .limit(1)
+    .maybeSingle();
+  if (alreadyRaised) {
+    go(
+      `/it/onboarding/${alreadyRaised.id}`,
+      "notice",
+      `${alreadyRaised.request_number} is already raised for this employee. No copy was made.`,
+    );
   }
 
   const { data: created, error } = await supabase
@@ -283,7 +317,9 @@ export async function createLifecycleRequest(formData: FormData) {
   }
 
   refresh();
-  go(`/it/onboarding/${created.id}`, "notice", `${created.request_number} raised. IT has been notified.`);
+  // HR raised an onboarding: back to HR's own view of it. A replacement stays with IT.
+  const raisedPath = kind === "Onboarding" ? `/hr/onboarding/${created.id}` : `/it/onboarding/${created.id}`;
+  go(raisedPath, "notice", `${created.request_number} raised. IT has been notified.`);
 }
 
 // BRD §5.1.4 / §5.2.5 — the IT Executive picks the request up.
@@ -333,7 +369,7 @@ export async function assignChecklistItem(requestId: string, itemId: string, for
 // The assignee records what was done (BRD §5.1.6–5.1.11, §5.2.7–5.2.10) and the item's status.
 export async function updateChecklistItem(requestId: string, itemId: string, formData: FormData) {
   const path = `/it/onboarding/${requestId}`;
-  const { supabase } = await requirePermission("it.onboarding.read");
+  const { supabase } = await requireAnyPermission(["it.onboarding.read", "it.onboarding.update"]);
 
   const status = text(formData, "status") as ItChecklistStatus;
   if (!CHECKLIST_STATUSES.includes(status)) go(path, "error", "Invalid task status.");
@@ -348,7 +384,7 @@ export async function updateChecklistItem(requestId: string, itemId: string, for
   if (!item) go(path, "error", "Task not found.");
 
   const details: Record<string, string> = { ...(item.details ?? {}) };
-  for (const field of TASK_DETAIL_FIELDS[item.task_type]) {
+  for (const field of TASK_DETAIL_FIELDS[item.task_type] ?? []) {
     const value = text(formData, `detail_${field.key}`);
     if (value) details[field.key] = value;
     else delete details[field.key];
@@ -377,7 +413,7 @@ export async function updateChecklistItem(requestId: string, itemId: string, for
 // flow already does.
 export async function completeEmailAccountTask(requestId: string, itemId: string, formData: FormData) {
   const path = `/it/onboarding/${requestId}`;
-  const { supabase } = await requirePermission("it.onboarding.read");
+  const { supabase } = await requireAnyPermission(["it.onboarding.read", "it.onboarding.update"]);
 
   const status = text(formData, "status") as ItChecklistStatus;
   if (!CHECKLIST_STATUSES.includes(status)) go(path, "error", "Invalid task status.");

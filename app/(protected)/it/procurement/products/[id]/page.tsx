@@ -2,7 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
-import { checked, hasItPermission } from "@/lib/it/ticket-data";
+import { checked, fetchOrgUnits, hasItPermission } from "@/lib/it/ticket-data";
+import { minimumLevel, stockMinimums } from "@/lib/it/stock";
 import { DEMAND_STATUS_TONE, formatMoney } from "@/lib/it/procurement";
 import { cardClass, FormMessage, primaryButtonClass } from "../../../_components/ticket-ui";
 import { BackLink } from "../../_components/ui";
@@ -24,15 +25,16 @@ export default async function ProductPage({
   const [{ id }, sp] = await Promise.all([params, searchParams]);
   const supabase = await createClient();
 
-  const [{ data: canRead }, canEdit] = await Promise.all([
+  const [{ data: canRead }, canEdit, showAmounts] = await Promise.all([
     supabase.schema("it").rpc("can_read_procurement_masters"),
     hasItPermission(supabase, "it.products.update"),
+    hasItPermission(supabase, "it.amounts.read"),
   ]);
   if (!canRead) notFound();
 
   const [productRes, typesRes, categoriesRes, demandsRes] = await Promise.all([
     supabase.schema("it").from("products").select("*").eq("id", id).maybeSingle(),
-    supabase.schema("it").from("asset_types").select("id, name, is_active").order("name"),
+    supabase.schema("it").from("asset_types").select("id, name, is_active, classification").order("name"),
     supabase.schema("it").from("products").select("category").not("category", "is", null),
     supabase
       .schema("it")
@@ -51,7 +53,17 @@ export default async function ProductPage({
   // Demands are RLS-filtered: this is what the viewer may see, not necessarily every demand.
   const demands = demandsRes.error ? [] : (demandsRes.data ?? []);
   const demandCount = demandsRes.error ? 0 : (demandsRes.count ?? demands.length);
-  const typeName = assetTypes.find((t) => t.id === product.asset_type_id)?.name;
+  const productType = assetTypes.find((t) => t.id === product.asset_type_id);
+  const typeName = productType?.name;
+  const isFixed = productType?.classification === "Fixed";
+  // Consumables: on hand per site (javaria_it_0022). null = viewer can't read stock.
+  const { data: levelRows, error: levelError } = isFixed
+    ? { data: null, error: null }
+    : await supabase.schema("it").from("stock_levels").select("site_id, on_hand").eq("product_id", product.id);
+  const levels = levelError ? null : (levelRows ?? []);
+  const [{ nameById: siteName }, minimums] = levels?.length
+    ? await Promise.all([fetchOrgUnits(supabase), stockMinimums(supabase)])
+    : [{ nameById: new Map<string, string>() }, new Map<string, number>()];
   const noPrice = !product.current_price || Number(product.current_price) <= 0;
 
   return (
@@ -72,19 +84,20 @@ export default async function ProductPage({
         <div className="min-w-0 flex-1">
           <h1 className="text-2xl font-bold text-slate-900">{product.product_name}</h1>
           <div className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-slate-500">
-            {product.asset_type_id ? (
+            {isFixed ? (
               <span className="rounded-full bg-violet-50 px-2 py-0.5 text-xs font-medium text-violet-700">
-                Fixed asset · {typeName ?? "type"}
+                Fixed asset · {typeName}
               </span>
             ) : (
-              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">
-                Consumable / service
+              <span className="rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800">
+                Consumable{typeName ? ` · ${typeName}` : " / service"}
               </span>
             )}
             {!product.is_active && <StatusPill label="Inactive" tone="warning" />}
             <span>{[product.category, `per ${product.unit}`].filter(Boolean).join(" · ")}</span>
           </div>
         </div>
+        {showAmounts && (
         <dl className="flex gap-8 text-right">
           <div>
             <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Purchase</dt>
@@ -97,6 +110,7 @@ export default async function ProductPage({
             </dd>
           </div>
         </dl>
+        )}
       </div>
 
       <FormMessage error={sp.error} notice={sp.notice} />
@@ -126,6 +140,35 @@ export default async function ProductPage({
         </div>
 
         <aside className="space-y-6">
+          {levels && (
+            <div className={cardClass}>
+              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
+                <h2 className="text-sm font-semibold text-slate-900">In stock</h2>
+                <Link href={`/it/inventory/stock?product=${product.id}`} className="text-xs font-medium text-blue-700 hover:underline">
+                  Stock page →
+                </Link>
+              </div>
+              {levels.length === 0 ? (
+                <p className="px-5 py-6 text-center text-sm text-slate-500">No stock recorded yet.</p>
+              ) : (
+                <ul className="divide-y divide-slate-100">
+                  {levels.map((l) => {
+                    const min = minimumLevel(minimums, product, l.site_id);
+                    const low = min !== null && l.on_hand <= min;
+                    return (
+                      <li key={l.site_id} className="flex items-center justify-between px-5 py-2.5 text-sm">
+                        <span className="text-slate-700">{siteName.get(l.site_id) ?? "Site"}</span>
+                        <span className={`font-semibold tabular-nums ${low ? "text-amber-700" : "text-slate-900"}`}>
+                          {l.on_hand} {product.unit}
+                          {low && <span className="ml-1 text-xs font-normal">· low</span>}
+                        </span>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+            </div>
+          )}
           <div className={cardClass}>
             <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3">
               <h2 className="text-sm font-semibold text-slate-900">Demands</h2>
