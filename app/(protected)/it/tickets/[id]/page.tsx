@@ -39,6 +39,7 @@ import {
 } from "../actions";
 import { CategorySelect } from "../../_components/category-select";
 import { Modal } from "@/components/modal";
+import { TaskProgressSummary, type TaskBallState } from "@/components/task-progress";
 import {
   AttachmentList,
   cardClass,
@@ -188,6 +189,9 @@ export default async function ItTicketWorkspacePage({
   ]);
 
   const nameOf = (pid: string | null) => (pid ? (names.get(pid) ?? "—") : "—");
+  const taskBallStateOf = (status: NonNullable<typeof tasks>[number]["status"]): TaskBallState =>
+    status === "Completed" ? "done" : status === "Cancelled" ? "skipped" : status === "In Progress" ? "active" : "pending";
+  const taskBalls = (tasks ?? []).map((t) => ({ id: t.id, label: t.task_type, state: taskBallStateOf(t.status) }));
 
   // After diagnosing: Fixed it, Send for repair or Replace device (the last two need the device).
   const [canRepair, canReplace, { data: device }, { data: openRepair }, { data: replacement }] = await Promise.all([
@@ -311,6 +315,7 @@ export default async function ItTicketWorkspacePage({
           {/* Tasks */}
           <section className={`${cardClass} p-6`}>
             <h2 className="mb-4 text-base font-semibold text-slate-900">Tasks</h2>
+            <TaskProgressSummary tasks={taskBalls} className="mb-4" />
             {(tasks ?? []).length === 0 ? (
               <p className="mb-4 text-sm text-slate-400">No tasks on this ticket.</p>
             ) : (

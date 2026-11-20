@@ -5,6 +5,7 @@ import { createAdminClient } from "@/lib/supabase/admin";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { Modal } from "@/components/modal";
+import { TaskProgressSummary, type TaskBallState } from "@/components/task-progress";
 import { AssetAllocationForm } from "../_components/asset-allocation-form";
 import { RequestDetails } from "../_components/request-details";
 import { AssetReturnForm } from "../../inventory/_components/asset-return-form";
@@ -221,6 +222,19 @@ export default async function LifecycleRequestPage({
 
   const nameOf = (pid: string | null) => (pid ? (names.get(pid) ?? "—") : "—");
   const done = checklist.filter((i) => i.status === "Completed" || i.status === "Not Applicable");
+  const ballStateOf = (status: (typeof checklist)[number]["status"]): TaskBallState =>
+    status === "Completed"
+      ? "done"
+      : status === "Not Applicable"
+        ? "skipped"
+        : status === "In Progress"
+          ? "active"
+          : "pending";
+  const checklistBalls = checklist.map((i) => ({
+    id: i.id,
+    label: i.task_name,
+    state: ballStateOf(i.status),
+  }));
 
   return (
     <div className="py-6">
@@ -251,6 +265,7 @@ export default async function LifecycleRequestPage({
                   : `${myTasks.filter((i) => i.status === "Completed" || i.status === "Not Applicable").length}/${myTasks.length} of yours done · ${done.length}/${checklist.length} overall`}
               </span>
             </div>
+            <TaskProgressSummary tasks={checklistBalls} className="mb-4" />
 
             <ul className="space-y-3">
               {visibleTasks.map((item) => {
@@ -589,7 +604,8 @@ export default async function LifecycleRequestPage({
                   {done.length}/{checklist.length} tasks done
                 </span>
               </div>
-              <p className="mt-1 text-xs text-slate-500">IT works through its checklist; the status above shows when it is finished.</p>
+              <TaskProgressSummary tasks={checklistBalls} className="mt-3" />
+              <p className="mt-3 text-xs text-slate-500">IT works through its checklist; the status above shows when it is finished.</p>
               {canUpdate && (
                 <p className="mt-2 text-xs text-slate-500">No task on this request is assigned to you.</p>
               )}
