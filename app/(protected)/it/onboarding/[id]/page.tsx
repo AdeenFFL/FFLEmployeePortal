@@ -16,7 +16,6 @@ import {
   CHECKLIST_STATUS_TONE,
   FINISHED_STATUSES,
   TASK_DETAIL_FIELDS,
-  taskGuide,
 } from "@/lib/it/onboarding";
 import { formatDateTime } from "@/lib/it/tickets";
 import {
@@ -29,7 +28,6 @@ import {
   completeHandoverTask,
   completePortalAccountTask,
   deactivatePortalAccess,
-  linkOnboardingPerson,
   signOffboarding,
   takeOwnership,
   updateChecklistItem,
@@ -80,7 +78,7 @@ export default async function LifecycleRequestPage({
   }>;
 }) {
   const [{ id }, sp] = await Promise.all([params, searchParams]);
-  const { notice, error, q } = sp;
+  const { notice, error } = sp;
   const supabase = await createClient();
   const basePath = `/it/onboarding/${id}`;
 
@@ -131,12 +129,6 @@ export default async function LifecycleRequestPage({
 
   const checklist = items ?? [];
   const isFinished = FINISHED_STATUSES.includes(request.status);
-  const portalTask = checklist.find((i) => i.task_type === "portal_account");
-  const canLink =
-    request.kind === "Onboarding" &&
-    !request.person_id &&
-    !isFinished &&
-    (canAssign || (portalTask && portalTask.assigned_to_person_id === personId));
 
   // Who sees what on the checklist:
   //   * whoever runs the request (can assign onboarding work, or is its IT Executive): every task;
@@ -155,8 +147,7 @@ export default async function LifecycleRequestPage({
     (i) => i.task_type === "portal_account" && i.status !== "Completed",
   );
 
-  const [names, { data: candidates }, { data: assignedAssets }, { data: leaverAccount }, { data: roles }] =
-    await Promise.all([
+  const [names, { data: assignedAssets }, { data: leaverAccount }, { data: roles }] = await Promise.all([
     fetchPersonNames(supabase, [
       request.person_id,
       request.requested_by,
@@ -166,9 +157,6 @@ export default async function LifecycleRequestPage({
       ...checklist.flatMap((i) => [i.assigned_to_person_id, i.completed_by]),
       ...(updates ?? []).map((u) => u.author_person_id),
     ]),
-    canLink && q
-      ? supabase.schema("it").rpc("search_employees", { p_search: q })
-      : Promise.resolve({ data: null }),
     assignmentIds.length
       ? supabase
           .schema("it")
@@ -208,9 +196,6 @@ export default async function LifecycleRequestPage({
   const emailTask = checklist.find((i) => i.task_type === "email_account");
   const companyEmail = emailTask?.details?.email_address ?? null;
 
-  const assetByAssignmentId = new Map(
-    (assignedAssets ?? []).map((a) => [a.id, a.assets as unknown as { asset_tag: string; asset_name: string } | null]),
-  );
   const acknowledgedAtByAssignmentId = new Map(
     (assignedAssets ?? []).map((a) => [a.id, a.acknowledged_at as string | null]),
   );
@@ -231,12 +216,76 @@ export default async function LifecycleRequestPage({
         : status === "In Progress"
           ? "active"
           : "pending";
-  const checklistBalls = checklist.map((i) => ({
-    id: i.id,
-    label: i.task_name,
-    state: ballStateOf(i.status),
-    href: `${basePath}/tasks/${i.id}`,
-  }));
+  // Each stepper row carries its own status line and action button(s) — the actions open this
+  // page's existing popups (Modal + ?updateTask=/?assignTask=, further down) rather than a card
+  // sitting open on the page per task.
+  const actionLinkClass = "text-xs font-medium text-blue-700 hover:underline";
+  const checklistBalls = checklist.map((item) => {
+    const isMine = Boolean(personId) && item.assigned_to_person_id === personId;
+    const canWork = !isFinished && (canAssign || (canUpdate && isMine));
+    const meta =
+      (item.assigned_to_person_id ? `Assigned to ${nameOf(item.assigned_to_person_id)}` : "Unassigned") +
+      (item.completed_at
+        ? ` · ${item.status.toLowerCase()} by ${nameOf(item.completed_by)} on ${formatDateTime(item.completed_at)}`
+        : "");
+
+    const extra: React.ReactNode[] = [];
+    if (canAssign && !isFinished) {
+      extra.push(
+        <Link key="assign" href={`${basePath}?assignTask=${item.id}`} className={actionLinkClass}>
+          {item.assigned_to_person_id ? "Reassign" : "Assign"}
+        </Link>,
+      );
+    }
+    if (item.task_type === "asset_allocation") {
+      if (canAssignAssets && !isFinished && request.person_id && item.status !== "Completed") {
+        extra.push(
+          <Link key="task" href={`${basePath}?updateTask=${item.id}`} className={actionLinkClass}>
+            Assign an asset
+          </Link>,
+        );
+      }
+    } else if (item.task_type === "asset_handover") {
+      if (
+        canAssign &&
+        !isFinished &&
+        item.status !== "Completed" &&
+        allocationAssignmentId &&
+        acknowledgedAtByAssignmentId.get(allocationAssignmentId)
+      ) {
+        extra.push(
+          <form key="task" action={completeHandoverTask.bind(null, request.id, item.id)}>
+            <button type="submit" className={actionLinkClass}>
+              Mark handover confirmed
+            </button>
+          </form>,
+        );
+      }
+    } else if (item.task_type === "portal_account") {
+      if (canAssign && !isFinished && item.status !== "Completed") {
+        extra.push(
+          <Link key="task" href={`${basePath}?updateTask=${item.id}`} className={actionLinkClass}>
+            Create portal account
+          </Link>,
+        );
+      }
+    } else if (canWork) {
+      extra.push(
+        <Link key="task" href={`${basePath}?updateTask=${item.id}`} className={actionLinkClass}>
+          Update task
+        </Link>,
+      );
+    }
+
+    return {
+      id: item.id,
+      label: item.task_name,
+      state: ballStateOf(item.status),
+      href: `${basePath}/tasks/${item.id}`,
+      meta,
+      extra: extra.length > 0 ? extra : undefined,
+    };
+  });
   // Structured task responses, promoted up into the request's own summary (Unified Ticket/Task
   // Tracker, Phase 2) instead of staying buried under the task that recorded them.
   const taskResponses = checklist.flatMap((i) => {
@@ -274,187 +323,6 @@ export default async function LifecycleRequestPage({
               </span>
             </div>
             <TaskProgressSummary tasks={checklistBalls} className="mb-4" />
-
-            <ul className="space-y-3">
-              {visibleTasks.map((item) => {
-                const isMine = Boolean(personId) && item.assigned_to_person_id === personId;
-                const canWork = !isFinished && (canAssign || (canUpdate && isMine));
-                const fields = TASK_DETAIL_FIELDS[item.task_type] ?? [];
-                const recorded = fields.filter((f) => item.details?.[f.key]);
-                return (
-                  <li key={item.id} className="rounded-lg border border-slate-200 p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <div>
-                        <Link
-                          href={`${basePath}/tasks/${item.id}`}
-                          className="text-sm font-medium text-slate-900 hover:text-blue-700 hover:underline"
-                        >
-                          {item.task_name}
-                        </Link>
-                        <p className="text-xs text-slate-500">
-                          {item.assigned_to_person_id
-                            ? `Assigned to ${nameOf(item.assigned_to_person_id)}`
-                            : "Unassigned"}
-                          {item.completed_at &&
-                            ` · ${item.status.toLowerCase()} by ${nameOf(item.completed_by)} on ${formatDateTime(item.completed_at)}`}
-                        </p>
-                      </div>
-                      <StatusPill label={item.status} tone={CHECKLIST_STATUS_TONE[item.status]} />
-                    </div>
-
-                    {(isMine || isManager) &&
-                      !isFinished &&
-                      (item.status === "Pending" || item.status === "In Progress") && (
-                        <p className="mt-2 rounded-md bg-blue-50 px-3 py-2 text-xs text-blue-900">
-                          <span className="font-semibold">How to complete: </span>
-                          {taskGuide(item.task_type, request.kind, request.email_required)}
-                        </p>
-                      )}
-
-                    {item.task_type === "asset_allocation" && item.assignment_id && (
-                      <p className="mt-2 text-xs text-emerald-700">
-                        {assetByAssignmentId.get(item.assignment_id)
-                          ? `Assigned: ${assetByAssignmentId.get(item.assignment_id)!.asset_tag} — ${assetByAssignmentId.get(item.assignment_id)!.asset_name}`
-                          : "Asset assigned"}
-                      </p>
-                    )}
-
-                    {item.task_type === "asset_handover" && (
-                      <p className="mt-2 text-xs text-slate-500">
-                        {!allocationAssignmentId
-                          ? "No asset assigned yet."
-                          : acknowledgedAtByAssignmentId.get(allocationAssignmentId)
-                            ? `Acknowledged by the employee on ${formatDateTime(acknowledgedAtByAssignmentId.get(allocationAssignmentId)!)}.`
-                            : "Awaiting the employee's acknowledgement (My Assets)."}
-                      </p>
-                    )}
-
-                    {(recorded.length > 0 || item.notes) && (
-                      <dl className="mt-3 grid gap-2 text-sm sm:grid-cols-2">
-                        {recorded.map((f) => (
-                          <div key={f.key}>
-                            <dt className="text-xs text-slate-400">{f.label}</dt>
-                            <dd className="whitespace-pre-wrap text-slate-700">
-                              {item.details[f.key]}
-                            </dd>
-                          </div>
-                        ))}
-                        {item.notes && (
-                          <div className="sm:col-span-2">
-                            <dt className="text-xs text-slate-400">Notes</dt>
-                            <dd className="whitespace-pre-wrap text-slate-700">{item.notes}</dd>
-                          </div>
-                        )}
-                      </dl>
-                    )}
-
-                    {item.task_type === "portal_account" && request.person_id && (
-                      <p className="mt-2 text-xs text-emerald-700">
-                        Linked portal account: {nameOf(request.person_id)}
-                      </p>
-                    )}
-
-                    {item.task_type === "portal_account" && canLink && (
-                      <div className="mt-3 rounded-lg bg-slate-50 p-3">
-                        <p className="mb-2 text-xs text-slate-600">
-                          Create the account on User Management first, then link it here so the
-                          new joiner can confirm their onboarding.
-                        </p>
-                        <form method="get" className="mb-2 flex gap-2">
-                          <input
-                            name="q"
-                            defaultValue={q ?? ""}
-                            placeholder="Search name or employee code"
-                            aria-label="Search employees"
-                            className={inputClass}
-                          />
-                          <button type="submit" className={secondaryButtonClass}>
-                            Search
-                          </button>
-                        </form>
-                        {q && (
-                          <form action={linkOnboardingPerson.bind(null, request.id)} className="space-y-2">
-                            {(candidates ?? []).length === 0 ? (
-                              <p className="text-xs text-slate-400">No match for “{q}”.</p>
-                            ) : (
-                              (candidates ?? []).map((c) => (
-                                <label key={c.person_id} className="flex items-center gap-2 text-sm">
-                                  <input type="radio" name="personId" value={c.person_id} required />
-                                  {c.full_name}
-                                  <span className="text-xs text-slate-400">
-                                    {[c.employee_code, c.designation].filter(Boolean).join(" · ")}
-                                  </span>
-                                </label>
-                              ))
-                            )}
-                            {(candidates ?? []).length > 0 && (
-                              <button type="submit" className={primaryButtonClass}>
-                                Link employee
-                              </button>
-                            )}
-                          </form>
-                        )}
-                      </div>
-                    )}
-
-                    {canAssign && !isFinished && (
-                      <Link
-                        href={`${basePath}?assignTask=${item.id}`}
-                        className="mt-3 mr-4 inline-block text-sm font-medium text-blue-700 hover:underline"
-                      >
-                        {item.assigned_to_person_id ? "Reassign" : "Assign"}
-                      </Link>
-                    )}
-
-                    {item.task_type === "asset_allocation" ? (
-                      canAssignAssets &&
-                      !isFinished &&
-                      request.person_id &&
-                      item.status !== "Completed" && (
-                        <Link
-                          href={`${basePath}?updateTask=${item.id}`}
-                          className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
-                        >
-                          Assign an asset
-                        </Link>
-                      )
-                    ) : item.task_type === "asset_handover" ? (
-                      canAssign &&
-                      !isFinished &&
-                      item.status !== "Completed" &&
-                      allocationAssignmentId &&
-                      acknowledgedAtByAssignmentId.get(allocationAssignmentId) && (
-                        <form action={completeHandoverTask.bind(null, request.id, item.id)} className="mt-3">
-                          <button type="submit" className="text-sm font-medium text-blue-700 hover:underline">
-                            Mark handover confirmed
-                          </button>
-                        </form>
-                      )
-                    ) : item.task_type === "portal_account" ? (
-                      canAssign &&
-                      !isFinished &&
-                      item.status !== "Completed" && (
-                        <Link
-                          href={`${basePath}?updateTask=${item.id}`}
-                          className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
-                        >
-                          Create portal account
-                        </Link>
-                      )
-                    ) : (
-                      canWork && (
-                        <Link
-                          href={`${basePath}?updateTask=${item.id}`}
-                          className="mt-3 inline-block text-sm font-medium text-blue-700 hover:underline"
-                        >
-                          Update task
-                        </Link>
-                      )
-                    )}
-                  </li>
-                );
-              })}
-            </ul>
 
             {visibleTasks.map((item) => {
               if (sp.updateTask !== item.id) return null;

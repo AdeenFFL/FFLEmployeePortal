@@ -4,13 +4,26 @@ import Link from "next/link";
 // checked off as they complete — used on both the ticket detail page's Tasks section and the
 // onboarding detail page's checklist section. Replaces an earlier horizontal "balls" row that
 // tried to pack too much into one line; this reads top to bottom like the step trackers people
-// already know, and each step is clickable through to that task's own page when a href is given.
+// already know.
+//
+// A step is either a plain link through to that task's own page (`href`, used by the ticket
+// page), or carries its status/assignment line (`meta`) plus right-aligned action buttons
+// (`extra` — arbitrary caller content, typically links that open that page's own popup/Modal via
+// a query param, same as the rest of that page already does). Not both at once: `extra` renders
+// its own interactive controls, so the label stays plain text rather than also being a link.
 //
 // Callers map their own status enum (ItTicketTaskStatus / ItChecklistStatus) into this small,
 // shared vocabulary rather than this component knowing about either.
 export type TaskBallState = "done" | "active" | "pending" | "skipped";
 
-type Task = { id: string; label: string; state: TaskBallState; href?: string };
+type Task = {
+  id: string;
+  label: string;
+  state: TaskBallState;
+  href?: string;
+  meta?: string;
+  extra?: React.ReactNode;
+};
 
 const CIRCLE_STYLE: Record<TaskBallState, string> = {
   done: "border-emerald-500 bg-emerald-500",
@@ -36,7 +49,7 @@ const LINE_STYLE: Record<TaskBallState, string> = {
 function Circle({ state }: { state: TaskBallState }) {
   if (state === "done") {
     return (
-      <span className={`flex h-6 w-6 items-center justify-center rounded-full border-2 ${CIRCLE_STYLE.done}`}>
+      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${CIRCLE_STYLE.done}`}>
         <svg viewBox="0 0 20 20" fill="white" className="h-3.5 w-3.5">
           <path
             fillRule="evenodd"
@@ -49,12 +62,12 @@ function Circle({ state }: { state: TaskBallState }) {
   }
   if (state === "active") {
     return (
-      <span className={`flex h-6 w-6 items-center justify-center rounded-full border-2 ${CIRCLE_STYLE.active}`}>
+      <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full border-2 ${CIRCLE_STYLE.active}`}>
         <span className="h-2 w-2 rounded-full bg-emerald-500" />
       </span>
     );
   }
-  return <span className={`h-6 w-6 rounded-full border-2 ${CIRCLE_STYLE[state]}`} />;
+  return <span className={`h-6 w-6 shrink-0 rounded-full border-2 ${CIRCLE_STYLE[state]}`} />;
 }
 
 export function TaskProgressSummary({ tasks, className = "" }: { tasks: Task[]; className?: string }) {
@@ -67,11 +80,12 @@ export function TaskProgressSummary({ tasks, className = "" }: { tasks: Task[]; 
     <div className={className}>
       <ul>
         {tasks.map((t, i) => {
-          const content = (
-            <div className="flex items-center gap-3 px-1 py-1">
-              <Circle state={t.state} />
-              <span className={`text-sm font-medium ${LABEL_STYLE[t.state]}`}>{t.label}</span>
-            </div>
+          const label = t.href ? (
+            <Link href={t.href} className={`text-sm font-medium hover:underline ${LABEL_STYLE[t.state]}`}>
+              {t.label}
+            </Link>
+          ) : (
+            <span className={`text-sm font-medium ${LABEL_STYLE[t.state]}`}>{t.label}</span>
           );
           return (
             <li key={t.id} className="relative pb-6 last:pb-0">
@@ -82,13 +96,16 @@ export function TaskProgressSummary({ tasks, className = "" }: { tasks: Task[]; 
                   style={{ height: "calc(100% - 1.5rem)" }}
                 />
               )}
-              {t.href ? (
-                <Link href={t.href} className="block rounded-md hover:bg-slate-50">
-                  {content}
-                </Link>
-              ) : (
-                content
-              )}
+              <div className="flex items-start justify-between gap-3 px-1 py-1">
+                <div className="flex min-w-0 items-center gap-3">
+                  <Circle state={t.state} />
+                  <div className="min-w-0">
+                    {label}
+                    {t.meta && <p className="text-xs text-slate-400">{t.meta}</p>}
+                  </div>
+                </div>
+                {t.extra && <div className="flex shrink-0 flex-wrap items-center gap-3 pt-1">{t.extra}</div>}
+              </div>
             </li>
           );
         })}
