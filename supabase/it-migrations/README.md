@@ -240,6 +240,18 @@ author's own historical record; the `supabase/migrations/` files are the authori
 programmatically byte-identical to its staged source; only the header comment block was replaced
 with a short replicated-from note.
 
+## Reconciled into the main sequence — 2026-11-20 (batch 6)
+
+One file, landed right after batch 5: `javaria_it_0029_task_notification_link.sql` (the "Task
+assigned" notification now opens the new per-task page, `/it/onboarding/<request>/tasks/<task>`,
+instead of the whole request). Unlike every file in batch 5, this one's "Applied to live DB: NO"
+header is **not** stale — genuinely pending. Replicated as `0090_it_task_notification_link.sql`,
+continuing on from `0089`.
+
+| Staged file | Replicated as |
+|---|---|
+| `javaria/javaria_it_0029_task_notification_link.sql` | `supabase/migrations/0090_it_task_notification_link.sql` (not yet applied) |
+
 ## Applied log
 
 | File | Applied on | By | Notes |
@@ -295,3 +307,4 @@ with a short replicated-from note.
 | `talha/talha_hr_0009_sign_for_all_roles.sql` | 2026-11-19 | Talha | hr.clearance.sign also granted to Employee and IT roles, so a signer keeps their normal role. Replicated as `0088_hr_sign_for_all_roles.sql` |
 | `talha/talha_hr_0010_clearance_onboarding_defaults.sql` | 2026-11-19 | Talha | Prefills clearance from the employee's own onboarding request where one exists. Replicated as `0089_hr_clearance_onboarding_defaults.sql` |
 | — | 2026-11-20 | Adeen | Reconciled `IT/dev` (Javaria, `javaria_it_0021`–`0028`) and `it/talha` (Talha, `talha_it_0010`–`0012` and the new `talha_hr_0001`–`0010` Clearance system) into one integration branch alongside `develop`, merging code first (conflict: Talha's Clearance system retires the self-offboarding screens built on `hr.offboarding.*` — resolved in the user's favor of Clearance as the deliberate replacement) and then these 21 staged files into the main sequence as `0069`–`0089`, continuing straight on from `0068`. `javaria_it_0026`/`0027` were initially flagged as the only two not already live (their own headers say "Applied to live DB: NO"), but a same-day read-only check against the live DB (`pg_proc`/`pg_trigger`) confirmed both are live too — every file in this batch needs only `migration repair`, not a real `db push`. |
+| `javaria/javaria_it_0029_task_notification_link.sql` | **Not applied** | Javaria | "Task assigned" notification now opens the task's own page (`/it/onboarding/<request>/tasks/<task>`) instead of the whole request. Replicated as `0090_it_task_notification_link.sql` — genuinely pending, not yet pushed. |
