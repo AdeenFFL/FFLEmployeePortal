@@ -165,7 +165,10 @@ export default async function ClearanceSlotPage({
     ? null
     : new Map((assignmentsResult.data ?? []).map((a) => [a.line_id, a]));
 
-  const assets: OpenAsset[] = (assetsResult.data ?? []).map((a) => ({
+  // Newest assignment first.
+  const assets: OpenAsset[] = [...(assetsResult.data ?? [])]
+    .sort((a, b) => b.assigned_date.localeCompare(a.assigned_date))
+    .map((a) => ({
     assignment_id: a.assignment_id,
     asset_tag: a.asset_tag,
     asset_name: a.asset_name,

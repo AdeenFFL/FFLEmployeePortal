@@ -21,6 +21,7 @@ type LineTask = {
   outcome: "Yes" | "No" | "N/A" | null;
   remarks: string | null;
   responded_at: string | null;
+  assigned_at: string;
 };
 type AssetTask = {
   case_id: string;
@@ -32,6 +33,7 @@ type AssetTask = {
   assigned_condition: string | null;
   asset_status: string;
   returned: boolean;
+  assigned_at: string;
 };
 type CaseInfo = {
   case_id: string;
@@ -70,7 +72,11 @@ export default async function MyClearanceTasksPage() {
   for (const t of linesResult.data ?? []) groupFor(t).lines.push(t);
   for (const t of assetsResult.error ? [] : (assetsResult.data ?? [])) groupFor(t).assets.push(t);
 
-  const all = [...groups.values()];
+  // Newest first: the request with the most recently assigned task on top (lines inside a request
+  // keep the form's order).
+  const latestAssigned = (g: Group) =>
+    [...g.lines.map((t) => t.assigned_at), ...g.assets.map((t) => t.assigned_at)].sort().at(-1) ?? "";
+  const all = [...groups.values()].sort((a, b) => latestAssigned(b).localeCompare(latestAssigned(a)));
   const isOpen = (g: Group) => g.info.case_status === "In Clearance" && !g.info.part_locked;
   const open = all.filter(isOpen);
   const closed = all.filter((g) => !isOpen(g));
@@ -78,8 +84,8 @@ export default async function MyClearanceTasksPage() {
 
   return (
     <div className="flex flex-col gap-6 py-6">
-      <Link href="/hr/clearance" className="text-sm text-blue-700 hover:underline">
-        ← Back to Clearance to sign
+      <Link href="/hr/clearance-home" className="text-sm text-blue-700 hover:underline">
+        ← Clearance
       </Link>
       <PageHeader
         title="My clearance tasks"

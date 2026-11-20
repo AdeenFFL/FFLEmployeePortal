@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { SignerCellPanel, type CellSigner } from "./signer-panel";
@@ -29,6 +30,7 @@ export default async function ClearanceSignersPage() {
   if (loadError) {
     return (
       <div className="py-6">
+        <Link href="/hr/clearance-home" className="mb-3 inline-block text-sm text-slate-500 hover:text-slate-700">← Clearance</Link>
         <PageHeader title="Clearance Signers" />
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{loadError.message}</p>
       </div>
@@ -172,6 +174,7 @@ export default async function ClearanceSignersPage() {
 
   return (
     <div className="py-6">
+      <Link href="/hr/clearance-home" className="mb-3 inline-block text-sm text-slate-500 hover:text-slate-700">← Clearance</Link>
       <PageHeader
         title="Clearance Signers"
         description="Who signs each part of the offboarding clearance forms, per site (and per department for the Department Head). ★ marks the primary signer."

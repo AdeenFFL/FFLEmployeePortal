@@ -203,7 +203,8 @@ export default async function MyRequestsPage() {
             received their complete data.
           </p>
           <ul className="divide-y divide-slate-100 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-            {(handovers ?? []).map((h) => (
+            {/* Newest request first: case numbers are zero-padded and given in order (CLR-000012). */}
+            {[...(handovers ?? [])].sort((a, b) => b.case_number.localeCompare(a.case_number)).map((h) => (
               <li key={h.case_id} className="flex flex-wrap items-start justify-between gap-3 px-5 py-4">
                 <div className="min-w-0">
                   <p className="text-sm font-medium text-slate-900">{h.employee_name}</p>

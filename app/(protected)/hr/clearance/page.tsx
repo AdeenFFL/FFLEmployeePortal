@@ -44,7 +44,8 @@ export default async function ClearanceInboxPage() {
           .eq("status", "In Clearance")
           .neq("person_id", personId)
           .or(scopeFilter)
-          .order("last_working_date")
+          // Newest request first.
+          .order("created_at", { ascending: false })
       : Promise.resolve({ data: [], error: null }),
     personId
       ? hr
@@ -141,6 +142,7 @@ export default async function ClearanceInboxPage() {
 
   return (
     <div className="py-6">
+      <Link href="/hr/clearance-home" className="mb-3 inline-block text-sm text-slate-500 hover:text-slate-700">← Clearance</Link>
       <PageHeader
         title="Clearance to sign"
         description="Your parts of the offboarding clearance forms: fill them in and sign."
