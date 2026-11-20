@@ -297,6 +297,15 @@ export async function deleteAsset(assetId: string) {
     );
   }
 
+  // Assets are never deleted once used: retiring keeps the history, repairs and costs in view.
+  const [{ count: assignments }, { count: repairs }] = await Promise.all([
+    supabase.schema("it").from("asset_assignments").select("id", { count: "exact", head: true }).eq("asset_id", assetId),
+    supabase.schema("it").from("asset_maintenance").select("id", { count: "exact", head: true }).eq("asset_id", assetId),
+  ]);
+  if ((assignments ?? 0) > 0 || (repairs ?? 0) > 0) {
+    redirect(detailUrl(assetId, "error", "This asset has a history, so it can't be deleted. Retire it instead."));
+  }
+
   const { data: deleted, error } = await supabase
     .schema("it")
     .from("assets")
@@ -467,53 +476,7 @@ export async function assignAsset(assetId: string, formData: FormData) {
   redirect(resultUrl(formData, assetId, "notice", `Assigned to ${holderName}.`));
 }
 
-// INV-06 / Phase 4 — send an asset for repair. it.open_maintenance() (talha_it_0005) refuses
-// Retired / Disposed / Lost and already-In-Repair assets, and sets the asset In Repair. Blank
-// optional fields are left OUT of the call so the database defaults apply (never sent as "").
-export async function openMaintenance(assetId: string, formData: FormData) {
-  const { supabase, personId, actorLabel } = await requirePermission("it.maintenance.update");
-
-  const issueType = text(formData, "issue_type");
-  const description = text(formData, "description");
-  const serviceDate = text(formData, "service_date");
-  if (!issueType) redirect(detailUrl(assetId, "error", "Enter the issue type."));
-  if (serviceDate && serviceDate > latestAllowedDate()) {
-    redirect(detailUrl(assetId, "error", "The service date can't be in the future."));
-  }
-
-  const { data: asset } = await supabase
-    .schema("it")
-    .from("assets")
-    .select("asset_tag")
-    .eq("id", assetId)
-    .is("deleted_at", null)
-    .maybeSingle();
-  if (!asset) redirect(detailUrl(assetId, "error", "This asset no longer exists."));
-
-  const { error } = await supabase.schema("it").rpc("open_maintenance", {
-    p_asset_id: assetId,
-    p_issue_type: issueType,
-    ...(description ? { p_description: description } : {}),
-    ...(serviceDate ? { p_service_date: serviceDate } : {}),
-  });
-  if (error) redirect(detailUrl(assetId, "error", error.message));
-
-  await logAuditEvent({
-    supabase,
-    actorId: personId,
-    actorLabel,
-    module: "it",
-    action: "MODIFIED",
-    details: `Sent asset ${asset.asset_tag} for repair: ${issueType}`,
-  });
-
-  revalidatePath("/it/inventory");
-  revalidatePath(`/it/inventory/${assetId}`);
-  revalidatePath("/it/my-assets");
-  redirect(detailUrl(assetId, "notice", `${asset.asset_tag} sent for repair.`));
-}
-
-// Phase 4 — repair finished. it.close_maintenance() completes the record and puts the asset back
+// Repairs from before javaria_it_0023 have no demand. it.close_maintenance() completes the record and puts the asset back
 // to In Use (someone still holds it) or Unassigned. An empty returned date must be OMITTED, not
 // sent as null: null would mark the record Completed with no date, which its check refuses.
 export async function closeMaintenance(assetId: string, maintenanceId: string, formData: FormData) {
@@ -580,4 +543,50 @@ export async function closeMaintenance(assetId: string, maintenanceId: string, f
   revalidatePath(`/it/inventory/${assetId}`);
   revalidatePath("/it/my-assets");
   redirect(detailUrl(assetId, "notice", `Repair closed on ${asset.asset_tag}.`));
+}
+
+// Phase 6 — record an asset's value (talha_it_0006 it.asset_values; RLS needs it.valuation.update).
+// Rows are history: a revaluation adds a row, and the latest one drives the book value shown on
+// the asset page (valuation.ts). Stored current_value is the value on valuation_date (= purchase).
+export async function setAssetValue(assetId: string, formData: FormData) {
+  const { supabase, personId, actorLabel } = await requirePermission("it.valuation.update");
+  const fail = (message: string): never => redirect(detailUrl(assetId, "error", message));
+
+  const valueTypeId = text(formData, "value_type_id");
+  if (!valueTypeId) fail("Choose New or Old.");
+  const purchase = Number(text(formData, "purchase_value").replace(/,/g, ""));
+  if (!Number.isFinite(purchase) || purchase < 0) fail("Enter the purchase value in rupees.");
+  const salvageText = text(formData, "salvage_value").replace(/,/g, "");
+  const salvage = salvageText === "" ? 0 : Number(salvageText);
+  if (!Number.isFinite(salvage) || salvage < 0 || salvage > purchase) {
+    fail("Salvage value must be between 0 and the purchase value.");
+  }
+  const valuationDate = text(formData, "valuation_date");
+  if (!valuationDate || valuationDate > latestAllowedDate()) fail("Choose the date the value starts from.");
+
+  const { error } = await supabase.schema("it").from("asset_values").insert({
+    asset_id: assetId,
+    value_type_id: valueTypeId,
+    purchase_value: purchase,
+    current_value: purchase,
+    accumulated_depreciation: 0,
+    salvage_value: salvage,
+    valuation_date: valuationDate,
+    remarks: optionalText(formData, "remarks"),
+    created_by: personId,
+    updated_by: personId,
+  });
+  if (error) fail(error.message);
+
+  await logAuditEvent({
+    supabase,
+    actorId: personId,
+    actorLabel,
+    module: "it",
+    action: "MODIFIED",
+    details: `Set asset value: ${purchase} from ${valuationDate}`,
+  });
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/inventory");
+  redirect(detailUrl(assetId, "notice", "Value saved."));
 }

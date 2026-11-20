@@ -63,10 +63,29 @@ export async function GET(request: NextRequest) {
     const { data: invitation } = await admin
       .from("invited_users")
       .select(
-        "role_id, department, site, department_id, status, notes, employee_code, designation, date_of_joining",
+        "role_id, department, site, department_id, status, notes, employee_code, designation, date_of_joining, onboarding_request_id",
       )
       .eq("email", normalizedEmail)
       .maybeSingle();
+
+    // An invite staged by an onboarding request (Email Account task): the new hire's site,
+    // joining date and employment type come from that request.
+    const { data: onboardingRequest } = invitation?.onboarding_request_id
+      ? await admin
+          .schema("it")
+          .from("onboarding_offboarding")
+          .select("id, site_id, joining_date, employee_category, person_id")
+          .eq("id", invitation.onboarding_request_id)
+          .maybeSingle()
+      : { data: null };
+
+    // Company email means this is always "with email"; employee_category only distinguishes
+    // permanent vs. contractual (0066_it_employee_lookup.sql's own comment on employment_type).
+    const employmentType = onboardingRequest
+      ? onboardingRequest.employee_category === "Permanent"
+        ? "permanent"
+        : "contractual_with_email"
+      : null;
 
     const { data: createdPerson, error: personError } = await admin
       .from("persons")
@@ -76,8 +95,9 @@ export async function GET(request: NextRequest) {
         notes: invitation?.notes ?? null,
         employee_code: invitation?.employee_code ?? null,
         designation: invitation?.designation ?? null,
-        date_of_joining: invitation?.date_of_joining ?? null,
+        date_of_joining: invitation?.date_of_joining ?? onboardingRequest?.joining_date ?? null,
         department_id: invitation?.department_id ?? null,
+        employment_type: employmentType,
       })
       .select("id, status")
       .single();
@@ -120,6 +140,26 @@ export async function GET(request: NextRequest) {
           new URL("/login?error=provisioning_failed", request.url),
         );
       }
+    }
+
+    // Link the new account to its onboarding request, so IT can allocate assets to them and they
+    // get "confirm your IT setup" on My Onboarding. Best effort, after the account exists, so it
+    // can never stop a sign-in: IT can still link by hand, and Admin can set the site.
+    if (onboardingRequest?.site_id) {
+      const { error: siteError } = await admin
+        .from("persons")
+        .update({ site_id: onboardingRequest.site_id })
+        .eq("id", createdPerson.id);
+      if (siteError) console.error("Setting the new joiner's site failed", siteError);
+    }
+    if (onboardingRequest && !onboardingRequest.person_id) {
+      const { error: linkError } = await admin
+        .schema("it")
+        .from("onboarding_offboarding")
+        .update({ person_id: createdPerson.id })
+        .eq("id", onboardingRequest.id)
+        .is("person_id", null);
+      if (linkError) console.error("Linking onboarding request to new account failed", linkError);
     }
 
     // Best-effort consume. If this fails the row lingers harmlessly — the admin users screen

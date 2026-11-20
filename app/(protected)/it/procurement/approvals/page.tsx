@@ -2,7 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
-import { checked, fetchOrgUnits } from "@/lib/it/ticket-data";
+import { checked, fetchOrgUnits, hasItPermission } from "@/lib/it/ticket-data";
 import { formatDate, formatDateTime } from "@/lib/it/tickets";
 import { demandCategoryLabel, formatMoney } from "@/lib/it/procurement";
 import { cardClass, FormMessage } from "../../_components/ticket-ui";
@@ -19,11 +19,12 @@ export default async function ApprovalsPage({
   const { notice, error } = await searchParams;
   const supabase = await createClient();
 
-  const [{ data: personId }, { data: departmentIds }, orgUnits, productsRes] = await Promise.all([
+  const [{ data: personId }, { data: departmentIds }, orgUnits, productsRes, showAmounts] = await Promise.all([
     supabase.rpc("current_person_id"),
     supabase.schema("it").rpc("my_approver_departments"),
     fetchOrgUnits(supabase),
     supabase.schema("it").from("products").select("id, product_name, unit"),
+    hasItPermission(supabase, "it.amounts.read"),
   ]);
   const departments = departmentIds ?? [];
   const productById = new Map((productsRes.data ?? []).map((p) => [p.id, p]));
@@ -125,7 +126,9 @@ export default async function ApprovalsPage({
                       {d?.demand_number} · {productById.get(d?.product_id ?? "")?.product_name ?? ""} ·{" "}
                       {vendorName.get(inv.vendor_id ?? "") ?? "vendor"} · {orgUnits.nameById.get(d?.department_id ?? "") ?? ""}
                     </span>
-                    <span className="ml-auto font-medium tabular-nums text-slate-900">{formatMoney(inv.invoice_amount)}</span>
+                    {showAmounts && (
+                      <span className="ml-auto font-medium tabular-nums text-slate-900">{formatMoney(inv.invoice_amount)}</span>
+                    )}
                     {inv.created_by === personId ? (
                       <span className="text-xs text-slate-400">You logged it — another approver decides</span>
                     ) : (
@@ -186,7 +189,7 @@ export default async function ApprovalsPage({
                     <p className="mt-1 line-clamp-2 text-sm text-slate-700">{d.justification}</p>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-medium tabular-nums text-slate-900">{formatMoney(total)}</p>
+                    {showAmounts && <p className="text-sm font-medium tabular-nums text-slate-900">{formatMoney(total)}</p>}
                     {own ? (
                       <p className="text-xs text-slate-400">Your own demand — another approver decides</p>
                     ) : (

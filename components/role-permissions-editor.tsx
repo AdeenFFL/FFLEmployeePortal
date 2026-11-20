@@ -26,12 +26,13 @@ export function RolePermissionsEditor({
   saveAction: (
     roleId: string,
     changes: { permissionId: string; granted: boolean }[],
-  ) => Promise<void>;
+  ) => Promise<number | void>; // number = people notified
 }) {
   const [granted, setGranted] = useState(new Set(initialGrantedIds));
   const [committed, setCommitted] = useState(new Set(initialGrantedIds));
   const [isPending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
   const isDirty =
     granted.size !== committed.size || [...granted].some((id) => !committed.has(id));
@@ -48,10 +49,12 @@ export function RolePermissionsEditor({
   function handleReset() {
     setGranted(new Set(committed));
     setError(null);
+    setNotice(null);
   }
 
   function handleSave() {
     setError(null);
+    setNotice(null);
     const allPermissions = [
       ...moduleAccessPermissions,
       ...permissionsBySection.flatMap(([, permissions]) => permissions),
@@ -63,8 +66,13 @@ export function RolePermissionsEditor({
 
     startTransition(async () => {
       try {
-        await saveAction(roleId, changes);
+        const notified = await saveAction(roleId, changes);
         setCommitted(new Set(granted));
+        setNotice(
+          typeof notified === "number"
+            ? `Saved. ${notified === 0 ? "No one has this role yet." : `${notified} ${notified === 1 ? "person" : "people"} with this role ${notified === 1 ? "was" : "were"} notified.`}`
+            : "Saved.",
+        );
       } catch (e) {
         setError(e instanceof Error ? e.message : "Failed to save changes.");
       }
@@ -154,6 +162,11 @@ export function RolePermissionsEditor({
         );
       })}
 
+      {notice && (
+        <p role="status" className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+          {notice}
+        </p>
+      )}
       {error && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
       )}

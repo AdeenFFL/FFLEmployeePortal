@@ -17,9 +17,12 @@ function describe(a: AssetOption) {
 export function AssetAllocationForm({
   requestId,
   itemId,
+  fromTaskPage = false,
 }: {
   requestId: string;
   itemId: string;
+  // Submitted from the task's own page: come back there.
+  fromTaskPage?: boolean;
 }) {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<AssetOption[]>([]);
@@ -58,6 +61,7 @@ export function AssetAllocationForm({
 
   return (
     <form action={assignAssetForOnboardingTask.bind(null, requestId, itemId)} className="space-y-3">
+      {fromTaskPage && <input type="hidden" name="taskPage" value={itemId} />}
       <div>
         <label className={labelClass}>Asset *</label>
         {selected ? (

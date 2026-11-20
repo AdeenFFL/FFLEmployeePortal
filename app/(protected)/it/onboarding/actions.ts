@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { requirePermission } from "@/lib/auth/require-permission";
+import { requireAnyPermission, requirePermission } from "@/lib/auth/require-permission";
 import { requireActiveUser } from "@/lib/auth/require-user";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient } from "@/lib/supabase/server";
@@ -29,7 +29,9 @@ import type {
 // status moves are allowed. Messages come back as ?error= / ?notice=.
 
 function go(path: string, kind: "error" | "notice", message: string): never {
-  redirect(`${path}?${kind}=${encodeURIComponent(message)}`);
+  // "&" when the path already has a query (e.g. /it/onboarding/new?kind=Onboarding): a second "?"
+  // broke the URL, so the error never showed and the form just came back empty.
+  redirect(`${path}${path.includes("?") ? "&" : "?"}${kind}=${encodeURIComponent(message)}`);
 }
 
 function text(formData: FormData, key: string) {
@@ -40,12 +42,28 @@ function optional(formData: FormData, key: string) {
   return text(formData, key) || null;
 }
 
+// Where a task action sends you back: the task's own page when it was submitted from there (a
+// hidden "taskPage" field holding the task id), else the request page.
+function backPath(requestId: string, formData?: FormData) {
+  const taskId = formData ? text(formData, "taskPage") : "";
+  return /^[0-9a-f-]{36}$/i.test(taskId)
+    ? `/it/onboarding/${requestId}/tasks/${taskId}`
+    : `/it/onboarding/${requestId}`;
+}
+
 function refresh(requestId?: string) {
   queueItEmails(); // notification rows were written by DB triggers; deliver their emails
+  revalidatePath("/it/my-work");
+  revalidatePath("/it/dashboard");
+  revalidatePath("/it/onboarding/[id]/tasks/[taskId]", "page");
   revalidatePath("/it/onboarding");
+  revalidatePath("/hr/onboarding");
   revalidatePath("/it/my-onboarding");
   revalidatePath("/it/my-offboarding");
-  if (requestId) revalidatePath(`/it/onboarding/${requestId}`);
+  if (requestId) {
+    revalidatePath(`/it/onboarding/${requestId}`);
+    revalidatePath(`/hr/onboarding/${requestId}`);
+  }
 }
 
 // Type-ahead for the employee picker (javaria_it_0018). it.employee_lookup() does the access
@@ -123,7 +141,13 @@ export async function createLifecycleRequest(formData: FormData) {
 
   if (kind === "Onboarding") {
     if (!employeeName) go(back, "error", "Enter the new joiner's name.");
-    if (!text(formData, "joiningDate")) go(back, "error", "Enter the joining date.");
+    // Every field marked * on the form, checked here too so nothing half-filled is ever raised.
+    if (!optional(formData, "designation")) go(back, "error", "Enter the designation.");
+    if (!optional(formData, "departmentId")) go(back, "error", "Choose the department.");
+    if (!optional(formData, "siteId")) go(back, "error", "Choose the work location.");
+    if (!reportingManagerId) go(back, "error", "Choose the reporting manager.");
+    if (category !== "Permanent" && category !== "Contractual") go(back, "error", "Choose the employee category.");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(text(formData, "joiningDate"))) go(back, "error", "Select the joining date.");
     // No company email means their portal account gets auto-created on their personal address
     // (see below) — there's nowhere else to send it.
     if (!emailRequired && !personalEmail) {
@@ -131,6 +155,28 @@ export async function createLifecycleRequest(formData: FormData) {
     }
   } else {
     if (!personId) go(back, "error", "Select the employee.");
+  }
+
+  // Double submit / raised twice: an open request of this kind for the same employee is the one
+  // already made, so show that instead of creating a copy.
+  const existing = supabase
+    .schema("it")
+    .from("onboarding_offboarding")
+    .select("id, request_number")
+    .eq("request_type_id", requestType.id)
+    .not("status", "in", "(Completed,Closed,Cancelled)");
+  const { data: alreadyRaised } = await (kind === "Onboarding"
+    ? existing.ilike("employee_name", employeeName).eq("joining_date", text(formData, "joiningDate"))
+    : existing.eq("person_id", personId ?? "")
+  )
+    .limit(1)
+    .maybeSingle();
+  if (alreadyRaised) {
+    go(
+      `/it/onboarding/${alreadyRaised.id}`,
+      "notice",
+      `${alreadyRaised.request_number} is already raised for this employee. No copy was made.`,
+    );
   }
 
   const { data: created, error } = await supabase
@@ -234,6 +280,12 @@ export async function createLifecycleRequest(formData: FormData) {
           full_name: employeeName,
           status: "Active",
           department_id: optional(formData, "departmentId"),
+          site_id: optional(formData, "siteId"),
+          employee_code: optional(formData, "employeeCode"),
+          designation: optional(formData, "designation"),
+          date_of_joining: optional(formData, "joiningDate"),
+          // This branch only runs when emailRequired is false (no company email requested).
+          employment_type: category === "Permanent" ? "permanent" : "contractual_no_email",
         })
         .select("id")
         .single();
@@ -283,7 +335,9 @@ export async function createLifecycleRequest(formData: FormData) {
   }
 
   refresh();
-  go(`/it/onboarding/${created.id}`, "notice", `${created.request_number} raised. IT has been notified.`);
+  // HR raised an onboarding: back to HR's own view of it. A replacement stays with IT.
+  const raisedPath = kind === "Onboarding" ? `/hr/onboarding/${created.id}` : `/it/onboarding/${created.id}`;
+  go(raisedPath, "notice", `${created.request_number} raised. IT has been notified.`);
 }
 
 // BRD §5.1.4 / §5.2.5 — the IT Executive picks the request up.
@@ -315,7 +369,7 @@ export async function takeOwnership(requestId: string) {
 
 // BRD §5.1.5 / §5.2.6 — assign a checklist item to an IT team member.
 export async function assignChecklistItem(requestId: string, itemId: string, formData: FormData) {
-  const path = `/it/onboarding/${requestId}`;
+  const path = backPath(requestId, formData);
   const { supabase } = await requirePermission("it.onboarding.assign");
 
   const { error } = await supabase
@@ -332,8 +386,8 @@ export async function assignChecklistItem(requestId: string, itemId: string, for
 
 // The assignee records what was done (BRD §5.1.6–5.1.11, §5.2.7–5.2.10) and the item's status.
 export async function updateChecklistItem(requestId: string, itemId: string, formData: FormData) {
-  const path = `/it/onboarding/${requestId}`;
-  const { supabase } = await requirePermission("it.onboarding.read");
+  const path = backPath(requestId, formData);
+  const { supabase } = await requireAnyPermission(["it.onboarding.read", "it.onboarding.update"]);
 
   const status = text(formData, "status") as ItChecklistStatus;
   if (!CHECKLIST_STATUSES.includes(status)) go(path, "error", "Invalid task status.");
@@ -348,7 +402,7 @@ export async function updateChecklistItem(requestId: string, itemId: string, for
   if (!item) go(path, "error", "Task not found.");
 
   const details: Record<string, string> = { ...(item.details ?? {}) };
-  for (const field of TASK_DETAIL_FIELDS[item.task_type]) {
+  for (const field of TASK_DETAIL_FIELDS[item.task_type] ?? []) {
     const value = text(formData, `detail_${field.key}`);
     if (value) details[field.key] = value;
     else delete details[field.key];
@@ -376,8 +430,8 @@ export async function updateChecklistItem(requestId: string, itemId: string, for
 // row + sends the invite email, mirroring exactly what the Admin → Users "Add New User" Microsoft
 // flow already does.
 export async function completeEmailAccountTask(requestId: string, itemId: string, formData: FormData) {
-  const path = `/it/onboarding/${requestId}`;
-  const { supabase } = await requirePermission("it.onboarding.read");
+  const path = backPath(requestId, formData);
+  const { supabase } = await requireAnyPermission(["it.onboarding.read", "it.onboarding.update"]);
 
   const status = text(formData, "status") as ItChecklistStatus;
   if (!CHECKLIST_STATUSES.includes(status)) go(path, "error", "Invalid task status.");
@@ -487,7 +541,7 @@ export async function assignAssetForOnboardingTask(
   itemId: string,
   formData: FormData,
 ) {
-  const path = `/it/onboarding/${requestId}`;
+  const path = backPath(requestId, formData);
   const { supabase } = await requirePermission("it.assets.assign");
 
   const assetId = text(formData, "asset_id");
@@ -539,9 +593,9 @@ export async function assignAssetForOnboardingTask(
 // asset_allocation task's assignment (it.acknowledge_assignment, already wired to "My Assets"),
 // rather than letting IT mark it complete on their own say-so. Deliberately doesn't touch
 // it.acknowledge_assignment() itself — this is purely additive, reading its result.
-export async function completeHandoverTask(requestId: string, itemId: string) {
-  const path = `/it/onboarding/${requestId}`;
-  const { supabase } = await requirePermission("it.onboarding.assign");
+export async function completeHandoverTask(requestId: string, itemId: string, formData?: FormData) {
+  const path = backPath(requestId, formData);
+  const { supabase } = await requireAnyPermission(["it.onboarding.assign", "it.onboarding.update"]);
 
   const [{ data: item }, { data: allocationItem }] = await Promise.all([
     supabase
@@ -604,7 +658,7 @@ export async function completeHandoverTask(requestId: string, itemId: string) {
 //   * Neither exists yet — the Email Account task hasn't been completed, so there's nothing to
 //     attach a role to.
 export async function completePortalAccountTask(requestId: string, itemId: string, formData: FormData) {
-  const path = `/it/onboarding/${requestId}`;
+  const path = backPath(requestId, formData);
   const { supabase, personId: actorId, actorLabel } = await requirePermission("it.onboarding.assign");
 
   const roleId = text(formData, "roleId");
@@ -704,7 +758,7 @@ export async function addChecklistItem(requestId: string, formData: FormData) {
 
 // BRD §5.1.11 — link the new joiner's portal account (created on /admin/users) to the request.
 export async function linkOnboardingPerson(requestId: string, formData: FormData) {
-  const path = `/it/onboarding/${requestId}`;
+  const path = backPath(requestId, formData);
   const { supabase } = await requireActiveUser();
 
   const personId = text(formData, "personId");
@@ -840,11 +894,14 @@ export async function addLifecycleUpdate(requestId: string, formData: FormData) 
       ? "/it/my-onboarding"
       : returnTo === "my-offboarding"
         ? "/it/my-offboarding"
-        : `/it/onboarding/${requestId}`;
+        : backPath(requestId, formData);
   const { supabase, personId } = await requireActiveUser();
 
-  const body = text(formData, "body");
-  if (!body) go(back, "error", "Message cannot be empty.");
+  const typed = text(formData, "body");
+  if (!typed) go(back, "error", "Message cannot be empty.");
+  // Posted from a task's own page: say which task it is about.
+  const taskName = text(formData, "taskName");
+  const body = taskName ? `${taskName}: ${typed}` : typed;
   const internal = formData.get("visibility") === "internal";
 
   const { error } = await supabase

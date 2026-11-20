@@ -24,6 +24,11 @@ function productFields(formData: FormData, back: string) {
   if (purchase === undefined || current === undefined) {
     go(back, "error", "Prices must be positive numbers (e.g. 125000 or 125,000.50).");
   }
+  const reorderText = text(formData, "reorderLevel");
+  const reorder = reorderText === "" ? null : Number(reorderText);
+  if (reorder !== null && (!Number.isInteger(reorder) || reorder < 0)) {
+    go(back, "error", "Reorder level must be a whole number (0 or more).");
+  }
   return {
     product_name: text(formData, "productName"),
     category: text(formData, "category") || null,
@@ -33,6 +38,8 @@ function productFields(formData: FormData, back: string) {
     description: text(formData, "description") || null,
     // Set = fixed-asset product (receiving registers assets); empty = consumable / service.
     asset_type_id: text(formData, "assetTypeId") || null,
+    // javaria_it_0022: low-stock warning on the Stock page (consumables only).
+    reorder_level: reorder,
   };
 }
 

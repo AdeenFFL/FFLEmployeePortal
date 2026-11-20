@@ -36,7 +36,7 @@ export default async function HrTicketsPage({
     .eq("auth_user_id", user!.id)
     .maybeSingle();
 
-  const [{ data: categories }, { data: tickets }, canSelfOffboard, canOffboardSiteUsers] = await Promise.all([
+  const [{ data: categories }, { data: tickets }, canRequestClearance, canStartClearance] = await Promise.all([
     supabase.schema("hr").from("ticket_categories").select("id, name").eq("is_active", true).order("name"),
     supabase
       .schema("hr")
@@ -44,8 +44,8 @@ export default async function HrTicketsPage({
       .select("id, subject, status, created_at")
       .eq("person_id", account?.person_id ?? "")
       .order("created_at", { ascending: false }),
-    hasItPermission(supabase, "hr.offboarding.create_self"),
-    hasItPermission(supabase, "hr.offboarding.create_for_site_users"),
+    hasItPermission(supabase, "hr.clearance.request_self"),
+    hasItPermission(supabase, "hr.clearance.forward"),
   ]);
 
   return (
@@ -55,13 +55,14 @@ export default async function HrTicketsPage({
         description="Submit a request or complaint to HR and track its progress."
         action={
           <div className="flex gap-2">
-            {canOffboardSiteUsers && (
-              <Link href="/it/my-offboarding/new-for-employee" className={secondaryButtonClass}>
-                Submit Offboarding (for an Employee)
+            {/* HR clearance flow (replaced the old IT self-offboarding forms). */}
+            {canStartClearance && (
+              <Link href="/hr/clearance-requests" className={secondaryButtonClass}>
+                Start clearance for an employee
               </Link>
             )}
-            {canSelfOffboard && (
-              <Link href="/it/my-offboarding/new" className={secondaryButtonClass}>
+            {canRequestClearance && (
+              <Link href="/profile" className={secondaryButtonClass}>
                 Submit Offboarding Request
               </Link>
             )}

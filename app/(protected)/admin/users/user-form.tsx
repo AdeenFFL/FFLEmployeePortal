@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import type { ChangeEvent } from "react";
 import { useDismissable } from "@/components/use-dismissable";
 import { XIcon } from "@/components/icons";
 import type { Role, UserStatus, AuthMethod, EmploymentType } from "@/types/database";
@@ -12,6 +13,7 @@ type UserFormValues = {
   display_name: string | null;
   role_id: string | null;
   department_id: string | null;
+  site_id: string | null;
   status: UserStatus;
   notes: string | null;
   employee_code: string | null;
@@ -35,16 +37,20 @@ export function UserFormPanel({
   mode,
   roles,
   departments,
+  sites,
   initialValues,
 }: {
   mode: "new" | "edit";
   roles: Role[];
   departments: { id: string; name: string }[];
+  sites: { id: string; name: string }[];
   initialValues: UserFormValues;
 }) {
   const { visible, close } = useDismissable("/admin/users");
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [authMethod, setAuthMethod] = useState<AuthMethod>("microsoft");
 
   if (!visible) return null;
 
@@ -56,10 +62,11 @@ export function UserFormPanel({
   function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     const formData = new FormData(e.currentTarget);
     startTransition(async () => {
       try {
-        await inviteOrUpdateUser(formData);
+        setNotice(await inviteOrUpdateUser(formData));
       } catch (err) {
         setError(err instanceof Error ? err.message : "Something went wrong.");
       }
@@ -85,6 +92,11 @@ export function UserFormPanel({
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+          {notice && (
+            <p role="status" className="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-800">
+              {notice}
+            </p>
+          )}
           {error && (
             <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
           )}
@@ -123,27 +135,34 @@ export function UserFormPanel({
             <>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium text-slate-700">Sign-in Method</span>
-                <select name="auth_method" defaultValue="microsoft" className={inputClass}>
+                <select
+                  name="auth_method"
+                  value={authMethod}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setAuthMethod(e.target.value as AuthMethod)}
+                  className={inputClass}
+                >
                   <option value="microsoft">Microsoft (invite)</option>
                   <option value="password">Email &amp; Password</option>
                 </select>
               </label>
 
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-700">Initial Password</span>
-                <input
-                  name="password"
-                  type="password"
-                  minLength={6}
-                  autoComplete="new-password"
-                  className={inputClass}
-                />
-                <span className="text-xs text-slate-400">
-                  Only used if Sign-in Method is Email &amp; Password. Minimum 6 characters.
-                  There is no email delivery in this system — you must share this password with
-                  the employee directly (verbally, chat, etc.) after saving.
-                </span>
-              </label>
+              {authMethod === "password" && (
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-slate-700">Initial Password</span>
+                  <input
+                    name="password"
+                    type="password"
+                    minLength={6}
+                    autoComplete="new-password"
+                    className={inputClass}
+                  />
+                  <span className="text-xs text-slate-400">
+                    Minimum 6 characters. There is no email delivery in this system — you must
+                    share this password with the employee directly (verbally, chat, etc.) after
+                    saving.
+                  </span>
+                </label>
+              )}
             </>
           ) : (
             <div className="flex flex-col gap-1 text-sm">
@@ -194,6 +213,29 @@ export function UserFormPanel({
               People in the "IT" department become eligible for site assignment on IT Settings.
             </span>
           </label>
+
+          {/* Pending Microsoft invites can't carry a site yet (invited_users has no site_id). */}
+          {!(mode === "edit" && initialValues.id === null) && (
+            <label className="flex flex-col gap-1 text-sm">
+              <span className="font-medium text-slate-700">Site</span>
+              <select
+                name="site_id"
+                defaultValue={initialValues.site_id ?? ""}
+                className={inputClass}
+              >
+                <option value="">— Select —</option>
+                {sites.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name}
+                  </option>
+                ))}
+              </select>
+              <span className="text-xs text-slate-400">
+                Saved for Email &amp; Password users and existing users. For a Microsoft invite,
+                set the site after their first sign-in.
+              </span>
+            </label>
+          )}
 
           <label className="flex flex-col gap-1 text-sm">
             <span className="font-medium text-slate-700">Employment Type</span>

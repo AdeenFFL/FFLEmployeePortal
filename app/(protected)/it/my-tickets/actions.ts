@@ -53,6 +53,50 @@ export async function createItTicket(formData: FormData) {
   if (!TICKET_PRIORITIES.includes(priority)) fail(NEW, "Please choose a priority.");
   if (!CONTACT_METHODS.includes(contactMethod)) fail(NEW, "Invalid contact method.");
 
+  // The request type must be a real, active one, and "Access required" is mandatory for the
+  // categories flagged for it: checked here too, not only in the browser.
+  const { data: requestType } = await supabase
+    .schema("it")
+    .from("request_types")
+    .select("id")
+    .eq("id", requestTypeId)
+    .eq("is_active", true)
+    .maybeSingle();
+  if (!requestType) fail(NEW, "Please choose a request type.");
+  const chosenCategoryId = optional(formData, "subcategoryId") ?? optional(formData, "categoryId");
+  if (chosenCategoryId) {
+    const { data: category } = await supabase
+      .schema("it")
+      .from("ticket_categories")
+      .select("needs_access_field")
+      .eq("id", chosenCategoryId)
+      .maybeSingle();
+    if (category?.needs_access_field && !optional(formData, "accessRequired")) {
+      fail(NEW, "Please say which access is required.");
+    }
+  }
+
+  // Double submit: the same ticket from the same person within 2 minutes is the one already
+  // made, so show that instead of creating a copy.
+  const { data: alreadyMade } = await supabase
+    .schema("it")
+    .from("tickets")
+    .select("id, ticket_number")
+    .eq("requester_person_id", personId)
+    .eq("subject", subject)
+    .eq("description", description)
+    .gte("created_at", new Date(Date.now() - 2 * 60_000).toISOString())
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (alreadyMade) {
+    redirect(
+      `/it/my-tickets/${alreadyMade.id}?notice=${encodeURIComponent(
+        `Ticket ${alreadyMade.ticket_number} was already created. No copy was made.`,
+      )}`,
+    );
+  }
+
   const files = formData
     .getAll("attachments")
     .filter((f): f is File => f instanceof File && f.size > 0);

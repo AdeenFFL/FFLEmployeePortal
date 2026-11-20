@@ -4,8 +4,15 @@ import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { queueItEmails } from "@/lib/it/notifications";
+import { parseMoney } from "@/lib/it/procurement";
 import { TASK_STATUSES, TICKET_PRIORITIES, WORKING_STATUSES } from "@/lib/it/tickets";
-import type { ItTicketPriority, ItTicketStatus, ItTicketTaskStatus } from "@/types/database";
+import { TASK_KIND_DETAIL_FIELDS } from "@/lib/it/ticket-tasks";
+import type {
+  ItTicketPriority,
+  ItTicketStatus,
+  ItTicketTaskKind,
+  ItTicketTaskStatus,
+} from "@/types/database";
 
 // Every action checks its permission here (defense in depth — proxy.ts already gates the page)
 // AND is re-checked by the database: RLS decides which rows the caller may touch, and
@@ -13,20 +20,54 @@ import type { ItTicketPriority, ItTicketStatus, ItTicketTaskStatus } from "@/typ
 // it.tickets.assign, closing needs it.tickets.close). The ticket timeline rows for status,
 // assignment, priority and escalation are written by trigger, not here.
 
-function fail(ticketId: string, message: string): never {
-  redirect(`/it/tickets/${ticketId}?error=${encodeURIComponent(message)}`);
+function failAt(path: string, message: string): never {
+  redirect(`${path}?error=${encodeURIComponent(message)}`);
 }
 
-function done(ticketId: string, message: string): never {
+function doneAt(ticketId: string, path: string, message: string): never {
   queueItEmails(); // notification rows were written by DB triggers; deliver their emails
   revalidatePath("/it/tickets");
   revalidatePath(`/it/tickets/${ticketId}`);
   revalidatePath(`/it/my-tickets/${ticketId}`);
-  redirect(`/it/tickets/${ticketId}?notice=${encodeURIComponent(message)}`);
+  revalidatePath("/it/tickets/[id]/tasks/[taskId]", "page");
+  revalidatePath("/it/my-work");
+  redirect(`${path}?notice=${encodeURIComponent(message)}`);
+}
+
+function fail(ticketId: string, message: string): never {
+  failAt(`/it/tickets/${ticketId}`, message);
+}
+
+function done(ticketId: string, message: string): never {
+  doneAt(ticketId, `/it/tickets/${ticketId}`, message);
+}
+
+// Where a task action sends you back: the task's own page when it was submitted from there (a
+// hidden "taskPage" field holding the task id), else the whole ticket — same pattern as
+// onboarding's backPath() in ../actions.ts.
+function taskBackPath(ticketId: string, formData: FormData) {
+  const taskId = text(formData, "taskPage");
+  return /^[0-9a-f-]{36}$/i.test(taskId) ? `/it/tickets/${ticketId}/tasks/${taskId}` : `/it/tickets/${ticketId}`;
 }
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
+}
+
+// device_check is the only task_kind today (lib/it/ticket-tasks.ts) — task_kind is set only when
+// at least one of its fields is filled, so a plain task (none filled) behaves exactly as it did
+// before this column existed.
+function readTaskDetails(formData: FormData): {
+  task_kind: ItTicketTaskKind | null;
+  details: Record<string, string>;
+} {
+  const kind: ItTicketTaskKind = "device_check";
+  const details: Record<string, string> = {};
+  for (const f of TASK_KIND_DETAIL_FIELDS[kind]) {
+    const value = text(formData, `detail_${f.key}`);
+    if (value) details[f.key] = value;
+  }
+  return Object.keys(details).length > 0 ? { task_kind: kind, details } : { task_kind: null, details: {} };
 }
 
 // BRD §5.3.5–5.3.7 — IT Executive classifies, prioritises and assigns.
@@ -105,6 +146,56 @@ export async function resolveTicket(ticketId: string, formData: FormData) {
   if (!data?.length) fail(ticketId, "You can only resolve tickets assigned to you.");
 
   done(ticketId, "Ticket resolved. The requester has been asked to confirm.");
+}
+
+// Send for repair: raises a Repair demand for the ticket's device, so the spend goes through
+// approval. The asset goes In Repair now; Device back on the demand resolves this ticket.
+export async function sendTicketForRepair(ticketId: string, assetId: string, formData: FormData) {
+  const { supabase } = await requirePermission("it.demands.create");
+
+  const issueType = text(formData, "issueType");
+  const departmentId = text(formData, "departmentId");
+  const estimate = parseMoney(formData.get("estimate"));
+  if (!issueType) fail(ticketId, "Say what is wrong with the device.");
+  if (!departmentId) fail(ticketId, "Choose the department.");
+  if (estimate === undefined) fail(ticketId, "The estimated cost must be a positive number.");
+
+  const { error } = await supabase.schema("it").rpc("raise_repair_demand", {
+    p_asset_id: assetId,
+    p_category: "Repair",
+    p_issue_type: issueType,
+    p_justification: text(formData, "description") || null,
+    p_department_id: departmentId,
+    p_estimate: estimate ?? null,
+    p_ticket_id: ticketId,
+  });
+  if (error) fail(ticketId, error.message);
+
+  revalidatePath("/it/inventory");
+  revalidatePath(`/it/inventory/${assetId}`);
+  revalidatePath("/it/procurement/demands");
+  done(ticketId, "Repair demand raised. The ticket resolves when the device is back.");
+}
+
+// Replace device: a ready-made demand that follows the normal approval flow.
+export async function replaceTicketDevice(ticketId: string, formData: FormData) {
+  const { supabase } = await requirePermission("it.demands.create");
+
+  const productId = text(formData, "productId");
+  const departmentId = text(formData, "departmentId");
+  if (!productId) fail(ticketId, "Choose the replacement product.");
+  if (!departmentId) fail(ticketId, "Choose the department.");
+
+  const { error } = await supabase.schema("it").rpc("raise_replacement_demand", {
+    p_ticket_id: ticketId,
+    p_product_id: productId,
+    p_department_id: departmentId,
+    p_justification: text(formData, "justification") || null,
+  });
+  if (error) fail(ticketId, error.message);
+
+  revalidatePath("/it/procurement/demands");
+  done(ticketId, "Replacement demand raised. The ticket resolves when the new device is assigned.");
 }
 
 // BRD §5.3.11.
@@ -189,6 +280,7 @@ export async function addTask(ticketId: string, formData: FormData) {
   if (!taskType) fail(ticketId, "Task name is required.");
 
   const leadId = text(formData, "assigneeId") || null;
+  const { task_kind, details } = readTaskDetails(formData);
   const { data: task, error } = await supabase
     .schema("it")
     .from("ticket_tasks")
@@ -197,6 +289,8 @@ export async function addTask(ticketId: string, formData: FormData) {
       task_type: taskType,
       description: text(formData, "description") || null,
       assigned_to_person_id: leadId,
+      task_kind,
+      details,
     })
     .select("id")
     .single();
@@ -255,19 +349,37 @@ export async function removeHelper(ticketId: string, personId: string) {
 
 export async function updateTaskStatus(ticketId: string, taskId: string, formData: FormData) {
   const { supabase } = await requirePermission("it.tickets.read");
+  const back = taskBackPath(ticketId, formData);
 
   const status = text(formData, "status") as ItTicketTaskStatus;
-  if (!TASK_STATUSES.includes(status)) fail(ticketId, "Invalid task status.");
+  if (!TASK_STATUSES.includes(status)) failAt(back, "Invalid task status.");
+
+  const { data: existing } = await supabase
+    .schema("it")
+    .from("ticket_tasks")
+    .select("task_kind, details")
+    .eq("id", taskId)
+    .eq("ticket_id", ticketId)
+    .maybeSingle();
+
+  const details: Record<string, string> = { ...(existing?.details ?? {}) };
+  if (existing?.task_kind) {
+    for (const f of TASK_KIND_DETAIL_FIELDS[existing.task_kind]) {
+      const value = text(formData, `detail_${f.key}`);
+      if (value) details[f.key] = value;
+      else delete details[f.key];
+    }
+  }
 
   const { data, error } = await supabase
     .schema("it")
     .from("ticket_tasks")
-    .update({ status })
+    .update({ status, ...(existing?.task_kind ? { details } : {}) })
     .eq("id", taskId)
     .eq("ticket_id", ticketId)
     .select("id");
-  if (error) fail(ticketId, error.message);
-  if (!data?.length) fail(ticketId, "You can only update tasks assigned to you.");
+  if (error) failAt(back, error.message);
+  if (!data?.length) failAt(back, "You can only update tasks assigned to you.");
 
-  done(ticketId, `Task marked ${status}.`);
+  doneAt(ticketId, back, `Task marked ${status}.`);
 }

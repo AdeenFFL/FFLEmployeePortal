@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { redirect } from "next/navigation";
 import { requirePermission } from "@/lib/auth/require-permission";
 import { logAuditEvent } from "@/lib/audit/log";
 import type {
@@ -16,9 +17,36 @@ const CLASSIFICATIONS: AssetClassification[] = ["Fixed", "Consumable"];
 const VALUE_TYPE_NAMES: AssetValueTypeName[] = ["New", "Old"];
 const DEPRECIATION_METHODS: DepreciationMethod[] = ["Straight Line", "Reducing Balance"];
 
+// Every action ends on the settings page with a ?notice= / ?error= banner (and closes the drawer)
+// instead of throwing to the error boundary.
+function go(tab: "types" | "values" | "minimums", kind: "notice" | "error", message: string): never {
+  redirect(`${PATH}?${kind}=${encodeURIComponent(message)}${tab === "types" ? "" : `#${tab}`}`);
+}
+
+// Minimum stock per product per site (javaria_it_0023). An empty minimum removes the site's own
+// level, so the product's default applies again.
+export async function saveStockMinimum(formData: FormData) {
+  const { supabase } = await requirePermission(PERMISSION);
+  const productId = String(formData.get("productId") ?? "");
+  const siteId = String(formData.get("siteId") ?? "");
+  const minText = String(formData.get("minQuantity") ?? "").trim();
+  if (!productId || !siteId) go("minimums", "error", "Choose the consumable and the site.");
+  const min = minText === "" ? null : Number(minText);
+  if (min !== null && (!Number.isInteger(min) || min < 0)) go("minimums", "error", "The minimum must be a whole number.");
+
+  const { error } = await supabase
+    .schema("it")
+    .rpc("set_stock_minimum", { p_product_id: productId, p_site_id: siteId, p_min_quantity: min });
+  if (error) go("minimums", "error", error.message);
+
+  revalidatePath(PATH);
+  revalidatePath("/it/inventory/stock");
+  go("minimums", "notice", min === null ? "Minimum removed." : "Minimum saved.");
+}
+
 function parseClassification(value: FormDataEntryValue | null): AssetClassification {
   const classification = String(value ?? "") as AssetClassification;
-  if (!CLASSIFICATIONS.includes(classification)) throw new Error("Choose Fixed or Consumable.");
+  if (!CLASSIFICATIONS.includes(classification)) go("types", "error", "Choose Fixed or Consumable.");
   return classification;
 }
 
@@ -32,14 +60,15 @@ export async function createAssetType(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
   const classification = parseClassification(formData.get("classification"));
-  if (!name) throw new Error("Name is required.");
+  const isActive = formData.get("is_active") !== null;
+  if (!name) go("types", "error", "Name is required.");
 
   const { error } = await supabase
     .schema("it")
     .from("asset_types")
-    .insert({ name, classification, description, created_by: personId, updated_by: personId });
-  if (error?.code === "23505") throw new Error(`An asset type named "${name}" already exists.`);
-  if (error) throw new Error(error.message);
+    .insert({ name, classification, description, is_active: isActive, created_by: personId, updated_by: personId });
+  if (error?.code === "23505") go("types", "error", `An asset type named "${name}" already exists.`);
+  if (error) go("types", "error", error.message);
 
   await logAuditEvent({
     supabase,
@@ -50,6 +79,7 @@ export async function createAssetType(formData: FormData) {
     details: `Created asset type "${name}" (${classification})`,
   });
   revalidatePath(PATH);
+  go("types", "notice", `Asset type "${name}" added.`);
 }
 
 export async function updateAssetType(assetTypeId: string, formData: FormData) {
@@ -58,15 +88,16 @@ export async function updateAssetType(assetTypeId: string, formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const description = String(formData.get("description") ?? "").trim() || null;
   const classification = parseClassification(formData.get("classification"));
-  if (!name) throw new Error("Name is required.");
+  const isActive = formData.get("is_active") !== null;
+  if (!name) go("types", "error", "Name is required.");
 
   const { error } = await supabase
     .schema("it")
     .from("asset_types")
-    .update({ name, classification, description, updated_by: personId })
+    .update({ name, classification, description, is_active: isActive, updated_by: personId })
     .eq("id", assetTypeId);
-  if (error?.code === "23505") throw new Error(`An asset type named "${name}" already exists.`);
-  if (error) throw new Error(error.message);
+  if (error?.code === "23505") go("types", "error", `An asset type named "${name}" already exists.`);
+  if (error) go("types", "error", error.message);
 
   await logAuditEvent({
     supabase,
@@ -77,6 +108,7 @@ export async function updateAssetType(assetTypeId: string, formData: FormData) {
     details: `Updated asset type "${name}" (${classification})`,
   });
   revalidatePath(PATH);
+  go("types", "notice", `Asset type "${name}" saved.`);
 }
 
 export async function toggleAssetTypeActive(assetTypeId: string, isActive: boolean) {
@@ -89,7 +121,7 @@ export async function toggleAssetTypeActive(assetTypeId: string, isActive: boole
     .eq("id", assetTypeId)
     .select("name")
     .single();
-  if (error) throw new Error(error.message);
+  if (error) go("types", "error", error.message);
 
   await logAuditEvent({
     supabase,
@@ -100,6 +132,7 @@ export async function toggleAssetTypeActive(assetTypeId: string, isActive: boole
     details: `${isActive ? "Activated" : "Deactivated"} asset type "${data.name}"`,
   });
   revalidatePath(PATH);
+  go("types", "notice", `"${data.name}" ${isActive ? "activated" : "deactivated — it stays on existing assets but can't be picked"}.`);
 }
 
 export async function deleteAssetType(assetTypeId: string) {
@@ -114,9 +147,9 @@ export async function deleteAssetType(assetTypeId: string) {
     .single();
   // 23503 = foreign_key_violation: assets (or Javeria's products) still reference this type.
   if (error?.code === "23503") {
-    throw new Error("This asset type is in use. Deactivate it instead of deleting it.");
+    go("types", "error", "This asset type is in use. Deactivate it instead of deleting it.");
   }
-  if (error) throw new Error(error.message);
+  if (error) go("types", "error", error.message);
 
   await logAuditEvent({
     supabase,
@@ -127,6 +160,7 @@ export async function deleteAssetType(assetTypeId: string) {
     details: `Deleted asset type "${data.name}"`,
   });
   revalidatePath(PATH);
+  go("types", "notice", `Asset type "${data.name}" deleted.`);
 }
 
 // Value types are a fixed pair (New / Old, enforced by a check constraint), so there's no
@@ -134,22 +168,22 @@ export async function deleteAssetType(assetTypeId: string) {
 // and later edits.
 export async function saveAssetValueType(name: AssetValueTypeName, formData: FormData) {
   const { supabase, personId, actorLabel } = await requirePermission(PERMISSION);
-  if (!VALUE_TYPE_NAMES.includes(name)) throw new Error("Unknown value type.");
+  if (!VALUE_TYPE_NAMES.includes(name)) go("values", "error", "Unknown value type.");
 
   const depreciationPercentage = Number(formData.get("depreciation_percentage"));
   if (!Number.isFinite(depreciationPercentage) || depreciationPercentage < 0 || depreciationPercentage > 100) {
-    throw new Error("Depreciation % must be between 0 and 100.");
+    go("values", "error", "Depreciation % must be between 0 and 100.");
   }
 
   const depreciationMethod = String(formData.get("depreciation_method") ?? "") as DepreciationMethod;
   if (!DEPRECIATION_METHODS.includes(depreciationMethod)) {
-    throw new Error("Choose a depreciation method.");
+    go("values", "error", "Choose a depreciation method.");
   }
 
   const usefulLifeRaw = String(formData.get("useful_life_years") ?? "").trim();
   const usefulLifeYears = usefulLifeRaw ? Number(usefulLifeRaw) : null;
   if (usefulLifeYears !== null && (!Number.isInteger(usefulLifeYears) || usefulLifeYears <= 0)) {
-    throw new Error("Useful life must be a whole number of years greater than 0.");
+    go("values", "error", "Useful life must be a whole number of years greater than 0.");
   }
 
   const description = String(formData.get("description") ?? "").trim() || null;
@@ -168,7 +202,7 @@ export async function saveAssetValueType(name: AssetValueTypeName, formData: For
       },
       { onConflict: "name" },
     );
-  if (error) throw new Error(error.message);
+  if (error) go("values", "error", error.message);
 
   await logAuditEvent({
     supabase,
@@ -181,4 +215,5 @@ export async function saveAssetValueType(name: AssetValueTypeName, formData: For
     }`,
   });
   revalidatePath(PATH);
+  go("values", "notice", `${name} asset rules saved.`);
 }

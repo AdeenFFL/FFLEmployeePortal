@@ -1,12 +1,12 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { setUserStatus, revokeInvitation, resendInviteEmail, hardDeleteUser } from "./actions";
+import { setUserStatus, revokeInvitation, resendInviteEmail } from "./actions";
+import { DeleteUserButton } from "./delete-user-button";
 import { UserFormPanel } from "./user-form";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { OptimisticToggle } from "@/components/optimistic-toggle";
 import { IconLink, IconButton } from "@/components/icon-button";
-import { ConfirmSubmitButton } from "@/components/confirm-submit-button";
 import { PencilIcon, TrashIcon, MailIcon } from "@/components/icons";
 import { getInitials } from "@/lib/format/initials";
 import type { UserStatus, AuthMethod, EmploymentType } from "@/types/database";
@@ -38,6 +38,13 @@ export default async function AdminUsersPage({
     .from("org_units")
     .select("id, name")
     .eq("type", "Department")
+    .eq("is_active", true)
+    .order("name");
+
+  const { data: sites } = await supabase
+    .from("org_units")
+    .select("id, name")
+    .eq("type", "Site")
     .eq("is_active", true)
     .order("name");
 
@@ -85,6 +92,14 @@ export default async function AdminUsersPage({
   const pendingInvitations = (invitations ?? []).filter(
     (invite) => !existingEmails.has(invite.email),
   );
+  // Invites staged by an IT onboarding request (Email Account task): show which one.
+  const onboardingIds = pendingInvitations
+    .map((i) => i.onboarding_request_id)
+    .filter((id): id is string => Boolean(id));
+  const { data: onboardingRequests } = onboardingIds.length
+    ? await supabase.schema("it").from("onboarding_offboarding").select("id, request_number").in("id", onboardingIds)
+    : { data: [] };
+  const requestNumberById = new Map((onboardingRequests ?? []).map((r) => [r.id, r.request_number]));
 
   let panel: { mode: "new" | "edit" } & {
     initialValues: {
@@ -93,6 +108,7 @@ export default async function AdminUsersPage({
       display_name: string | null;
       role_id: string | null;
       department_id: string | null;
+      site_id: string | null;
       status: UserStatus;
       notes: string | null;
       employee_code: string | null;
@@ -112,6 +128,7 @@ export default async function AdminUsersPage({
         display_name: null,
         role_id: null,
         department_id: null,
+        site_id: null,
         status: "Active",
         notes: null,
         employee_code: null,
@@ -130,10 +147,13 @@ export default async function AdminUsersPage({
       .maybeSingle();
 
     if (existingAccount?.persons) {
+      // limit(1): a person left with two role rows by the old save made maybeSingle() fail.
       const { data: roleRow } = await supabase
         .from("user_roles")
         .select("role_id")
         .eq("person_id", existingAccount.person_id)
+        .order("granted_at", { ascending: false })
+        .limit(1)
         .maybeSingle();
 
       panel = {
@@ -144,6 +164,7 @@ export default async function AdminUsersPage({
           display_name: existingAccount.persons.full_name,
           role_id: roleRow?.role_id ?? null,
           department_id: existingAccount.persons.department_id,
+          site_id: existingAccount.persons.site_id,
           status: existingAccount.persons.status,
           notes: existingAccount.persons.notes,
           employee_code: existingAccount.persons.employee_code,
@@ -170,6 +191,7 @@ export default async function AdminUsersPage({
             display_name: invitation.display_name,
             role_id: invitation.role_id,
             department_id: invitation.department_id,
+            site_id: null, // invited_users has no site_id yet; the form hides Site for invites
             status: invitation.status,
             notes: invitation.notes,
             employee_code: invitation.employee_code,
@@ -180,6 +202,21 @@ export default async function AdminUsersPage({
           },
         };
       }
+    }
+  }
+
+  // Keep a user's current site selectable even if it was deactivated since — otherwise the
+  // select falls back to "— Select —" and saving the form silently clears persons.site_id.
+  let siteOptions = sites ?? [];
+  const currentSiteId = panel?.initialValues.site_id ?? null;
+  if (currentSiteId && !siteOptions.some((s) => s.id === currentSiteId)) {
+    const { data: currentSite } = await supabase
+      .from("org_units")
+      .select("id, name")
+      .eq("id", currentSiteId)
+      .maybeSingle();
+    if (currentSite) {
+      siteOptions = [...siteOptions, { id: currentSite.id, name: `${currentSite.name} (inactive)` }];
     }
   }
 
@@ -304,13 +341,10 @@ export default async function AdminUsersPage({
                         label="Edit user"
                         tone="primary"
                       />
-                      <form action={hardDeleteUser.bind(null, p.id)}>
-                        <ConfirmSubmitButton
-                          icon={<TrashIcon className="h-4 w-4" />}
-                          label="Permanently delete user"
-                          confirmMessage={`Permanently delete ${p.full_name ?? account?.email ?? "this user"}? This deletes their account and ALL associated data (tickets, messages, assets, onboarding records — including ones owned by other people but assigned to or touched by them). This cannot be undone.`}
-                        />
-                      </form>
+                      <DeleteUserButton
+                        personId={p.id}
+                        confirmMessage={`Permanently delete ${p.full_name ?? account?.email ?? "this user"}? This deletes their account and ALL associated data (tickets, messages, assets, onboarding records — including ones owned by other people but assigned to or touched by them). This cannot be undone.`}
+                      />
                     </div>
                   </td>
                 </tr>
@@ -344,7 +378,17 @@ export default async function AdminUsersPage({
           <tbody className="divide-y divide-slate-100">
             {pendingInvitations.map((invite) => (
               <tr key={invite.email}>
-                <td className="px-4 py-3">{invite.display_name ?? "—"}</td>
+                <td className="px-4 py-3">
+                  {invite.display_name ?? "—"}
+                  {invite.onboarding_request_id && (
+                    <Link
+                      href={`/it/onboarding/${invite.onboarding_request_id}`}
+                      className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700 hover:underline"
+                    >
+                      Onboarding {requestNumberById.get(invite.onboarding_request_id) ?? ""}
+                    </Link>
+                  )}
+                </td>
                 <td className="px-4 py-3 text-slate-500">{invite.email}</td>
                 <td className="px-4 py-3">{roleNameById.get(invite.role_id)}</td>
                 <td className="px-4 py-3 text-slate-500">{formatDate(invite.invited_at)}</td>
@@ -394,6 +438,7 @@ export default async function AdminUsersPage({
           mode={panel.mode}
           roles={roles ?? []}
           departments={departments ?? []}
+          sites={siteOptions}
           initialValues={panel.initialValues}
         />
       )}

@@ -10,7 +10,6 @@ import {
   cardClass,
   FormMessage,
   inputClass,
-  primaryButtonClass,
   secondaryButtonClass,
   Timeline,
 } from "../_components/ticket-ui";
@@ -61,13 +60,17 @@ export default async function MyOffboardingPage({
       <PageHeader
         title="My Offboarding"
         description="Your own resignation / offboarding requests and their progress with IT."
-        action={
-          <Link href="/it/my-offboarding/new" className={primaryButtonClass}>
-            + New request
-          </Link>
-        }
       />
       <FormMessage error={error} notice={notice} />
+
+      {/* New requests go through the HR clearance flow; this page only lists the old ones. */}
+      <div className="mb-6 rounded-xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
+        Offboarding requests are now submitted from{" "}
+        <Link href="/profile" className="font-medium underline">
+          your profile
+        </Link>
+        . Your earlier requests below are still followed up by IT.
+      </div>
 
       {rows.length === 0 && (
         <div className={`${cardClass} px-6 py-10 text-center text-sm text-slate-400`}>

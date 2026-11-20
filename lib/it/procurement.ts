@@ -49,6 +49,10 @@ export const DEMAND_CATEGORIES: { value: ItDemandCategory; label: string; hint: 
   { value: "Fix", label: "Fix", hint: "One-off fix" },
 ];
 
+// These name a device instead of a product (javaria_it_0023). Old demands in these categories have
+// no device and keep the delivery flow, so "is it a repair?" is demand.asset_id, not the category.
+export const REPAIR_CATEGORIES: ItDemandCategory[] = ["Repair", "Maintenance", "Fix"];
+
 export function demandCategoryLabel(value: ItDemandCategory | null) {
   if (!value) return "Not categorised";
   return DEMAND_CATEGORIES.find((c) => c.value === value)?.label ?? value;

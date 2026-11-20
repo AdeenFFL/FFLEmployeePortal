@@ -12,6 +12,20 @@ export async function createTicket(formData: FormData) {
   const body = String(formData.get("body") ?? "").trim();
   if (!subject || !body) throw new Error("Subject and description are required.");
 
+  // Double submit: the same ticket from the same person within 2 minutes is the one already
+  // made, so open that instead of creating a copy.
+  const { data: alreadyMade } = await supabase
+    .schema("hr")
+    .from("tickets")
+    .select("id")
+    .eq("person_id", personId)
+    .eq("subject", subject)
+    .eq("body", body)
+    .gte("created_at", new Date(Date.now() - 2 * 60_000).toISOString())
+    .limit(1)
+    .maybeSingle();
+  if (alreadyMade) redirect(`/hr/tickets/${alreadyMade.id}`);
+
   // Denormalized at creation time per 01-platform-design-and-sop.md §7 — cheap filtering by
   // site/company later without joining back through persons on every query.
   const { data: person } = await supabase

@@ -2,6 +2,7 @@ import Link from "next/link";
 import { requireActiveUser } from "@/lib/auth/require-user";
 import { updateOwnBiodata, changeOwnPassword } from "./actions";
 import { PageHeader } from "@/components/page-header";
+import { OffboardingCard } from "../hr/clearance/offboarding-card";
 
 function formatDate(value: string | null) {
   if (!value) return "—";
@@ -258,6 +259,7 @@ export default async function ProfilePage({
               </form>
             </div>
           )}
+          <OffboardingCard personId={personId} siteId={profile.site_id} departmentId={profile.department_id} />
         </div>
       </div>
     </div>

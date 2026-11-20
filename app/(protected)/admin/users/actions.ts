@@ -9,14 +9,17 @@ import type { UserStatus, AuthMethod, EmploymentType } from "@/types/database";
 
 const MIN_PASSWORD_LENGTH = 6; // Supabase's own GoTrue default minimum
 
-// persons.company_id/site_id are proper FKs this pass doesn't wire a picker for yet (see
-// 0008_org_hierarchy_fix_and_identity_split.sql step B.4 comment) — department_id now has one
-// (0054_it_department_based_staff.sql), since the IT module needs it to determine IT staff.
+// persons.company_id is a proper FK this pass doesn't wire a picker for yet (see
+// 0008_org_hierarchy_fix_and_identity_split.sql step B.4 comment) — department_id has one
+// (0054_it_department_based_staff.sql), since the IT module needs it to determine IT staff, and
+// site_id has one too. The Microsoft invite path doesn't carry site_id yet (invited_users has no
+// such column — that needs a migration), so a Microsoft user's site is set after first sign-in.
 function readUserFormFields(formData: FormData) {
   return {
     full_name: String(formData.get("display_name") ?? "").trim() || null,
     role_id: String(formData.get("role_id") ?? ""),
     department_id: String(formData.get("department_id") ?? "").trim() || null,
+    site_id: String(formData.get("site_id") ?? "").trim() || null,
     status: (String(formData.get("status") ?? "Active") as UserStatus) ?? "Active",
     notes: String(formData.get("notes") ?? "").trim() || null,
     employee_code: String(formData.get("employee_code") ?? "").trim() || null,
@@ -27,7 +30,8 @@ function readUserFormFields(formData: FormData) {
   };
 }
 
-export async function inviteOrUpdateUser(formData: FormData) {
+// Returns the message the panel shows on success.
+export async function inviteOrUpdateUser(formData: FormData): Promise<string> {
   const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 
   const email = String(formData.get("email") ?? "")
@@ -53,26 +57,25 @@ export async function inviteOrUpdateUser(formData: FormData) {
     // never read on this branch. persons.full_name is NOT NULL (unlike the old
     // profiles.display_name) — fall back to email if the admin clears the display name field.
     const { role_id, ...personFields } = fields;
-    const { error } = await supabase
+    // .select() so an update RLS silently filtered out (0 rows) is reported, not ignored.
+    const { data: updated, error } = await supabase
       .from("persons")
       .update({ ...personFields, full_name: personFields.full_name ?? email })
-      .eq("id", existingAccount.person_id);
+      .eq("id", existingAccount.person_id)
+      .select("id");
     if (error) throw new Error(error.message);
+    if (!updated?.length) throw new Error("You don't have permission to edit this user.");
 
     // The UI still assigns exactly one role per person for now (schema supports multi-role;
-    // see 04-claude-code-refactor-instructions.md Section 6) — delete-then-insert the one row.
-    const { error: roleDeleteError } = await supabase
-      .from("user_roles")
-      .delete()
-      .eq("person_id", existingAccount.person_id);
-    if (roleDeleteError) throw new Error(roleDeleteError.message);
-
-    const { error: roleInsertError } = await supabase.from("user_roles").insert({
-      person_id: existingAccount.person_id,
-      role_id,
-      granted_by: adminPersonId,
+    // see 04-claude-code-refactor-instructions.md Section 6). set_person_role
+    // (javaria_it_0026) swaps it in one transaction: the old delete-then-insert could leave the
+    // old role in place when the delete silently matched nothing.
+    // The person gets a notification when the role actually changed.
+    const { data: roleChanged, error: roleError } = await supabase.rpc("set_person_role", {
+      p_person_id: existingAccount.person_id,
+      p_role_id: role_id,
     });
-    if (roleInsertError) throw new Error(roleInsertError.message);
+    if (roleError) throw new Error(roleError.message);
 
     await logAuditEvent({
       supabase,
@@ -84,7 +87,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
     });
 
     revalidatePath("/admin/users");
-    return;
+    return roleChanged ? "Saved. The role changed and they've been notified." : "Saved.";
   }
 
   const authMethod = String(formData.get("auth_method") ?? "microsoft") as AuthMethod;
@@ -135,6 +138,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
         date_of_joining: fields.date_of_joining,
         employment_type: fields.employment_type,
         department_id: fields.department_id,
+        site_id: fields.site_id,
       })
       .select("id")
       .single();
@@ -189,7 +193,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
     });
 
     revalidatePath("/admin/users");
-    return;
+    return emailResult.sent ? "Account created and the invite email sent." : "Account created, but the invite email failed to send.";
   }
 
   // Microsoft path — new invite, or editing a still-pending one. Upsert on the email PK covers
@@ -247,6 +251,7 @@ export async function inviteOrUpdateUser(formData: FormData) {
   });
 
   revalidatePath("/admin/users");
+  return existingInvite ? "Invitation updated." : emailResult?.sent ? "Invitation sent." : "Invited, but the email failed to send.";
 }
 
 // Lets an admin re-send the invite notification for a pending Microsoft invitation without
@@ -365,11 +370,13 @@ export async function setUserStatus(personId: string, status: UserStatus) {
 // only their own records go" pattern — a ticket assigned to this person is deleted even though
 // someone else filed it. There is no undo. Soft-delete (status-based, no data loss) is a
 // separate, not-yet-built feature — this is the hard-delete-only pass.
-export async function hardDeleteUser(personId: string) {
+// Expected failures are RETURNED (shown inline by <DeleteUserButton>), not thrown: Next.js hides
+// a thrown Server Action error's message in production.
+export async function hardDeleteUser(personId: string): Promise<{ error: string | null }> {
   const { supabase, personId: adminPersonId, actorLabel } = await requirePermission("route:/admin/users");
 
   if (personId === adminPersonId) {
-    throw new Error("You cannot delete your own account.");
+    return { error: "You cannot delete your own account." };
   }
 
   const { data: account } = await supabase
@@ -382,7 +389,27 @@ export async function hardDeleteUser(personId: string) {
   // referencing this person — but NOT their Supabase Auth identity (user_accounts.auth_user_id
   // references auth.users, not the other way around), so that's removed separately below.
   const { error } = await supabase.from("persons").delete().eq("id", personId);
-  if (error) throw new Error(error.message);
+  if (error) {
+    // 23514 = talha_it_0012's asset_assignments_holder_needed_while_open: they still hold an asset.
+    if (error.code === "23514" && error.message.includes("asset_assignments_holder_needed_while_open")) {
+      return {
+        error: "This employee still holds IT assets. Return them first, or set them Inactive.",
+      };
+    }
+    // 23503 = a row elsewhere still points at this person and has no delete rule.
+    if (error.code === "23503" && error.message.includes("asset_assignments_person_id_fkey")) {
+      return {
+        error:
+          "This employee has IT asset history (assets assigned to them), so they cannot be deleted. Set them Inactive instead.",
+      };
+    }
+    if (error.code === "23503") {
+      return {
+        error: `This user is still linked to other records, so they cannot be deleted. Set them Inactive instead. (${error.message})`,
+      };
+    }
+    return { error: error.message };
+  }
 
   if (account?.auth_user_id) {
     const admin = createAdminClient();
@@ -406,6 +433,7 @@ export async function hardDeleteUser(personId: string) {
   });
 
   revalidatePath("/admin/users");
+  return { error: null };
 }
 
 export async function revokeInvitation(email: string) {
