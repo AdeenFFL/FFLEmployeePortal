@@ -127,6 +127,9 @@ export function readinessProblems(
 // Readiness of an existing case, using hr.clearance_missing_for_case (parts with no signer that are
 // not skipped) — the same list hr.forward_clearance_case checks. A missing site/department is
 // reported once, as in readinessProblems; a department only matters if a department part is not skipped.
+export const HR_SLOT_KEY = "hr";
+export const AUTO_SKIP_REASON = "No signer is set for this site / department.";
+
 export function caseReadiness(
   siteId: string | null,
   departmentId: string | null,
@@ -139,14 +142,31 @@ export function caseReadiness(
     departmentId === null &&
     slots.some((s) => s.scope === "department" && !skippedKeys.has(s.slot_key));
   const scopeOf = new Map(slots.map((s) => [s.slot_key, s.scope]));
-  const slotsWithoutSigner = missing
-    .filter((m) => (scopeOf.get(m.slot_key) === "department" ? !missingDepartment : !missingSite))
+  const withoutSigner = missing.filter((m) =>
+    scopeOf.get(m.slot_key) === "department" ? !missingDepartment : !missingSite,
+  );
+  // Forward skips a part with no signer by itself (forwardCase), except HR: page one cannot be
+  // skipped, so a missing HR signer still blocks.
+  const slotsWithoutSigner = withoutSigner
+    .filter((m) => m.slot_key === HR_SLOT_KEY)
+    .map((m) => cleanSlotLabel(m.label));
+  const autoSkipped = withoutSigner
+    .filter((m) => m.slot_key !== HR_SLOT_KEY)
     .map((m) => cleanSlotLabel(m.label));
 
   const messages: string[] = [];
   if (missingSite) messages.push("No site is set for this employee.");
   if (missingDepartment) messages.push("No department is set for this employee.");
-  if (slotsWithoutSigner.length > 0) messages.push(`No signer for: ${slotsWithoutSigner.join(", ")}.`);
+  if (slotsWithoutSigner.length > 0) {
+    messages.push(`No signer for: ${slotsWithoutSigner.join(", ")} (this part cannot be skipped).`);
+  }
 
-  return { missingSite, missingDepartment, slotsWithoutSigner, messages, ready: messages.length === 0 };
+  return {
+    missingSite,
+    missingDepartment,
+    slotsWithoutSigner,
+    autoSkipped,
+    messages,
+    ready: messages.length === 0,
+  };
 }

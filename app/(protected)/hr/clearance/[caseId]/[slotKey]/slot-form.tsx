@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { saveClearanceAnswer, signClearancePart } from "./actions";
+import { LineAssign, type LineAssignee } from "./line-assign";
 
 type Outcome = "Yes" | "No" | "N/A";
 type Answer = { outcome: Outcome | null; remarks: string };
@@ -16,6 +17,8 @@ export type FormLine = {
   remarks: string | null;
   // Set when someone else answers this line (the line manager's "data received"): shown only.
   lockedNote?: string | null;
+  // IT part only (talha_hr_0011): whom the lead handed this line to; undefined = not assignable.
+  assignee?: LineAssignee | null;
 };
 
 const OUTCOMES: Outcome[] = ["Yes", "No", "N/A"];
@@ -207,6 +210,14 @@ export function SlotForm({
                 {error && <p className="text-xs text-red-700">{error}</p>}
                 {!error && justSaved.has(line.id) && (
                   <p className="text-xs text-green-700">Saved</p>
+                )}
+                {line.assignee !== undefined && (
+                  <LineAssign
+                    caseId={caseId}
+                    target={{ kind: "line", lineId: line.id }}
+                    assignee={line.assignee}
+                    disabled={busy}
+                  />
                 )}
               </li>
             );

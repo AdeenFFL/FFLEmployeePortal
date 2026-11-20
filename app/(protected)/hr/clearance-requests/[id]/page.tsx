@@ -243,7 +243,15 @@ export default async function ClearanceRequestDetailPage({
         (readiness.ready ? (
           <div className="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">
             <p className="font-medium">Ready to forward?</p>
-            <p>Ready. All signers are set for this site and department.</p>
+            {readiness.autoSkipped.length > 0 ? (
+              <p>
+                Ready. These parts have no signer for this site / department and will be skipped
+                automatically when you forward: {readiness.autoSkipped.join(", ")}.
+              </p>
+            ) : (
+              <p>Ready. All signers are set for this site and department.</p>
+            )}
+            <p className="mt-1 text-xs">Forwarding emails every signer of the parts that are not skipped.</p>
           </div>
         ) : (
           <div className="mb-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -259,7 +267,13 @@ export default async function ClearanceRequestDetailPage({
                 <Link href="/hr/admin/clearance-signers" className="font-medium underline">
                   Clearance Signers
                 </Link>{" "}
-                page, or skip a part for this request under Progress below.
+                page.
+              </p>
+            )}
+            {readiness.autoSkipped.length > 0 && (
+              <p className="mt-1">
+                These parts have no signer and will be skipped automatically when you forward:{" "}
+                {readiness.autoSkipped.join(", ")}.
               </p>
             )}
             {(readiness.missingSite || readiness.missingDepartment) && (
