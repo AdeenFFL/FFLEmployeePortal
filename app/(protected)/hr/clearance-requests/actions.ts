@@ -3,7 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require-permission";
 
-const LIST_PATH = "/hr/resignations";
+const LIST_PATH = "/hr/clearance-requests";
 const NOT_ALLOWED = "You are not allowed to do this (it needs Forward Offboarding Requests).";
 
 // Expected failures (no permission, a rule in the database function) are RETURNED, not thrown:

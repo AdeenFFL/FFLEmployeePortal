@@ -1,4 +1,4 @@
-import { formatDay } from "../resignations/clearance-view";
+import { formatDay } from "../clearance-requests/clearance-view";
 
 // The page-one details the HR signer fills in (form HR/002). One list of labels and units, used by
 // the edit form, the read-only view and (later) the print page. Plain module — no "use client" —

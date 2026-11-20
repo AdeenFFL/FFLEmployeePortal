@@ -19,6 +19,6 @@ export async function confirmDataReceived(caseId: string): Promise<ActionResult>
 
   revalidatePath("/requests");
   revalidatePath("/hr/clearance", "layout");
-  revalidatePath(`/hr/resignations/${caseId}`);
+  revalidatePath(`/hr/clearance-requests/${caseId}`);
   return { error: null };
 }

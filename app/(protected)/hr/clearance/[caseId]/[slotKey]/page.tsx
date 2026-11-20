@@ -10,7 +10,7 @@ import {
   formatTimestamp,
   karachiToday,
   orderSlotsHrLast,
-} from "../../../resignations/clearance-view";
+} from "../../../clearance-requests/clearance-view";
 import {
   ANSWER_LABELS,
   FORM_TITLES,

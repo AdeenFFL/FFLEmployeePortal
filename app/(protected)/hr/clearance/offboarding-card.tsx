@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
 import { OffboardingForm } from "./offboarding-form";
 import { getSignatureCount, MISSING_SETUP_WARNING } from "./clearance-tracker";
-import { formatDay, STATUS_TONE } from "../resignations/clearance-view";
+import { formatDay, STATUS_TONE } from "../clearance-requests/clearance-view";
 
 const TZ = "Asia/Karachi";
 

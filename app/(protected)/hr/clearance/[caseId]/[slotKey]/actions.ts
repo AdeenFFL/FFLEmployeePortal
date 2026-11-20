@@ -181,7 +181,7 @@ export async function saveClearanceDetails(
 
   revalidatePath(`${LIST_PATH}/${caseId}/hr`);
   // The last working date also shows on the HRBP case page and the employee's request page.
-  revalidatePath(`/hr/resignations/${caseId}`);
+  revalidatePath(`/hr/clearance-requests/${caseId}`);
   revalidatePath(`/requests/offboarding/${caseId}`);
   return { error: null };
 }
@@ -245,7 +245,7 @@ export async function setLineManager(
   if (error) return { error: error.message };
 
   revalidatePath(`${LIST_PATH}/${caseId}/hr`);
-  revalidatePath(`/hr/resignations/${caseId}`);
+  revalidatePath(`/hr/clearance-requests/${caseId}`);
   revalidatePath("/requests");
   revalidatePath(`/requests/offboarding/${caseId}`);
   return { error: null };

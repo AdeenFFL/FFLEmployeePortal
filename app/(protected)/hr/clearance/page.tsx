@@ -9,7 +9,7 @@ import {
   formatDay,
   formatTimestamp,
   karachiToday,
-} from "../resignations/clearance-view";
+} from "../clearance-requests/clearance-view";
 import { loadSignerSetup, mySlotsForCase, myScopes } from "./signer-work";
 
 const errorBox = "mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700";

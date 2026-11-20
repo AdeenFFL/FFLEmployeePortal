@@ -57,7 +57,7 @@ export default async function HrTicketsPage({
           <div className="flex gap-2">
             {/* HR clearance flow (replaced the old IT self-offboarding forms). */}
             {canStartClearance && (
-              <Link href="/hr/resignations" className={secondaryButtonClass}>
+              <Link href="/hr/clearance-requests" className={secondaryButtonClass}>
                 Start clearance for an employee
               </Link>
             )}
