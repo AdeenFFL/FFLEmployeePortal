@@ -203,12 +203,12 @@ Procurement working as one" that was itself run live, then immediately supersede
 reproducing the exact two-step path the live database actually went through — `0071` is not safe
 to run in isolation against a database that already has `0072`'s functions.
 
-**Two files are not already live**, unlike everything else in this and every batch since batch 3:
-`javaria_it_0026_set_person_role.sql` and `javaria_it_0027_repair_flow_fixes.sql`, replicated as
-`0074`/`0075`, both still headered "Applied to live DB: NO". These are genuine pending migrations,
-same status as `0056_hr_onboarding_replacement_permissions.sql` from batch 4 — they need an actual
-`supabase db push` (after `migration repair --status applied` for everything else in this batch,
-same two-step dance as every batch so far), not just a repair.
+**`javaria_it_0026_set_person_role.sql` and `javaria_it_0027_repair_flow_fixes.sql`** are both
+headered "Applied to live DB: NO", but both headers are stale — confirmed live 2026-11-20 by a
+read-only check (`public.set_person_role`/`public.notify_role_access_changed` exist;
+`trg_invoices_set_repair_cost` already fires on delete and `it.demands_guard_links` already blocks
+a quantity change). So every file in this batch is already live, same as every batch since batch
+3 — nothing in this batch needs an actual `supabase db push`, only `migration repair`.
 
 | Staged file | Replicated as |
 |---|---|
@@ -217,8 +217,8 @@ same two-step dance as every batch so far), not just a repair.
 | `javaria/javaria_it_0023_repairs_and_guides.sql` | `supabase/migrations/0071_it_repairs_and_guides.sql` |
 | `javaria/javaria_it_0024_repairs_in_procurement.sql` | `supabase/migrations/0072_it_repairs_in_procurement.sql` |
 | `javaria/javaria_it_0025_beyond_repair.sql` | `supabase/migrations/0073_it_beyond_repair.sql` |
-| `javaria/javaria_it_0026_set_person_role.sql` | `supabase/migrations/0074_it_set_person_role.sql` (not yet applied) |
-| `javaria/javaria_it_0027_repair_flow_fixes.sql` | `supabase/migrations/0075_it_repair_flow_fixes.sql` (not yet applied) |
+| `javaria/javaria_it_0026_set_person_role.sql` | `supabase/migrations/0074_it_set_person_role.sql` |
+| `javaria/javaria_it_0027_repair_flow_fixes.sql` | `supabase/migrations/0075_it_repair_flow_fixes.sql` |
 | `javaria/javaria_it_0028_onboarding_task_flow.sql` | `supabase/migrations/0076_it_onboarding_task_flow.sql` |
 | `talha/talha_it_0010_valuation_functions.sql` | `supabase/migrations/0077_it_valuation_functions.sql` |
 | `talha/talha_it_0011_person_delete_rules.sql` | `supabase/migrations/0078_it_person_delete_rules.sql` |
@@ -278,8 +278,8 @@ with a short replicated-from note.
 | `javaria/javaria_it_0023_repairs_and_guides.sql` | 2026-11-06 (first draft, superseded in place by 0024) | Javaria | Inventory and Procurement working as one, first draft. Replicated as `0071_it_repairs_and_guides.sql`, immediately followed by its own replicated 0024 — do not run in isolation against an already-current database. |
 | `javaria/javaria_it_0024_repairs_in_procurement.sql` | 2026-11-10 (applied by Javaria via Supabase SQL Editor) | Javaria | Brings 0023's first draft to the agreed repairs-as-demands design. Replicated as `0072_it_repairs_in_procurement.sql` |
 | `javaria/javaria_it_0025_beyond_repair.sql` | 2026-11-16 (confirmed live: 9-argument it.record_device_back installed) | Javaria | Beyond repair at Device back: retire, notify the holder, keep the ticket open for Replace device. Replicated as `0073_it_beyond_repair.sql` |
-| `javaria/javaria_it_0026_set_person_role.sql` | **Not applied** | Javaria | Role changes stick and notify the person. Replicated as `0074_it_set_person_role.sql` — genuinely pending, not yet pushed. |
-| `javaria/javaria_it_0027_repair_flow_fixes.sql` | **Not applied** | Javaria | Three repair-flow fixes (quantity fixed at 1, bill counted once, replace once). Replicated as `0075_it_repair_flow_fixes.sql` — genuinely pending, not yet pushed. |
+| `javaria/javaria_it_0026_set_person_role.sql` | 2026-11-20 (confirmed live by read-only check; own header said NO) | Javaria | Role changes stick and notify the person. Replicated as `0074_it_set_person_role.sql` |
+| `javaria/javaria_it_0027_repair_flow_fixes.sql` | 2026-11-20 (confirmed live by read-only check; own header said NO) | Javaria | Three repair-flow fixes (quantity fixed at 1, bill counted once, replace once). Replicated as `0075_it_repair_flow_fixes.sql` |
 | `javaria/javaria_it_0028_onboarding_task_flow.sql` | 2026-11-19 (first version applied; this is the safe-to-rerun revision) | Javaria | Checklist tasks always have an owner (primary task-type owner, else the request's IT Executive); tasks follow a later-assigned IT Executive. Replicated as `0076_it_onboarding_task_flow.sql` |
 | `talha/talha_it_0010_valuation_functions.sql` | 2026-11-13 | Talha | Phase 6 valuation: it.compute_depreciation and it.record_asset_valuation (straight line, completed months). Replicated as `0077_it_valuation_functions.sql` |
 | `talha/talha_it_0011_person_delete_rules.sql` | 2026-11-19 | Talha | Admin > Users can delete a person who only touched inventory records (assigned_by/returned_to go ON DELETE SET NULL). Replicated as `0078_it_person_delete_rules.sql` |
@@ -294,4 +294,4 @@ with a short replicated-from note.
 | `talha/talha_hr_0008_skip_manager_assets.sql` | 2026-11-19 | Talha | Clearance: skip a part per request, line manager confirms data received, IT assets returned from the clearance form; replaces 4 functions. Replicated as `0087_hr_skip_manager_assets.sql` |
 | `talha/talha_hr_0009_sign_for_all_roles.sql` | 2026-11-19 | Talha | hr.clearance.sign also granted to Employee and IT roles, so a signer keeps their normal role. Replicated as `0088_hr_sign_for_all_roles.sql` |
 | `talha/talha_hr_0010_clearance_onboarding_defaults.sql` | 2026-11-19 | Talha | Prefills clearance from the employee's own onboarding request where one exists. Replicated as `0089_hr_clearance_onboarding_defaults.sql` |
-| — | 2026-11-20 | Adeen | Reconciled `IT/dev` (Javaria, `javaria_it_0021`–`0028`) and `it/talha` (Talha, `talha_it_0010`–`0012` and the new `talha_hr_0001`–`0010` Clearance system) into one integration branch alongside `develop`, merging code first (conflict: Talha's Clearance system retires the self-offboarding screens built on `hr.offboarding.*` — resolved in the user's favor of Clearance as the deliberate replacement) and then these 21 staged files into the main sequence as `0069`–`0089`, continuing straight on from `0068`. `javaria_it_0026` and `javaria_it_0027` are the only two **not** already live — everything else here was applied by hand through the SQL Editor, same pattern as every batch since batch 3. |
+| — | 2026-11-20 | Adeen | Reconciled `IT/dev` (Javaria, `javaria_it_0021`–`0028`) and `it/talha` (Talha, `talha_it_0010`–`0012` and the new `talha_hr_0001`–`0010` Clearance system) into one integration branch alongside `develop`, merging code first (conflict: Talha's Clearance system retires the self-offboarding screens built on `hr.offboarding.*` — resolved in the user's favor of Clearance as the deliberate replacement) and then these 21 staged files into the main sequence as `0069`–`0089`, continuing straight on from `0068`. `javaria_it_0026`/`0027` were initially flagged as the only two not already live (their own headers say "Applied to live DB: NO"), but a same-day read-only check against the live DB (`pg_proc`/`pg_trigger`) confirmed both are live too — every file in this batch needs only `migration repair`, not a real `db push`. |

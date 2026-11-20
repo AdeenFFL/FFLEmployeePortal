@@ -1,6 +1,7 @@
--- Replicated from supabase/it-migrations/javaria/javaria_it_0026_set_person_role.sql.
--- **Not yet applied to the live DB** (its own header says so) -- unlike the rest of this batch,
--- this one is a genuine pending migration, not a historical record.
+-- Replicated from supabase/it-migrations/javaria/javaria_it_0026_set_person_role.sql. Its own
+-- header says "Applied to live DB: NO", but that's stale: confirmed live 2026-11-20 by a
+-- read-only check (public.set_person_role and public.notify_role_access_changed both exist).
+-- Nothing re-run; this only gives the live state a linear history, same as the rest of this batch.
 --
 -- Administration -> User Management: changing a user's role sticks, and the person is notified via
 -- the notification bell (it.notifications) when their access changes.

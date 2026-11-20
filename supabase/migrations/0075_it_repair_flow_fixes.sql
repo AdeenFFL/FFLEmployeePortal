@@ -1,5 +1,8 @@
--- Replicated from supabase/it-migrations/javaria/javaria_it_0027_repair_flow_fixes.sql.
--- **Not yet applied to the live DB** (its own header says so) -- a genuine pending migration.
+-- Replicated from supabase/it-migrations/javaria/javaria_it_0027_repair_flow_fixes.sql. Its own
+-- header says "Applied to live DB: NO", but that's stale: confirmed live 2026-11-20 by a
+-- read-only check (trg_invoices_set_repair_cost already fires on delete; it.demands_guard_links
+-- already blocks a quantity change). Nothing re-run; this only gives the live state a linear
+-- history, same as the rest of this batch.
 --
 -- Three fixes to the repair flow (2026-11-16): a repair demand's quantity can no longer change
 -- (Revise & resubmit offered it, which could leave a demand waiting on a second Device back); the
