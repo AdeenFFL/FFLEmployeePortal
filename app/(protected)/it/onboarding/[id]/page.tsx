@@ -74,6 +74,7 @@ export default async function LifecycleRequestPage({
     error?: string;
     q?: string;
     updateTask?: string;
+    assignTask?: string;
     cancel?: string;
     returnAsset?: string;
   }>;
@@ -397,27 +398,12 @@ export default async function LifecycleRequestPage({
                     )}
 
                     {canAssign && !isFinished && (
-                      <form
-                        action={assignChecklistItem.bind(null, request.id, item.id)}
-                        className="mt-3 flex gap-2"
+                      <Link
+                        href={`${basePath}?assignTask=${item.id}`}
+                        className="mt-3 mr-4 inline-block text-sm font-medium text-blue-700 hover:underline"
                       >
-                        <select
-                          name="assigneeId"
-                          defaultValue={item.assigned_to_person_id ?? ""}
-                          aria-label={`Assignee for ${item.task_name}`}
-                          className={inputClass}
-                        >
-                          <option value="">Unassigned</option>
-                          {(staff ?? []).map((s) => (
-                            <option key={s.person_id} value={s.person_id}>
-                              {s.full_name}
-                            </option>
-                          ))}
-                        </select>
-                        <button type="submit" className={secondaryButtonClass}>
-                          Assign
-                        </button>
-                      </form>
+                        {item.assigned_to_person_id ? "Reassign" : "Assign"}
+                      </Link>
                     )}
 
                     {item.task_type === "asset_allocation" ? (
@@ -575,6 +561,35 @@ export default async function LifecycleRequestPage({
                         Save
                       </button>
                     </div>
+                  </form>
+                </Modal>
+              );
+            })}
+
+            {visibleTasks.map((item) => {
+              if (sp.assignTask !== item.id || !canAssign || isFinished) return null;
+              return (
+                <Modal key={Date.now()} closeHref={basePath} title={`Assign: ${item.task_name}`}>
+                  <form action={assignChecklistItem.bind(null, request.id, item.id)} className="space-y-3">
+                    <label className="block">
+                      <span className={labelClass}>Assignee</span>
+                      <select
+                        name="assigneeId"
+                        defaultValue={item.assigned_to_person_id ?? ""}
+                        aria-label={`Assignee for ${item.task_name}`}
+                        className={inputClass}
+                      >
+                        <option value="">Unassigned</option>
+                        {(staff ?? []).map((s) => (
+                          <option key={s.person_id} value={s.person_id}>
+                            {s.full_name}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="submit" className={primaryButtonClass}>
+                      Save
+                    </button>
                   </form>
                 </Modal>
               );
