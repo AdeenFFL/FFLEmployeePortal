@@ -171,6 +171,11 @@ export function Sidebar({
       icon: BuildingIcon,
       children: [
         { href: "/it/dashboard", label: "Dashboard", permission: "it.tickets.read" },
+        {
+          href: "/it/my-work",
+          label: "My Tasks",
+          permission: ["it.tickets.read", "it.tickets.update", "it.onboarding.read", "it.onboarding.update", "it.onboarding.assign"],
+        },
         // Unified queue: tickets + onboarding/offboarding/replacement in one list, filterable by
         // type (replaces the separate Ticket Queue / Onboarding / Offboarding entries).
         {

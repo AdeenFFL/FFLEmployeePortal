@@ -42,8 +42,20 @@ function optional(formData: FormData, key: string) {
   return text(formData, key) || null;
 }
 
+// Where a task action sends you back: the task's own page when it was submitted from there (a
+// hidden "taskPage" field holding the task id), else the request page.
+function backPath(requestId: string, formData?: FormData) {
+  const taskId = formData ? text(formData, "taskPage") : "";
+  return /^[0-9a-f-]{36}$/i.test(taskId)
+    ? `/it/onboarding/${requestId}/tasks/${taskId}`
+    : `/it/onboarding/${requestId}`;
+}
+
 function refresh(requestId?: string) {
   queueItEmails(); // notification rows were written by DB triggers; deliver their emails
+  revalidatePath("/it/my-work");
+  revalidatePath("/it/dashboard");
+  revalidatePath("/it/onboarding/[id]/tasks/[taskId]", "page");
   revalidatePath("/it/onboarding");
   revalidatePath("/hr/onboarding");
   revalidatePath("/it/my-onboarding");
@@ -351,7 +363,7 @@ export async function takeOwnership(requestId: string) {
 
 // BRD §5.1.5 / §5.2.6 — assign a checklist item to an IT team member.
 export async function assignChecklistItem(requestId: string, itemId: string, formData: FormData) {
-  const path = `/it/onboarding/${requestId}`;
+  const path = backPath(requestId, formData);
   const { supabase } = await requirePermission("it.onboarding.assign");
 
   const { error } = await supabase
@@ -368,7 +380,7 @@ export async function assignChecklistItem(requestId: string, itemId: string, for
 
 // The assignee records what was done (BRD §5.1.6–5.1.11, §5.2.7–5.2.10) and the item's status.
 export async function updateChecklistItem(requestId: string, itemId: string, formData: FormData) {
-  const path = `/it/onboarding/${requestId}`;
+  const path = backPath(requestId, formData);
   const { supabase } = await requireAnyPermission(["it.onboarding.read", "it.onboarding.update"]);
 
   const status = text(formData, "status") as ItChecklistStatus;
@@ -412,7 +424,7 @@ export async function updateChecklistItem(requestId: string, itemId: string, for
 // row + sends the invite email, mirroring exactly what the Admin → Users "Add New User" Microsoft
 // flow already does.
 export async function completeEmailAccountTask(requestId: string, itemId: string, formData: FormData) {
-  const path = `/it/onboarding/${requestId}`;
+  const path = backPath(requestId, formData);
   const { supabase } = await requireAnyPermission(["it.onboarding.read", "it.onboarding.update"]);
 
   const status = text(formData, "status") as ItChecklistStatus;
@@ -523,7 +535,7 @@ export async function assignAssetForOnboardingTask(
   itemId: string,
   formData: FormData,
 ) {
-  const path = `/it/onboarding/${requestId}`;
+  const path = backPath(requestId, formData);
   const { supabase } = await requirePermission("it.assets.assign");
 
   const assetId = text(formData, "asset_id");
@@ -575,9 +587,9 @@ export async function assignAssetForOnboardingTask(
 // asset_allocation task's assignment (it.acknowledge_assignment, already wired to "My Assets"),
 // rather than letting IT mark it complete on their own say-so. Deliberately doesn't touch
 // it.acknowledge_assignment() itself — this is purely additive, reading its result.
-export async function completeHandoverTask(requestId: string, itemId: string) {
-  const path = `/it/onboarding/${requestId}`;
-  const { supabase } = await requirePermission("it.onboarding.assign");
+export async function completeHandoverTask(requestId: string, itemId: string, formData?: FormData) {
+  const path = backPath(requestId, formData);
+  const { supabase } = await requireAnyPermission(["it.onboarding.assign", "it.onboarding.update"]);
 
   const [{ data: item }, { data: allocationItem }] = await Promise.all([
     supabase
@@ -640,7 +652,7 @@ export async function completeHandoverTask(requestId: string, itemId: string) {
 //   * Neither exists yet — the Email Account task hasn't been completed, so there's nothing to
 //     attach a role to.
 export async function completePortalAccountTask(requestId: string, itemId: string, formData: FormData) {
-  const path = `/it/onboarding/${requestId}`;
+  const path = backPath(requestId, formData);
   const { supabase, personId: actorId, actorLabel } = await requirePermission("it.onboarding.assign");
 
   const roleId = text(formData, "roleId");
@@ -740,7 +752,7 @@ export async function addChecklistItem(requestId: string, formData: FormData) {
 
 // BRD §5.1.11 — link the new joiner's portal account (created on /admin/users) to the request.
 export async function linkOnboardingPerson(requestId: string, formData: FormData) {
-  const path = `/it/onboarding/${requestId}`;
+  const path = backPath(requestId, formData);
   const { supabase } = await requireActiveUser();
 
   const personId = text(formData, "personId");
@@ -876,11 +888,14 @@ export async function addLifecycleUpdate(requestId: string, formData: FormData) 
       ? "/it/my-onboarding"
       : returnTo === "my-offboarding"
         ? "/it/my-offboarding"
-        : `/it/onboarding/${requestId}`;
+        : backPath(requestId, formData);
   const { supabase, personId } = await requireActiveUser();
 
-  const body = text(formData, "body");
-  if (!body) go(back, "error", "Message cannot be empty.");
+  const typed = text(formData, "body");
+  if (!typed) go(back, "error", "Message cannot be empty.");
+  // Posted from a task's own page: say which task it is about.
+  const taskName = text(formData, "taskName");
+  const body = taskName ? `${taskName}: ${typed}` : typed;
   const internal = formData.get("visibility") === "internal";
 
   const { error } = await supabase

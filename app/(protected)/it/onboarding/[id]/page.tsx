@@ -262,7 +262,12 @@ export default async function LifecycleRequestPage({
                   <li key={item.id} className="rounded-lg border border-slate-200 p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <div>
-                        <p className="text-sm font-medium text-slate-900">{item.task_name}</p>
+                        <Link
+                          href={`${basePath}/tasks/${item.id}`}
+                          className="text-sm font-medium text-slate-900 hover:text-blue-700 hover:underline"
+                        >
+                          {item.task_name}
+                        </Link>
                         <p className="text-xs text-slate-500">
                           {item.assigned_to_person_id
                             ? `Assigned to ${nameOf(item.assigned_to_person_id)}`
