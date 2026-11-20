@@ -6,9 +6,14 @@ import { CHECKLIST_STATUS_TONE } from "@/lib/it/onboarding";
 import { formatDate, STATUS_TONE, TASK_STATUS_TONE } from "@/lib/it/tickets";
 import { cardClass, FormMessage, PriorityBadge } from "../_components/ticket-ui";
 import type { ItTicketPriority } from "@/types/database";
+import {
+  CLEARANCE_TASKS_HREF,
+  loadItSignerCases,
+  loadMyClearanceTaskGroups,
+} from "../../hr/clearance/it-clearance-work";
 
 type Tone = "positive" | "neutral" | "warning" | "negative" | "info";
-type WorkKind = "ticket" | "ticket_task" | "onboarding";
+type WorkKind = "ticket" | "ticket_task" | "onboarding" | "clearance_task" | "clearance_sign";
 type Row = {
   key: string;
   kind: WorkKind;
@@ -27,6 +32,8 @@ const KIND_LABEL: Record<WorkKind, string> = {
   ticket: "Ticket",
   ticket_task: "Ticket task",
   onboarding: "Onboarding task",
+  clearance_task: "Clearance task",
+  clearance_sign: "Clearance to sign",
 };
 
 const SHOWS = ["open", "done"] as const;
@@ -34,6 +41,7 @@ const TYPES = [
   { key: "all", label: "Everything" },
   { key: "tickets", label: "Tickets" },
   { key: "onboarding", label: "On/offboarding tasks" },
+  { key: "clearance", label: "Clearance" },
 ] as const;
 
 // My Tasks: everything assigned to me in IT, in one list — tickets, tasks on tickets, and
@@ -50,9 +58,19 @@ export default async function MyWorkPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const wantTickets = type !== "onboarding";
-  const wantOnboarding = type !== "tickets";
+  const wantTickets = type === "all" || type === "tickets";
+  const wantOnboarding = type === "all" || type === "onboarding";
+  // HR clearance (its own tables): lines / assets the IT lead gave me, and IT parts I sign.
+  const wantClearance = type === "all" || type === "clearance";
   const doneLimit = 50;
+
+  const [clearanceGroups, signerCases] =
+    personId && wantClearance
+      ? await Promise.all([
+          loadMyClearanceTaskGroups(supabase),
+          loadItSignerCases(supabase, personId, { activeOnly: show === "open" }),
+        ])
+      : [[], []];
 
   const [{ data: tickets }, { data: ticketTasks }, { data: checklist }] = await Promise.all([
     personId && wantTickets
@@ -153,6 +171,46 @@ export default async function MyWorkPage({
         sortAt: show === "open" ? t.created_at : (t.completed_at ?? t.created_at),
       };
     }),
+    ...clearanceGroups
+      .filter((g) => (show === "open" ? g.open : !g.open))
+      .slice(0, show === "open" ? undefined : doneLimit)
+      .map((g) => ({
+        key: `ct-${g.caseId}`,
+        kind: "clearance_task" as const,
+        href: CLEARANCE_TASKS_HREF,
+        reference: g.caseNumber,
+        title: g.employeeName + (g.employeeCode ? ` (${g.employeeCode})` : ""),
+        context: g.open
+          ? g.left > 0
+            ? `${g.left} of ${g.total} still to do`
+            : "All done, waiting for the IT lead to sign"
+          : `${g.total} task${g.total === 1 ? "" : "s"}`,
+        status: g.open ? (g.left > 0 ? "To do" : "Done") : g.partLocked ? "IT signed" : g.caseStatus,
+        tone: (g.open ? (g.left > 0 ? "warning" : "positive") : g.partLocked ? "positive" : "neutral") as Tone,
+        priority: null,
+        due: null,
+        sortAt: g.latestAssignedAt,
+      })),
+    ...signerCases
+      .filter((c) =>
+        show === "open"
+          ? c.itState === "Waiting for IT"
+          : c.itState === "IT signed" || c.status === "Completed",
+      )
+      .slice(0, show === "open" ? undefined : doneLimit)
+      .map((c) => ({
+        key: `cs-${c.id}`,
+        kind: "clearance_sign" as const,
+        href: c.href,
+        reference: c.case_number,
+        title: c.employee_name + (c.employee_code ? ` (${c.employee_code})` : ""),
+        context: "IT part of the clearance",
+        status: c.itState ?? c.status,
+        tone: (c.itState === "Waiting for IT" ? "warning" : "positive") as Tone,
+        priority: null,
+        due: null,
+        sortAt: c.created_at,
+      })),
   ];
 
   // Open work: soonest due first (no due date last), then oldest first. Done: most recent first.
@@ -183,7 +241,7 @@ export default async function MyWorkPage({
     <div className="py-6">
       <PageHeader
         title="My Tasks"
-        description="Everything assigned to you in IT: tickets, ticket tasks and onboarding / offboarding tasks."
+        description="Everything assigned to you in IT: tickets, ticket tasks, onboarding / offboarding tasks and clearance work."
       />
       <FormMessage error={sp.error} notice={sp.notice} />
 

@@ -7,6 +7,8 @@ import { formatDate, STATUS_TONE as TICKET_STATUS_TONE } from "@/lib/it/tickets"
 import { FINISHED_STATUSES, KIND_TONE, LIFECYCLE_STATUS_TONE } from "@/lib/it/onboarding";
 import { cardClass, FormMessage, inputClass, primaryButtonClass, secondaryButtonClass } from "../_components/ticket-ui";
 import type { ItLifecycleKind } from "@/types/database";
+import { loadItSignerCases } from "../../hr/clearance/it-clearance-work";
+import { STATUS_TONE as CLEARANCE_STATUS_TONE, type CaseStatus } from "../../hr/clearance-requests/clearance-view";
 
 type Filters = {
   type?: string;
@@ -19,7 +21,7 @@ type Filters = {
 
 type Row = {
   key: string;
-  kind: "Ticket" | ItLifecycleKind;
+  kind: "Ticket" | ItLifecycleKind | "Clearance";
   number: string;
   title: string;
   siteId: string | null;
@@ -30,10 +32,12 @@ type Row = {
 };
 
 const PAGE_LIMIT = 200;
-const TYPE_OPTIONS = ["Ticket", "Onboarding", "Offboarding", "Replacement"] as const;
+// "Clearance": the HR clearance cases (their own tables) at the sites where I am the IT signer.
+const TYPE_OPTIONS = ["Ticket", "Onboarding", "Offboarding", "Replacement", "Clearance"] as const;
 const TYPE_TONE: Record<Row["kind"], "positive" | "neutral" | "warning" | "negative" | "info"> = {
   Ticket: "info",
   ...KIND_TONE,
+  Clearance: "warning",
 };
 
 // One queue across IT's two separate backends (it.tickets and it.onboarding_offboarding —
@@ -58,7 +62,10 @@ export default async function ItRequestsPage({ searchParams }: { searchParams: P
   const wantLifecycle =
     canReadOnboarding && (type === "" || type === "Onboarding" || type === "Offboarding" || type === "Replacement");
 
-  const [{ data: tickets }, { data: lifecycle }] = await Promise.all([
+  const wantClearance = type === "" || type === "Clearance";
+  const { data: personId } = wantClearance ? await supabase.rpc("current_person_id") : { data: null };
+
+  const [{ data: tickets }, { data: lifecycle }, clearanceCases] = await Promise.all([
     wantTickets
       ? (() => {
           let query = supabase
@@ -94,6 +101,14 @@ export default async function ItRequestsPage({ searchParams }: { searchParams: P
           return query.then(checked);
         })()
       : Promise.resolve({ data: null }),
+    personId
+      ? loadItSignerCases(supabase, personId, {
+          activeOnly: status === "active",
+          siteId: filters.site,
+          search: q,
+          limit: PAGE_LIMIT,
+        })
+      : Promise.resolve([]),
   ]);
 
   const rows: Row[] = [
@@ -119,13 +134,31 @@ export default async function ItRequestsPage({ searchParams }: { searchParams: P
       createdAt: r.created_at,
       href: `/it/onboarding/${r.id}`,
     })),
+    ...clearanceCases.map((c) => ({
+      key: `clearance-${c.id}`,
+      kind: "Clearance" as const,
+      number: c.case_number,
+      title: c.employee_name + (c.employee_code ? ` (${c.employee_code})` : ""),
+      siteId: c.site_id,
+      status: c.itState ?? c.status,
+      statusTone:
+        c.itState === "Waiting for IT"
+          ? ("warning" as const)
+          : c.itState === "IT signed"
+            ? ("positive" as const)
+            : c.itState === "IT skipped"
+              ? ("neutral" as const)
+              : (CLEARANCE_STATUS_TONE[c.status as CaseStatus] ?? "neutral"),
+      createdAt: c.created_at,
+      href: c.href,
+    })),
   ].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 
   return (
     <div className="py-6">
       <PageHeader
         title="Requests"
-        description="Onboarding and offboarding are raised by HR; replacements are raised from the Asset Register."
+        description="Onboarding and offboarding are raised by HR; replacements are raised from the Asset Register; clearance shows the cases at the sites where you sign the IT part."
       />
       <FormMessage error={filters.error} notice={filters.notice} />
 

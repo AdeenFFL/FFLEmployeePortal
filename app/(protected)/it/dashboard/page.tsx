@@ -21,6 +21,11 @@ import { inventoryKpis } from "@/lib/it/assets";
 import { BarList, ColumnChart, StatTile } from "../_components/charts";
 import { formatCost } from "../inventory/asset-status";
 import { cardClass, secondaryButtonClass } from "../_components/ticket-ui";
+import {
+  CLEARANCE_TASKS_HREF,
+  loadItSignerCases,
+  loadMyClearanceTaskGroups,
+} from "../../hr/clearance/it-clearance-work";
 
 const RANGES = [30, 90, 180] as const;
 
@@ -122,6 +127,28 @@ export default async function ItDashboardPage({
     : { data: null };
   const taskRequestById = new Map((taskRequests ?? []).map((r) => [r.id, r]));
 
+  // HR clearance (its own tables): IT parts waiting for my signature, then the lines / asset
+  // returns the IT lead gave me. Shown only when there is something.
+  const [clearanceSign, clearanceTasks] = personId
+    ? await Promise.all([
+        loadItSignerCases(supabase, personId, { activeOnly: true, limit: 8 }),
+        loadMyClearanceTaskGroups(supabase),
+      ])
+    : [[], []];
+  const myClearance = [
+    ...clearanceSign
+      .filter((c) => c.itState === "Waiting for IT")
+      .map((c) => ({ key: `s-${c.id}`, href: c.href, number: c.case_number, text: `${c.employee_name}: sign the IT part` })),
+    ...clearanceTasks
+      .filter((g) => g.open && g.left > 0)
+      .map((g) => ({
+        key: `t-${g.caseId}`,
+        href: CLEARANCE_TASKS_HREF,
+        number: g.caseNumber,
+        text: `${g.employeeName}: ${g.left} task${g.left === 1 ? "" : "s"} to do`,
+      })),
+  ].slice(0, 8);
+
   const categoryName = (id: string | null) =>
     (id && maps.categoryNameById.get(id)) ?? "Uncategorised";
   const kpis = computeKpis(tickets, from, to, now);
@@ -208,8 +235,8 @@ export default async function ItDashboardPage({
         </span>
       </nav>
 
-      {(myTickets?.length || myLifecycle?.length || myTasks?.length) ? (
-        <div className="mb-6 grid gap-6 xl:grid-cols-3">
+      {(myTickets?.length || myLifecycle?.length || myTasks?.length || myClearance.length) ? (
+        <div className={`mb-6 grid gap-6 ${myClearance.length ? "md:grid-cols-2 xl:grid-cols-4" : "xl:grid-cols-3"}`}>
           <Card title="My open tickets" subtitle="Assigned to you">
             {myTickets?.length ? (
               <ul className="divide-y divide-slate-100 text-sm">
@@ -275,6 +302,28 @@ export default async function ItDashboardPage({
               <p className="py-4 text-center text-sm text-slate-400">No tasks assigned to you.</p>
             )}
           </Card>
+          {myClearance.length > 0 && (
+            <Card
+              title="My clearance work"
+              subtitle="IT parts to sign and clearance tasks"
+              action={
+                <Link href="/it/my-work?type=clearance" className="text-sm font-medium text-blue-700 hover:underline">
+                  My Tasks
+                </Link>
+              }
+            >
+              <ul className="divide-y divide-slate-100 text-sm">
+                {myClearance.map((c) => (
+                  <li key={c.key} className="py-2">
+                    <Link href={c.href} className="font-medium text-blue-700 hover:underline">
+                      {c.number}
+                    </Link>
+                    <span className="ml-2 text-slate-600">{c.text}</span>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          )}
         </div>
       ) : null}
 

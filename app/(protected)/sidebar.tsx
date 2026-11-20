@@ -113,10 +113,11 @@ export function Sidebar({
     { type: "link", href: effectiveHomePath, label: "Home", icon: HomeIcon },
     { type: "link", href: "/profile", label: "My Profile", icon: UserIcon },
     { type: "link", href: "/requests", label: "My Requests", icon: TicketIcon },
-    // Clearance lines and asset returns the IT Team Lead hands out; only IT staff can get them.
+    // The same My Tasks screen as under IT Management: tickets, onboarding and clearance work
+    // (clearance lines and asset returns go only to IT staff).
     {
       type: "link",
-      href: "/hr/clearance/tasks",
+      href: "/it/my-work",
       label: "My Tasks",
       icon: TicketIcon,
       permission: "it.tickets.update",
