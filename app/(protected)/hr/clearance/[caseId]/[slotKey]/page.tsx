@@ -432,9 +432,11 @@ export default async function ClearanceSlotPage({
         </p>
       )}
 
+      {/* Employee, Signatures (and Assets on the IT part) side by side on wide screens. */}
+      <div className={`grid gap-6 ${showAssets ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
       <section className={card}>
         <h2 className={cardTitle}>Employee</h2>
-        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-1">
           {employee.map(([label, value]) => (
             <div key={label}>
               <dt className="text-xs text-slate-500">{label}</dt>
@@ -451,7 +453,7 @@ export default async function ClearanceSlotPage({
             const so = signoffBySlot.get(s.slot_key);
             const skip = skipBySlot.get(s.slot_key);
             return (
-              <li key={s.slot_key} className="flex flex-wrap justify-between gap-2 text-sm">
+              <li key={s.slot_key} className="flex flex-wrap justify-between gap-2 text-sm lg:flex-col lg:gap-0">
                 <span className="font-medium text-slate-900">{cleanSlotLabel(s.label)}</span>
                 <span className={so ? "text-green-700" : "text-slate-500"}>
                   {so
@@ -485,6 +487,7 @@ export default async function ClearanceSlotPage({
           )}
         </section>
       )}
+      </div>
 
       {useWizard ? (
         // An open HR part: Line manager → HR details → Checklist & sign, one step at a time.
