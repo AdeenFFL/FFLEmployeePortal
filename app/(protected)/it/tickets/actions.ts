@@ -20,16 +20,34 @@ import type {
 // it.tickets.assign, closing needs it.tickets.close). The ticket timeline rows for status,
 // assignment, priority and escalation are written by trigger, not here.
 
-function fail(ticketId: string, message: string): never {
-  redirect(`/it/tickets/${ticketId}?error=${encodeURIComponent(message)}`);
+function failAt(path: string, message: string): never {
+  redirect(`${path}?error=${encodeURIComponent(message)}`);
 }
 
-function done(ticketId: string, message: string): never {
+function doneAt(ticketId: string, path: string, message: string): never {
   queueItEmails(); // notification rows were written by DB triggers; deliver their emails
   revalidatePath("/it/tickets");
   revalidatePath(`/it/tickets/${ticketId}`);
   revalidatePath(`/it/my-tickets/${ticketId}`);
-  redirect(`/it/tickets/${ticketId}?notice=${encodeURIComponent(message)}`);
+  revalidatePath("/it/tickets/[id]/tasks/[taskId]", "page");
+  revalidatePath("/it/my-work");
+  redirect(`${path}?notice=${encodeURIComponent(message)}`);
+}
+
+function fail(ticketId: string, message: string): never {
+  failAt(`/it/tickets/${ticketId}`, message);
+}
+
+function done(ticketId: string, message: string): never {
+  doneAt(ticketId, `/it/tickets/${ticketId}`, message);
+}
+
+// Where a task action sends you back: the task's own page when it was submitted from there (a
+// hidden "taskPage" field holding the task id), else the whole ticket — same pattern as
+// onboarding's backPath() in ../actions.ts.
+function taskBackPath(ticketId: string, formData: FormData) {
+  const taskId = text(formData, "taskPage");
+  return /^[0-9a-f-]{36}$/i.test(taskId) ? `/it/tickets/${ticketId}/tasks/${taskId}` : `/it/tickets/${ticketId}`;
 }
 
 function text(formData: FormData, key: string) {
@@ -331,9 +349,10 @@ export async function removeHelper(ticketId: string, personId: string) {
 
 export async function updateTaskStatus(ticketId: string, taskId: string, formData: FormData) {
   const { supabase } = await requirePermission("it.tickets.read");
+  const back = taskBackPath(ticketId, formData);
 
   const status = text(formData, "status") as ItTicketTaskStatus;
-  if (!TASK_STATUSES.includes(status)) fail(ticketId, "Invalid task status.");
+  if (!TASK_STATUSES.includes(status)) failAt(back, "Invalid task status.");
 
   const { data: existing } = await supabase
     .schema("it")
@@ -359,8 +378,8 @@ export async function updateTaskStatus(ticketId: string, taskId: string, formDat
     .eq("id", taskId)
     .eq("ticket_id", ticketId)
     .select("id");
-  if (error) fail(ticketId, error.message);
-  if (!data?.length) fail(ticketId, "You can only update tasks assigned to you.");
+  if (error) failAt(back, error.message);
+  if (!data?.length) failAt(back, "You can only update tasks assigned to you.");
 
-  done(ticketId, `Task marked ${status}.`);
+  doneAt(ticketId, back, `Task marked ${status}.`);
 }
