@@ -242,14 +242,25 @@ export default async function ItDashboardPage({
               <p className="py-4 text-center text-sm text-slate-400">No requests assigned to you.</p>
             )}
           </Card>
-          <Card title="My onboarding tasks" subtitle="Checklist items assigned to you">
+          <Card
+            title="My onboarding tasks"
+            subtitle="Checklist items assigned to you"
+            action={
+              <Link href="/it/my-work" className="text-sm font-medium text-blue-700 hover:underline">
+                My Tasks
+              </Link>
+            }
+          >
             {myTasks?.length ? (
               <ul className="divide-y divide-slate-100 text-sm">
                 {myTasks.map((t) => {
                   const r = taskRequestById.get(t.request_id);
                   return (
                     <li key={t.id} className="py-2">
-                      <Link href={`/it/onboarding/${t.request_id}`} className="font-medium text-blue-700 hover:underline">
+                      <Link
+                        href={`/it/onboarding/${t.request_id}/tasks/${t.id}`}
+                        className="font-medium text-blue-700 hover:underline"
+                      >
                         {r?.request_number ?? "Request"}
                       </Link>
                       <span className="ml-2 text-slate-600">

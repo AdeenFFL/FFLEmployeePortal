@@ -5,7 +5,7 @@
 --              messages go to the portal's notification bell (it.notifications, the only inbox).
 -- Depends on:  0008_org_hierarchy_fix_and_identity_split.sql (user_roles), 0019 (is_admin),
 --              javaria_it_0003_notifications.sql (it.notify)
--- Applied to live DB: NO
+-- Applied to live DB: YES (confirmed 2026-11-20: public.set_person_role exists on live)
 --
 -- The bug: saving a new role deleted the person's user_roles rows and inserted the new one as two
 -- separate requests. A delete that RLS lets through on no rows doesn't error, so the old role
