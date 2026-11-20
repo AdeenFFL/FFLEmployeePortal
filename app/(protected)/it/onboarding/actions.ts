@@ -268,6 +268,12 @@ export async function createLifecycleRequest(formData: FormData) {
           full_name: employeeName,
           status: "Active",
           department_id: optional(formData, "departmentId"),
+          site_id: optional(formData, "siteId"),
+          employee_code: optional(formData, "employeeCode"),
+          designation: optional(formData, "designation"),
+          date_of_joining: optional(formData, "joiningDate"),
+          // This branch only runs when emailRequired is false (no company email requested).
+          employment_type: category === "Permanent" ? "permanent" : "contractual_no_email",
         })
         .select("id")
         .single();
