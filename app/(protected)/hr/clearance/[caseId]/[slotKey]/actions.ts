@@ -2,9 +2,11 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require-permission";
+import { queueItEmails } from "@/lib/it/notifications";
 import { HR_DETAIL_FIELDS, MAX_DECIMAL, type HrDetailsValues } from "../../hr-details-fields";
 
 const LIST_PATH = "/hr/clearance";
+const TASKS_PATH = "/hr/clearance/tasks";
 const NOT_ALLOWED = "You are not allowed to do this (it needs Sign Clearance Forms).";
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const OUTCOMES = ["Yes", "No", "N/A"] as const;
@@ -61,6 +63,7 @@ export async function saveClearanceAnswer(
 
   revalidatePath(LIST_PATH);
   revalidatePath(`${LIST_PATH}/${caseId}`, "layout");
+  revalidatePath(TASKS_PATH);
   return { error: null };
 }
 
@@ -244,10 +247,85 @@ export async function setLineManager(
   });
   if (error) return { error: error.message };
 
+  // The database queued a notification for the chosen manager (talha_hr_0012): send the email.
+  if (managerPersonId) queueItEmails();
+
   revalidatePath(`${LIST_PATH}/${caseId}/hr`);
   revalidatePath(`/hr/clearance-requests/${caseId}`);
   revalidatePath("/requests");
   revalidatePath(`/requests/offboarding/${caseId}`);
+  return { error: null };
+}
+
+export type ItStaffCandidate = ManagerCandidate;
+
+// Active IT staff for the "Assign to" picker (hr.clearance_search_it_staff needs Sign).
+export async function searchItStaff(
+  query: string,
+): Promise<{ error: string | null; people: ItStaffCandidate[] }> {
+  const q = query.trim();
+  if (q.length < 2) return { error: "Type at least 2 letters of a name or employee code.", people: [] };
+
+  const supabase = await signerClient();
+  if (!supabase) return { error: NOT_ALLOWED, people: [] };
+
+  const { data, error } = await supabase
+    .schema("hr")
+    .rpc("clearance_search_it_staff", { p_query: q, p_limit: 20 });
+  if (error) return { error: error.message, people: [] };
+  return { error: null, people: data ?? [] };
+}
+
+// The IT Team Lead hands one line to an IT staff member (or takes it back with null). The database
+// checks that the caller signs this part and that the person is IT staff, and queues the
+// notification + email; the email is sent after the response (queueItEmails).
+export async function assignClearanceLine(
+  caseId: string,
+  lineId: string,
+  personId: string | null,
+): Promise<ActionResult> {
+  if (!UUID_PATTERN.test(caseId) || !UUID_PATTERN.test(lineId)) return { error: "Line not found." };
+  if (personId !== null && !UUID_PATTERN.test(personId)) return { error: "Person not found." };
+
+  const supabase = await signerClient();
+  if (!supabase) return { error: NOT_ALLOWED };
+
+  const { error } = await supabase.schema("hr").rpc("assign_clearance_line", {
+    p_case_id: caseId,
+    p_line_id: lineId,
+    p_person_id: personId,
+  });
+  if (error) return { error: error.message };
+
+  if (personId) queueItEmails();
+  revalidatePath(`${LIST_PATH}/${caseId}/it`);
+  revalidatePath(TASKS_PATH);
+  return { error: null };
+}
+
+// The IT Team Lead hands the return of one asset to an IT staff member (or takes it back with
+// null). Same checks and notification as a line (hr.assign_clearance_asset).
+export async function assignClearanceAsset(
+  caseId: string,
+  assignmentId: string,
+  personId: string | null,
+): Promise<ActionResult> {
+  if (!UUID_PATTERN.test(caseId) || !UUID_PATTERN.test(assignmentId)) return { error: "Asset not found." };
+  if (personId !== null && !UUID_PATTERN.test(personId)) return { error: "Person not found." };
+
+  const supabase = await signerClient();
+  if (!supabase) return { error: NOT_ALLOWED };
+
+  const { error } = await supabase.schema("hr").rpc("assign_clearance_asset", {
+    p_case_id: caseId,
+    p_assignment_id: assignmentId,
+    p_person_id: personId,
+  });
+  if (error) return { error: error.message };
+
+  if (personId) queueItEmails();
+  revalidatePath(`${LIST_PATH}/${caseId}/it`);
+  revalidatePath(TASKS_PATH);
   return { error: null };
 }
 
@@ -289,6 +367,7 @@ export async function returnClearanceAsset(
   if (error) return { error: error.message };
 
   revalidatePath(`${LIST_PATH}/${caseId}/it`);
+  revalidatePath(TASKS_PATH);
   revalidatePath("/it/inventory");
   return { error: null };
 }

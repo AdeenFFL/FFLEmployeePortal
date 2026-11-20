@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { returnClearanceAsset } from "./actions";
+import { LineAssign, type LineAssignee } from "./line-assign";
 
 export type OpenAsset = {
   assignment_id: string;
@@ -13,6 +14,8 @@ export type OpenAsset = {
   assignedOn: string;
   assigned_condition: string | null;
   asset_status: string;
+  // talha_hr_0012: whom the lead handed this return to; undefined = handing out not available.
+  assignee?: LineAssignee | null;
 };
 
 // Same choices as hr.clearance_return_asset accepts.
@@ -86,13 +89,22 @@ export function AssetReturns({
               onClose={() => setOpenId(null)}
             />
           )}
+          {canReturn && a.assignee !== undefined && a.asset_status !== "In Repair" && (
+            <LineAssign
+              caseId={caseId}
+              target={{ kind: "asset", assignmentId: a.assignment_id }}
+              assignee={a.assignee}
+              disabled={false}
+            />
+          )}
         </li>
       ))}
     </ul>
   );
 }
 
-function ReturnForm({
+// Also used on My clearance tasks, by the IT staff member an asset return was handed to.
+export function ReturnForm({
   caseId,
   assignmentId,
   onClose,

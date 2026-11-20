@@ -1332,6 +1332,36 @@ export type Database = {
           },
         ];
       };
+      // talha_hr_0011: which line of a case was handed to which IT staff member.
+      clearance_line_assignments: {
+        Row: {
+          case_id: string;
+          line_id: string;
+          assignee_person_id: string;
+          assignee_name: string;
+          assigned_by: string | null;
+          assigned_by_name: string | null;
+          assigned_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
+      // talha_hr_0012: which open asset of the leaving employee was handed to which IT staff member.
+      clearance_asset_tasks: {
+        Row: {
+          case_id: string;
+          asset_assignment_id: string;
+          assignee_person_id: string;
+          assignee_name: string;
+          assigned_by: string | null;
+          assigned_by_name: string | null;
+          assigned_at: string;
+        };
+        Insert: Record<string, never>;
+        Update: Record<string, never>;
+        Relationships: [];
+      };
       // Read by the HRBP inbox (/hr/clearance-requests); written only through the hr.* clearance functions.
       clearance_lines: {
         Row: {
@@ -1583,6 +1613,70 @@ export type Database = {
           full_name: string;
           employee_code: string | null;
           designation: string | null;
+        }[];
+      };
+      // talha_hr_0011: the IT Team Lead hands out IT lines to IT staff.
+      clearance_search_it_staff: {
+        Args: { p_query: string; p_limit?: number };
+        Returns: {
+          person_id: string;
+          full_name: string;
+          employee_code: string | null;
+          designation: string | null;
+        }[];
+      };
+      assign_clearance_line: {
+        Args: { p_case_id: string; p_line_id: string; p_person_id: string | null };
+        Returns: undefined;
+      };
+      my_clearance_tasks: {
+        Args: Record<string, never>;
+        Returns: {
+          case_id: string;
+          case_number: string;
+          employee_name: string;
+          employee_code: string | null;
+          designation: string | null;
+          last_working_date: string;
+          case_status: string;
+          part_locked: boolean;
+          line_id: string;
+          line_description: string;
+          sort_order: number;
+          outcome: "Yes" | "No" | "N/A" | null;
+          remarks: string | null;
+          responded_at: string | null;
+          answered_by_me: boolean;
+          assigned_by_name: string | null;
+          assigned_at: string;
+        }[];
+      };
+      // talha_hr_0012
+      assign_clearance_asset: {
+        Args: { p_case_id: string; p_assignment_id: string; p_person_id: string | null };
+        Returns: undefined;
+      };
+      my_clearance_asset_tasks: {
+        Args: Record<string, never>;
+        Returns: {
+          case_id: string;
+          case_number: string;
+          employee_name: string;
+          employee_code: string | null;
+          last_working_date: string;
+          case_status: string;
+          part_locked: boolean;
+          assignment_id: string;
+          asset_tag: string;
+          asset_name: string;
+          serial_number: string | null;
+          assigned_date: string;
+          assigned_condition: string | null;
+          asset_status: string;
+          returned: boolean;
+          return_date: string | null;
+          assigned_by_name: string | null;
+          assigned_at: string;
         }[];
       };
       my_handover_requests: {

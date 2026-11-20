@@ -86,6 +86,8 @@ export default async function ClearanceSlotPage({
 
   const showAssets = slotKey === "it";
   const isHrSlot = slotKey === "hr";
+  // Same list as ASSIGNABLE SLOTS in hr.assign_clearance_line.
+  const canAssignLines = slotKey === "it";
   const [
     linesResult,
     responsesResult,
@@ -95,6 +97,8 @@ export default async function ClearanceSlotPage({
     departmentName,
     skipsResult,
     onboardingResult,
+    assignmentsResult,
+    assetTasksResult,
   ] = await Promise.all([
     hr
       .from("clearance_lines")
@@ -102,7 +106,10 @@ export default async function ClearanceSlotPage({
       .eq("slot_key", slotKey)
       .eq("is_active", true)
       .order("sort_order"),
-    hr.from("clearance_responses").select("line_id, outcome, remarks").eq("case_id", caseId),
+    hr
+      .from("clearance_responses")
+      .select("line_id, outcome, remarks, responded_by, responded_at")
+      .eq("case_id", caseId),
     hr
       .from("clearance_signoffs")
       .select("slot_key, signer_name, signer_designation, signed_at, remarks")
@@ -133,8 +140,30 @@ export default async function ClearanceSlotPage({
     isHrSlot
       ? hr.rpc("clearance_onboarding_defaults", { p_case_id: caseId })
       : Promise.resolve({ data: [], error: null }),
+    // Lines the IT Team Lead handed to IT staff (talha_hr_0011).
+    canAssignLines
+      ? hr
+          .from("clearance_line_assignments")
+          .select("line_id, assignee_person_id, assignee_name")
+          .eq("case_id", caseId)
+      : Promise.resolve({ data: [], error: null }),
+    // Asset returns the IT Team Lead handed to IT staff (talha_hr_0012).
+    showAssets
+      ? hr
+          .from("clearance_asset_tasks")
+          .select("asset_assignment_id, assignee_person_id, assignee_name")
+          .eq("case_id", caseId)
+      : Promise.resolve({ data: [], error: null }),
   ]);
   const onboarding = onboardingResult.error ? null : (onboardingResult.data?.[0] ?? null);
+  // Before talha_hr_0012 is live the table is missing: assets then work as before (no Assign).
+  const assetTaskByAssignment = assetTasksResult.error
+    ? null
+    : new Map((assetTasksResult.data ?? []).map((t) => [t.asset_assignment_id, t]));
+  // Before talha_hr_0011 is live the table is missing: the part then works as before (no Assign).
+  const assignmentByLine = assignmentsResult.error
+    ? null
+    : new Map((assignmentsResult.data ?? []).map((a) => [a.line_id, a]));
 
   const assets: OpenAsset[] = (assetsResult.data ?? []).map((a) => ({
     assignment_id: a.assignment_id,
@@ -144,6 +173,16 @@ export default async function ClearanceSlotPage({
     assignedOn: formatDay(a.assigned_date),
     assigned_condition: a.assigned_condition,
     asset_status: a.asset_status,
+    ...(assetTaskByAssignment
+      ? {
+          assignee: (() => {
+            const t = assetTaskByAssignment.get(a.assignment_id);
+            return t
+              ? { personId: t.assignee_person_id, name: t.assignee_name, doneByThem: false }
+              : null;
+          })(),
+        }
+      : {}),
   }));
 
   const loadError =
@@ -175,8 +214,27 @@ export default async function ClearanceSlotPage({
         l.line_key === DATA_RECEIVED_LINE && c.line_manager_person_id
           ? "Fills in by itself when the line manager confirms."
           : null,
+      ...(assignmentByLine && l.auto_from_form === null
+        ? {
+            assignee: (() => {
+              const a = assignmentByLine.get(l.id);
+              return a
+                ? {
+                    personId: a.assignee_person_id,
+                    name: a.assignee_name,
+                    doneByThem: Boolean(r?.outcome && r.responded_by === a.assignee_person_id),
+                  }
+                : null;
+            })(),
+          }
+        : {}),
     };
   });
+  // Answers saved by someone else (an assignee) since this form was drawn: draw it fresh so they
+  // show. The signer's own saves do not change this, so their unsaved edits are kept.
+  const othersLatestAnswer = (responsesResult.data ?? [])
+    .filter((r) => r.responded_by && r.responded_by !== personId)
+    .reduce((latest, r) => (r.responded_at && r.responded_at > latest ? r.responded_at : latest), "");
 
   // HR signs last: the other active parts still unsigned (skipped parts are not waited for).
   const waitingFor =
@@ -410,8 +468,9 @@ export default async function ClearanceSlotPage({
           </div>
         ) : (
           <SlotForm
-            // Choosing or clearing the line manager changes which lines are editable: start fresh.
-            key={c.line_manager_person_id ?? "no-line-manager"}
+            // Choosing or clearing the line manager changes which lines are editable, and an
+            // assignee's answer changes a line: start fresh.
+            key={`${c.line_manager_person_id ?? "no-line-manager"}|${othersLatestAnswer}`}
             caseId={c.id}
             slotKey={slotKey}
             lines={lines}

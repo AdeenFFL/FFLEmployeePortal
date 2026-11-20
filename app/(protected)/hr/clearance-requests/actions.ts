@@ -2,6 +2,8 @@
 
 import { revalidatePath } from "next/cache";
 import { requirePermission } from "@/lib/auth/require-permission";
+import { queueItEmails } from "@/lib/it/notifications";
+import { AUTO_SKIP_REASON, HR_SLOT_KEY } from "./clearance-view";
 
 const LIST_PATH = "/hr/clearance-requests";
 const NOT_ALLOWED = "You are not allowed to do this (it needs Forward Offboarding Requests).";
@@ -78,11 +80,36 @@ export async function startClearance(
 export async function forwardCase(caseId: string): Promise<ActionResult> {
   const supabase = await forwarderClient();
   if (!supabase) return { error: NOT_ALLOWED };
+  const hr = supabase.schema("hr");
 
-  const { error } = await supabase.schema("hr").rpc("forward_clearance_case", { p_case_id: caseId });
-  if (error) return { error: error.message };
+  // A part with no signer for this site / department is skipped by itself (never HR: page one
+  // cannot be skipped, so forward_clearance_case still reports it). Same function as the manual Skip.
+  const { data: missing, error: missingError } = await hr.rpc("clearance_missing_for_case", {
+    p_case_id: caseId,
+  });
+  if (missingError) return { error: missingError.message };
+  for (const m of missing ?? []) {
+    if (m.slot_key === HR_SLOT_KEY) continue;
+    const { error } = await hr.rpc("skip_clearance_slot", {
+      p_case_id: caseId,
+      p_slot_key: m.slot_key,
+      p_reason: AUTO_SKIP_REASON,
+    });
+    if (error) {
+      revalidateSkip(caseId);
+      return { error: error.message };
+    }
+  }
 
-  revalidateCase(caseId);
+  const { error } = await hr.rpc("forward_clearance_case", { p_case_id: caseId });
+  if (error) {
+    if ((missing ?? []).length > 0) revalidateSkip(caseId);
+    return { error: error.message };
+  }
+
+  // The database queued a notification for every signer (talha_hr_0012): send the emails.
+  queueItEmails();
+  revalidateSkip(caseId);
   return { error: null };
 }
 

@@ -58,6 +58,18 @@ export default async function ClearanceInboxPage() {
       : Promise.resolve({ data: [], error: null }),
   ]);
 
+  // Lines (talha_hr_0011) and asset returns (talha_hr_0012) the IT Team Lead handed to me; before
+  // they are live these fail quietly.
+  const [{ data: myTasks }, { data: myAssetTasks }] = personId
+    ? await Promise.all([hr.rpc("my_clearance_tasks"), hr.rpc("my_clearance_asset_tasks")])
+    : [{ data: [] }, { data: [] }];
+  const openTaskCount =
+    (myTasks ?? []).filter((t) => t.case_status === "In Clearance" && !t.part_locked && !t.outcome)
+      .length +
+    (myAssetTasks ?? []).filter(
+      (t) => t.case_status === "In Clearance" && !t.part_locked && !t.returned,
+    ).length;
+
   const cases = casesResult.data ?? [];
   const caseIds = cases.map((c) => c.id);
   const [signoffsResult, responsesResult, linesResult, skipsResult] = caseIds.length
@@ -133,6 +145,21 @@ export default async function ClearanceInboxPage() {
         title="Clearance to sign"
         description="Your parts of the offboarding clearance forms: fill them in and sign."
       />
+
+      {openTaskCount > 0 && (
+        <Link
+          href="/hr/clearance/tasks"
+          className="mb-6 flex items-center justify-between gap-3 rounded-xl border border-blue-200 bg-blue-50 px-5 py-3 text-sm text-blue-800 hover:bg-blue-100"
+        >
+          <span>
+            <span className="font-medium">
+              {openTaskCount} clearance task{openTaskCount === 1 ? "" : "s"}
+            </span>{" "}
+            assigned to you by the IT Team Lead.
+          </span>
+          <span className="font-medium">Open my tasks →</span>
+        </Link>
+      )}
 
       {loadError && <p className={errorBox}>Could not load everything. Please try again later.</p>}
 
