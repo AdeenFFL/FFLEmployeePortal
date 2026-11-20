@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
 import { ClearanceTracker, MISSING_SETUP_WARNING } from "../../../hr/clearance/clearance-tracker";
-import { formatDay, formatTimestamp, STATUS_TONE } from "../../../hr/resignations/clearance-view";
+import { formatDay, formatTimestamp, STATUS_TONE } from "../../../hr/clearance-requests/clearance-view";
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -19,7 +19,7 @@ const NEXT_STEP: Record<string, string> = {
 
 // The employee's own offboarding clearance request (hr.clearance_cases), opened from My Requests.
 // Filtered on person_id as well as id: hr.clearance.read_all holders can read everyone's cases
-// through RLS, but this page only ever shows the viewer's own (HR uses /hr/resignations/[id]).
+// through RLS, but this page only ever shows the viewer's own (HR uses /hr/clearance-requests/[id]).
 export default async function MyOffboardingRequestPage({
   params,
 }: {

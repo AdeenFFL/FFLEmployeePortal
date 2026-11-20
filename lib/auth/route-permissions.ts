@@ -38,6 +38,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   "/hr/admin/categories": "hr.categories.update",
   "/hr/admin/roles": "hr.manage_role_permissions",
   "/hr/admin/clearance-signers": "hr.clearance.read_all",
+  "/hr/clearance-requests": "hr.clearance.read_all",
+  // Old URL, now only a redirect to /hr/clearance-requests.
   "/hr/resignations": "hr.clearance.read_all",
   "/hr/clearance": "hr.clearance.sign",
   // IT module — Service Management track (08-it-service-management-plan.md §4).

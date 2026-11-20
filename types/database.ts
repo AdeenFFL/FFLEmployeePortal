@@ -1340,7 +1340,7 @@ export type Database = {
         };
         Insert: Record<string, never>;
         Update: Record<string, never>;
-        // Lets /hr/resignations embed clearance_signoffs(count) on clearance_cases.
+        // Lets /hr/clearance-requests embed clearance_signoffs(count) on clearance_cases.
         Relationships: [
           {
             foreignKeyName: "clearance_signoffs_case_id_fkey";
@@ -1381,7 +1381,7 @@ export type Database = {
         };
         Insert: Record<string, never>;
         Update: Record<string, never>;
-        // Lets /hr/resignations embed clearance_skips(count) on clearance_cases.
+        // Lets /hr/clearance-requests embed clearance_skips(count) on clearance_cases.
         Relationships: [
           {
             foreignKeyName: "clearance_skips_case_id_fkey";
@@ -1392,7 +1392,7 @@ export type Database = {
           },
         ];
       };
-      // Read by the HRBP inbox (/hr/resignations); written only through the hr.* clearance functions.
+      // Read by the HRBP inbox (/hr/clearance-requests); written only through the hr.* clearance functions.
       clearance_lines: {
         Row: {
           id: string;

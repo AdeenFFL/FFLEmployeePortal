@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { searchLineManagers, setLineManager, type ManagerCandidate } from "./actions";
+import { searchLineManagers, setLineManager } from "./actions";
+import { LIVE_SEARCH_MIN, useLiveSearch } from "../../use-live-search";
 
 const inputClass =
   "rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
@@ -34,27 +35,10 @@ export function LineManagerPicker({
 }) {
   const router = useRouter();
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<ManagerCandidate[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
-
-  function handleSearch(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    startTransition(async () => {
-      try {
-        const result = await searchLineManagers(query);
-        if (result.error) {
-          setError(result.error);
-          setResults(null);
-        } else {
-          setResults(result.people);
-        }
-      } catch {
-        setError("Something went wrong. Please try again.");
-      }
-    });
-  }
+  // Searches as you type (no Search button).
+  const { results, error: searchError, searching, tooShort } = useLiveSearch(query, searchLineManagers);
 
   function choose(personId: string | null) {
     setError(null);
@@ -66,7 +50,6 @@ export function LineManagerPicker({
         } else {
           // Re-read the page so the new manager and the locked line show; clear the search.
           setQuery("");
-          setResults(null);
           router.refresh();
         }
       } catch {
@@ -143,23 +126,24 @@ export function LineManagerPicker({
               </p>
             )
           )}
-          <form onSubmit={handleSearch} className="flex max-w-md gap-2">
-            <input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="Name or employee code"
-              aria-label="Search line manager"
-              className={`${inputClass} flex-1`}
-            />
-            <button
-              type="submit"
-              disabled={isPending}
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-            >
-              {managerName ? "Change" : "Search"}
-            </button>
-          </form>
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={
+              managerName ? "Type a name or employee code to change" : "Type a name or employee code"
+            }
+            aria-label="Search line manager"
+            className={`${inputClass} max-w-md`}
+          />
 
+          {tooShort && (
+            <p className="text-xs text-slate-400">Type at least {LIVE_SEARCH_MIN} letters.</p>
+          )}
+          {searching && <p className="text-xs text-slate-400">Searching…</p>}
+          {searchError && (
+            <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{searchError}</p>
+          )}
           {results && results.length === 0 && (
             <p className="text-sm text-slate-400">No active employee matches.</p>
           )}

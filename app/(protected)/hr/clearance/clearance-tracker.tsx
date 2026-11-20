@@ -4,7 +4,7 @@ import {
   formatTimestamp,
   orderSlotsHrLast,
   signatureProgress,
-} from "../resignations/clearance-view";
+} from "../clearance-requests/clearance-view";
 
 // The employee-facing clearance tracker, shared by the profile Offboarding card and
 // /requests/offboarding/[id]. Reads only what RLS lets the employee see: the active slots and

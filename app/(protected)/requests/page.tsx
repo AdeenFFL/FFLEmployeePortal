@@ -3,7 +3,7 @@ import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { primaryButtonClass } from "../it/_components/ticket-ui";
-import { formatTimestamp } from "../hr/resignations/clearance-view";
+import { formatTimestamp } from "../hr/clearance-requests/clearance-view";
 import { ConfirmDataReceivedButton } from "./confirm-data-received";
 
 // A single, read-only aggregator across the portal's separate ticket/request systems (HR

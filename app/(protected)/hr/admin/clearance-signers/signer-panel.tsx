@@ -10,6 +10,7 @@ import {
   type ActionResult,
   type SignerCandidate,
 } from "./actions";
+import { LIVE_SEARCH_MIN, useLiveSearch } from "../../clearance/use-live-search";
 
 export type CellSigner = {
   id: string;
@@ -42,8 +43,12 @@ export function SignerCellPanel({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<SignerCandidate[] | null>(null);
   const [isPending, startTransition] = useTransition();
+  // Searches as you type (no Search button).
+  const { results, error: searchError, searching, tooShort } = useLiveSearch<SignerCandidate>(
+    query,
+    searchSignerCandidates,
+  );
 
   function run(action: () => Promise<ActionResult>, onSuccess?: () => void) {
     setError(null);
@@ -58,29 +63,10 @@ export function SignerCellPanel({
     });
   }
 
-  function handleSearch(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-    startTransition(async () => {
-      try {
-        const result = await searchSignerCandidates(query);
-        if (result.error) {
-          setError(result.error);
-          setResults(null);
-        } else {
-          setResults(result.people);
-        }
-      } catch {
-        setError("Something went wrong. Please try again.");
-      }
-    });
-  }
-
   function close() {
     setOpen(false);
     setError(null);
     setQuery("");
-    setResults(null);
   }
 
   const signerPersonIds = new Set(signers.map((s) => s.person_id));
@@ -173,21 +159,23 @@ export function SignerCellPanel({
             <h3 className="mb-2 text-xs font-medium uppercase tracking-wide text-slate-400">
               Add signer
             </h3>
-            <form onSubmit={handleSearch} className="mb-3 flex gap-2">
+            <div className="mb-3 flex flex-col gap-1">
               <input
+                type="search"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Name or employee code"
-                className={`${inputClass} flex-1`}
+                placeholder="Type a name or employee code"
+                aria-label="Search signer"
+                className={inputClass}
               />
-              <button
-                type="submit"
-                disabled={isPending}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              >
-                Search
-              </button>
-            </form>
+              {tooShort && (
+                <p className="text-xs text-slate-400">Type at least {LIVE_SEARCH_MIN} letters.</p>
+              )}
+              {searching && <p className="text-xs text-slate-400">Searching…</p>}
+            </div>
+            {searchError && (
+              <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{searchError}</p>
+            )}
 
             {results && results.length === 0 && (
               <p className="text-sm text-slate-400">No active employee matches.</p>
@@ -215,10 +203,7 @@ export function SignerCellPanel({
                         onClick={() =>
                           run(
                             () => addSigner(slotKey, unitId, p.person_id),
-                            () => {
-                              setResults(null);
-                              setQuery("");
-                            },
+                            () => setQuery(""),
                           )
                         }
                         className="shrink-0 rounded-lg bg-blue-600 px-3 py-1 text-xs font-medium text-white hover:bg-blue-700 disabled:opacity-60"

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { XIcon } from "@/components/icons";
 import { searchEmployees, startClearance, type EmployeeCandidate } from "./actions";
 import { readinessProblems, type SignerScope, type SlotInfo } from "./clearance-view";
+import { LIVE_SEARCH_MIN, useLiveSearch } from "../clearance/use-live-search";
 
 const inputClass =
   "rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
@@ -25,37 +26,25 @@ export function StartClearancePanel({
   const [open, setOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<EmployeeCandidate[] | null>(null);
   const [picked, setPicked] = useState<EmployeeCandidate | null>(null);
   const [lastWorkingDate, setLastWorkingDate] = useState("");
   const [isPending, startTransition] = useTransition();
+  // Searches as you type (no Search button).
+  const { results, error: searchError, searching, tooShort } = useLiveSearch(query, searchEmployees);
 
   function close() {
     setOpen(false);
     setError(null);
     setQuery("");
-    setResults(null);
     setPicked(null);
     setLastWorkingDate("");
   }
 
-  function handleSearch(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  // Typing a new search drops the earlier choice, as the Search button used to.
+  function changeQuery(value: string) {
+    setQuery(value);
     setError(null);
     setPicked(null);
-    startTransition(async () => {
-      try {
-        const result = await searchEmployees(query);
-        if (result.error) {
-          setError(result.error);
-          setResults(null);
-        } else {
-          setResults(result.people);
-        }
-      } catch {
-        setError("Something went wrong. Please try again.");
-      }
-    });
   }
 
   function handleStart(e: React.FormEvent<HTMLFormElement>) {
@@ -68,7 +57,7 @@ export function StartClearancePanel({
         if (result.error || !result.caseId) {
           setError(result.error ?? "Something went wrong. Please try again.");
         } else {
-          router.push(`/hr/resignations/${result.caseId}`);
+          router.push(`/hr/clearance-requests/${result.caseId}`);
         }
       } catch {
         setError("Something went wrong. Please try again.");
@@ -115,21 +104,23 @@ export function StartClearancePanel({
               <p className="mb-4 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{error}</p>
             )}
 
-            <form onSubmit={handleSearch} className="mb-3 flex gap-2">
+            <div className="mb-3 flex flex-col gap-1">
               <input
+                type="search"
                 value={query}
-                onChange={(e) => setQuery(e.target.value)}
-                placeholder="Name or employee code"
-                className={`${inputClass} flex-1`}
+                onChange={(e) => changeQuery(e.target.value)}
+                placeholder="Type a name or employee code"
+                aria-label="Search employee"
+                className={inputClass}
               />
-              <button
-                type="submit"
-                disabled={isPending}
-                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-60"
-              >
-                Search
-              </button>
-            </form>
+              {tooShort && (
+                <p className="text-xs text-slate-400">Type at least {LIVE_SEARCH_MIN} letters.</p>
+              )}
+              {searching && <p className="text-xs text-slate-400">Searching…</p>}
+            </div>
+            {searchError && (
+              <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{searchError}</p>
+            )}
 
             {results && results.length === 0 && (
               <p className="text-sm text-slate-400">No active or recently left employee matches.</p>
