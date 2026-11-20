@@ -234,6 +234,7 @@ export default async function LifecycleRequestPage({
     id: i.id,
     label: i.task_name,
     state: ballStateOf(i.status),
+    href: `${basePath}/tasks/${i.id}`,
   }));
   // Structured task responses, promoted up into the request's own summary (Unified Ticket/Task
   // Tracker, Phase 2) instead of staying buried under the task that recorded them.

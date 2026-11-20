@@ -14,14 +14,7 @@ import {
   hasItPermission,
   signedAttachmentUrls,
 } from "@/lib/it/ticket-data";
-import {
-  formatDate,
-  formatDateTime,
-  TASK_STATUS_TONE,
-  TASK_STATUSES,
-  TICKET_PRIORITIES,
-  WORKING_STATUSES,
-} from "@/lib/it/tickets";
+import { formatDate, formatDateTime, TICKET_PRIORITIES, WORKING_STATUSES } from "@/lib/it/tickets";
 import {
   addStaffUpdate,
   addTask,
@@ -34,7 +27,6 @@ import {
   addHelper,
   removeHelper,
   triageTicket,
-  updateTaskStatus,
   updateTicketStatus,
 } from "../actions";
 import { CategorySelect } from "../../_components/category-select";
@@ -158,10 +150,6 @@ export default async function ItTicketWorkspacePage({
     ]);
   const helpers = (assignees ?? []).filter((a) => a.role === "helper");
   const isHelper = Boolean(personId) && helpers.some((h) => h.person_id === personId);
-  const extrasByTask = new Map<string, string[]>();
-  for (const ta of taskAssignees ?? []) {
-    extrasByTask.set(ta.task_id, [...(extrasByTask.get(ta.task_id) ?? []), ta.person_id]);
-  }
   // Same precedence as auto-assignment: subcategory owners at the handling site, else category's.
   const siteOwners = (owners ?? []).filter((o) => o.site_id === ticket.handling_site_id);
   const subOwners = siteOwners.filter((o) => o.category_id === ticket.subcategory_id);
@@ -192,7 +180,12 @@ export default async function ItTicketWorkspacePage({
   const nameOf = (pid: string | null) => (pid ? (names.get(pid) ?? "—") : "—");
   const taskBallStateOf = (status: NonNullable<typeof tasks>[number]["status"]): TaskBallState =>
     status === "Completed" ? "done" : status === "Cancelled" ? "skipped" : status === "In Progress" ? "active" : "pending";
-  const taskBalls = (tasks ?? []).map((t) => ({ id: t.id, label: t.task_type, state: taskBallStateOf(t.status) }));
+  const taskBalls = (tasks ?? []).map((t) => ({
+    id: t.id,
+    label: t.task_type,
+    state: taskBallStateOf(t.status),
+    href: `/it/tickets/${ticket.id}/tasks/${t.id}`,
+  }));
   // Structured task responses, promoted up into the ticket's own summary (Unified Ticket/Task
   // Tracker, Phase 2) instead of staying buried under the task that recorded them.
   const taskResponses = (tasks ?? []).flatMap((t) => {
@@ -323,88 +316,10 @@ export default async function ItTicketWorkspacePage({
           {/* Tasks */}
           <section className={`${cardClass} p-6`}>
             <h2 className="mb-4 text-base font-semibold text-slate-900">Tasks</h2>
-            <TaskProgressSummary tasks={taskBalls} className="mb-4" />
             {(tasks ?? []).length === 0 ? (
               <p className="mb-4 text-sm text-slate-400">No tasks on this ticket.</p>
             ) : (
-              <ul className="mb-4 divide-y divide-slate-100">
-                {(tasks ?? []).map((task) => {
-                  const canEditTask =
-                    !isClosed &&
-                    (canAssign ||
-                      (canUpdate &&
-                        (task.assigned_to_person_id === personId ||
-                          (extrasByTask.get(task.id) ?? []).includes(personId ?? ""))));
-                  const extras = extrasByTask.get(task.id) ?? [];
-                  const kindFields = task.task_kind ? TASK_KIND_DETAIL_FIELDS[task.task_kind] : [];
-                  const recorded = kindFields.filter((f) => task.details?.[f.key]);
-                  return (
-                    <li key={task.id} className="flex flex-col gap-2 py-3">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <div className="min-w-0 flex-1">
-                          <p className="text-sm font-medium text-slate-800">{task.task_type}</p>
-                          {task.description && (
-                            <p className="text-sm text-slate-500">{task.description}</p>
-                          )}
-                          <p className="text-xs text-slate-400">
-                            {nameOf(task.assigned_to_person_id)}
-                            {extras.length > 0 && ` + ${extras.map((pid) => nameOf(pid)).join(", ")}`}
-                            {task.completed_at && ` · completed ${formatDateTime(task.completed_at)}`}
-                          </p>
-                        </div>
-                        {!canEditTask && <StatusPill label={task.status} tone={TASK_STATUS_TONE[task.status]} />}
-                      </div>
-
-                      {recorded.length > 0 && !canEditTask && (
-                        <dl className="grid gap-2 text-xs sm:grid-cols-3">
-                          {recorded.map((f) => (
-                            <div key={f.key}>
-                              <dt className="text-slate-400">{f.label}</dt>
-                              <dd className="text-slate-700">{task.details[f.key]}</dd>
-                            </div>
-                          ))}
-                        </dl>
-                      )}
-
-                      {canEditTask && (
-                        <form action={updateTaskStatus.bind(null, ticket.id, task.id)} className="space-y-2">
-                          {kindFields.length > 0 && (
-                            <div className="grid gap-2 sm:grid-cols-3">
-                              {kindFields.map((f) => (
-                                <input
-                                  key={f.key}
-                                  name={`detail_${f.key}`}
-                                  defaultValue={task.details?.[f.key] ?? ""}
-                                  placeholder={f.label}
-                                  aria-label={f.label}
-                                  className="rounded-lg border border-slate-300 px-2 py-1 text-xs"
-                                />
-                              ))}
-                            </div>
-                          )}
-                          <div className="flex items-center gap-2">
-                            <select
-                              name="status"
-                              defaultValue={task.status}
-                              aria-label="Task status"
-                              className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                            >
-                              {TASK_STATUSES.map((s) => (
-                                <option key={s} value={s}>
-                                  {s}
-                                </option>
-                              ))}
-                            </select>
-                            <button type="submit" className="text-sm font-medium text-blue-700">
-                              Save
-                            </button>
-                          </div>
-                        </form>
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+              <TaskProgressSummary tasks={taskBalls} className="mb-4" />
             )}
 
             {canComment && (
