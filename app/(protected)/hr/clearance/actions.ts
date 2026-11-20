@@ -24,5 +24,9 @@ export async function submitOwnClearance(lastWorkingDate: string): Promise<{ err
   if (error) return { error: error.message };
 
   revalidatePath("/profile");
+  // The same card opens as a popup on Home and Raise a Ticket, and the request shows on My Requests.
+  revalidatePath("/home");
+  revalidatePath("/requests/new");
+  revalidatePath("/requests");
   return { error: null };
 }

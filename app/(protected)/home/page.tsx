@@ -3,6 +3,8 @@ import { getCurrentUserNav } from "../current-user";
 import { createClient } from "@/lib/supabase/server";
 import { listOpenAssignments } from "@/lib/it/assets";
 import { PageHeader } from "@/components/page-header";
+import { ClearancePopup } from "../hr/clearance/clearance-popup";
+import { MyClearanceCard } from "../hr/clearance/my-clearance-card";
 import { UserIcon, TicketIcon, BuildingIcon, KeyIcon, LaptopIcon, LogoutIcon } from "@/components/icons";
 
 type IconComponent = (props: { className?: string }) => React.ReactElement;
@@ -14,6 +16,8 @@ type QuickLink = {
   icon: IconComponent;
   permission?: string;
   count?: number;
+  // Opens the Clearance popup instead of navigating.
+  popup?: boolean;
 };
 
 // Access-based: which cards show up depends on the signed-in person's actual granted
@@ -66,13 +70,14 @@ export default async function EmployeeHomePage() {
       count: assetCount,
     },
     {
-      // The HR clearance flow replaced the old IT self-offboarding: the request is now the
-      // Offboarding card on the profile page.
+      // The HR clearance flow replaced the old IT self-offboarding: this card opens the employee's
+      // Clearance card (the same as on the profile) in a popup.
       href: "/profile",
       label: "Clearance",
-      description: "Leaving the company? Submit your clearance request from your profile.",
+      description: "Leaving the company? Submit your clearance request here.",
       icon: LogoutIcon,
       permission: "hr.clearance.request_self",
+      popup: true,
     },
     {
       href: "/hr/dashboard",
@@ -102,11 +107,34 @@ export default async function EmployeeHomePage() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {quickLinks.map((link) => {
           const LinkIcon = link.icon;
+          const cardClass =
+            "group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md";
+          if (link.popup) {
+            return (
+              <ClearancePopup
+                key={link.label}
+                triggerClassName={cardClass}
+                trigger={
+                  <>
+                    <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition-colors group-hover:bg-blue-100">
+                      <LinkIcon className="h-5 w-5" />
+                    </span>
+                    <span className="block">
+                      <span className="block text-base font-semibold text-slate-900">{link.label}</span>
+                      <span className="mt-1 block text-sm text-slate-500">{link.description}</span>
+                    </span>
+                  </>
+                }
+              >
+                <MyClearanceCard />
+              </ClearancePopup>
+            );
+          }
           return (
             <Link
               key={link.label}
               href={link.href}
-              className="group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+              className={cardClass}
             >
               <span className="relative flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition-colors group-hover:bg-blue-100">
                 <LinkIcon className="h-5 w-5" />

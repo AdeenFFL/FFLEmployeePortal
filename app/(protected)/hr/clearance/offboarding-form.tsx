@@ -1,9 +1,11 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { submitOwnClearance } from "./actions";
 
 export function OffboardingForm({ minDate, maxDate }: { minDate: string; maxDate: string }) {
+  const router = useRouter();
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
@@ -17,6 +19,8 @@ export function OffboardingForm({ minDate, maxDate }: { minDate: string; maxDate
       try {
         const result = await submitOwnClearance(value);
         if (result.error) setError(result.error);
+        // Re-read the page so the card (also inside the Home popup) shows the new request.
+        else router.refresh();
       } catch {
         setError("Something went wrong. Please try again.");
       }

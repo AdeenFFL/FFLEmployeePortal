@@ -21,6 +21,7 @@ import {
 import { HR_DETAIL_GROUPS, formatHrDetail, toHrDetailsValues } from "../../hr-details-fields";
 import { HrDetailsForm } from "./hr-details-form";
 import { LineManagerPicker } from "./line-manager-picker";
+import { HrWizard } from "./hr-wizard";
 import { AssetReturns, type OpenAsset } from "./asset-returns";
 import { SlotForm, type FormLine } from "./slot-form";
 
@@ -161,7 +162,8 @@ export default async function ClearanceSlotPage({
     ? null
     : new Map((assetTasksResult.data ?? []).map((t) => [t.asset_assignment_id, t]));
   // Before talha_hr_0011 is live the table is missing: the part then works as before (no Assign).
-  const assignmentByLine = assignmentsResult.error
+  // Only the IT part can hand lines out: other parts (HR, Admin, …) get no Assign button.
+  const assignmentByLine = !canAssignLines || assignmentsResult.error
     ? null
     : new Map((assignmentsResult.data ?? []).map((a) => [a.line_id, a]));
 
@@ -288,6 +290,126 @@ export default async function ClearanceSlotPage({
     ["Forwarded", c.forwarded_at ? formatTimestamp(c.forwarded_at) : "—"],
   ];
 
+  // The three sections of the HR part, shown either inside the wizard (an open HR part) or as
+  // stacked cards (every other part, or a signed / closed HR part).
+  const managerChosen = Boolean(c.line_manager_person_id);
+  const useWizard = isHrSlot && canEdit && !loadError;
+
+  const lineManagerContent = isHrSlot ? (
+    <LineManagerPicker
+      caseId={c.id}
+      managerName={c.line_manager_person_id ? c.reporting_manager_name : null}
+      confirmedOn={
+        c.data_received_confirmed_at ? formatTimestamp(c.data_received_confirmed_at) : null
+      }
+      canChange={canEdit && !c.data_received_confirmed_at && !managerLocked}
+      lockedNote={
+        managerLocked && !c.data_received_confirmed_at
+          ? "Locked: the HR details were saved with this line manager."
+          : null
+      }
+      suggestion={managerSuggestion}
+    />
+  ) : null;
+
+  const hrDetailsContent = isHrSlot ? (
+    detailsResult.error ? (
+      <p className={errorBox}>Could not load the HR details. Please try again later.</p>
+    ) : (
+      <div className="flex flex-col gap-6">
+        <dl className="grid gap-x-6 gap-y-3 rounded-lg bg-slate-50 p-4 sm:grid-cols-4">
+          {fixedDetails.map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-xs text-slate-500">{label}</dt>
+              <dd className="text-sm text-slate-900">{value}</dd>
+            </div>
+          ))}
+        </dl>
+        {canEdit ? (
+          <HrDetailsForm
+            caseId={c.id}
+            initial={detailValues}
+            prefill={joiningPrefill ? { date_of_joining: joiningPrefill } : undefined}
+            prefillNote="Filled from the onboarding request. Check it, then save."
+            lastSaved={
+              savedDetails ? `Last saved ${formatTimestamp(savedDetails.updated_at)}` : null
+            }
+          />
+        ) : (
+          HR_DETAIL_GROUPS.map((group) => (
+            <div key={group.title}>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {group.title}
+              </h3>
+              <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+                {group.fields.map((field) => (
+                  <div key={field.key}>
+                    <dt className="text-xs text-slate-500">{field.label}</dt>
+                    <dd className="whitespace-pre-line text-sm text-slate-900">
+                      {formatHrDetail(field, detailValues[field.key]) ?? "—"}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            </div>
+          ))
+        )}
+      </div>
+    )
+  ) : null;
+
+  const formContent = loadError ? (
+    <p className={errorBox}>Could not load the form. Please try again later.</p>
+  ) : mySignoff || mySkip || !isOpen ? (
+    <div className="flex flex-col gap-4">
+      {mySkip && !mySignoff && (
+        <p className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
+          This part was skipped for this request: {mySkip.reason}. Nothing to fill in or sign.
+        </p>
+      )}
+      {mySignoff && (
+        <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
+          Signed by {mySignoff.signer_name}
+          {mySignoff.signer_designation ? ` (${mySignoff.signer_designation})` : ""} on{" "}
+          {formatTimestamp(mySignoff.signed_at)}. This part is locked.
+          {mySignoff.remarks ? ` Remarks: ${mySignoff.remarks}` : ""}
+        </p>
+      )}
+      {lines.length === 0 ? (
+        <p className="text-sm text-slate-500">This part has no checklist.</p>
+      ) : (
+        <ol className="flex flex-col divide-y divide-slate-100">
+          {lines.map((l) => (
+            <li key={l.id} className="py-3">
+              <p className="text-sm font-medium text-slate-900">{l.description}</p>
+              <p className="text-sm text-slate-700">
+                {l.outcome ? labels[l.outcome] : "Not answered"}
+                {l.remarks ? ` · ${l.remarks}` : ""}
+              </p>
+            </li>
+          ))}
+        </ol>
+      )}
+    </div>
+  ) : (
+    <SlotForm
+      // Choosing or clearing the line manager changes which lines are editable, and an
+      // assignee's answer changes a line: start fresh.
+      key={`${c.line_manager_person_id ?? "no-line-manager"}|${othersLatestAnswer}`}
+      caseId={c.id}
+      slotKey={slotKey}
+      lines={lines}
+      labels={labels}
+      waitingFor={waitingFor}
+      signHint={isHrSlot && !savedDetails ? DETAILS_NOT_SAVED : null}
+      signBlocker={
+        assets.length > 0
+          ? `${assets.length} asset${assets.length === 1 ? " is" : "s are"} still assigned: return ${assets.length === 1 ? "it" : "them"} (or mark Lost) above.`
+          : null
+      }
+    />
+  );
+
   return (
     <div className="flex flex-col gap-6 py-6">
       {backLink}
@@ -364,130 +486,56 @@ export default async function ClearanceSlotPage({
         </section>
       )}
 
-      {/* The line manager comes first: the HR details can only be saved once one is chosen. */}
-      {isHrSlot && (
+      {useWizard ? (
+        // An open HR part: Line manager → HR details → Checklist & sign, one step at a time.
         <section className={card}>
-          <h2 className={cardTitle}>Line manager</h2>
-          <LineManagerPicker
-            caseId={c.id}
-            managerName={c.line_manager_person_id ? c.reporting_manager_name : null}
-            confirmedOn={
-              c.data_received_confirmed_at ? formatTimestamp(c.data_received_confirmed_at) : null
-            }
-            canChange={canEdit && !c.data_received_confirmed_at && !managerLocked}
-            lockedNote={
-              managerLocked && !c.data_received_confirmed_at
-                ? "Locked: the HR details were saved with this line manager."
-                : null
-            }
-            suggestion={managerSuggestion}
+          <HrWizard
+            initialStep={!managerChosen ? 0 : !savedDetails ? 1 : 2}
+            steps={[
+              {
+                title: "Line manager",
+                done: managerChosen,
+                nextHint: "Choose the line manager first.",
+                content: lineManagerContent,
+              },
+              {
+                title: "HR details",
+                done: managerChosen && Boolean(savedDetails),
+                nextHint: "Save the HR details first.",
+                content: hrDetailsContent,
+              },
+              {
+                title: "Checklist & sign",
+                done: false,
+                nextHint: "",
+                content: formContent,
+              },
+            ]}
           />
         </section>
-      )}
-
-      {isHrSlot && (
-        <section className={card}>
-          <h2 className={cardTitle}>HR details (page one)</h2>
-          {detailsResult.error ? (
-            <p className={errorBox}>Could not load the HR details. Please try again later.</p>
-          ) : (
-            <div className="flex flex-col gap-6">
-              <dl className="grid gap-x-6 gap-y-3 rounded-lg bg-slate-50 p-4 sm:grid-cols-4">
-                {fixedDetails.map(([label, value]) => (
-                  <div key={label}>
-                    <dt className="text-xs text-slate-500">{label}</dt>
-                    <dd className="text-sm text-slate-900">{value}</dd>
-                  </div>
-                ))}
-              </dl>
-              {canEdit ? (
-                <HrDetailsForm
-                  caseId={c.id}
-                  initial={detailValues}
-                  prefill={joiningPrefill ? { date_of_joining: joiningPrefill } : undefined}
-                  prefillNote="Filled from the onboarding request. Check it, then save."
-                  lastSaved={
-                    savedDetails ? `Last saved ${formatTimestamp(savedDetails.updated_at)}` : null
-                  }
-                />
-              ) : (
-                HR_DETAIL_GROUPS.map((group) => (
-                  <div key={group.title}>
-                    <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                      {group.title}
-                    </h3>
-                    <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-                      {group.fields.map((field) => (
-                        <div key={field.key}>
-                          <dt className="text-xs text-slate-500">{field.label}</dt>
-                          <dd className="whitespace-pre-line text-sm text-slate-900">
-                            {formatHrDetail(field, detailValues[field.key]) ?? "—"}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </div>
-                ))
-              )}
-            </div>
+      ) : (
+        <>
+          {/* The line manager comes first: the HR details can only be saved once one is chosen. */}
+          {isHrSlot && (
+            <section className={card}>
+              <h2 className={cardTitle}>Line manager</h2>
+              {lineManagerContent}
+            </section>
           )}
-        </section>
-      )}
 
-      <section className={card}>
-        <h2 className={cardTitle}>{FORM_TITLES[slot.form_key]}</h2>
-        {loadError ? (
-          <p className={errorBox}>Could not load the form. Please try again later.</p>
-        ) : mySignoff || mySkip || !isOpen ? (
-          <div className="flex flex-col gap-4">
-            {mySkip && !mySignoff && (
-              <p className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
-                This part was skipped for this request: {mySkip.reason}. Nothing to fill in or sign.
-              </p>
-            )}
-            {mySignoff && (
-              <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
-                Signed by {mySignoff.signer_name}
-                {mySignoff.signer_designation ? ` (${mySignoff.signer_designation})` : ""} on{" "}
-                {formatTimestamp(mySignoff.signed_at)}. This part is locked.
-                {mySignoff.remarks ? ` Remarks: ${mySignoff.remarks}` : ""}
-              </p>
-            )}
-            {lines.length === 0 ? (
-              <p className="text-sm text-slate-500">This part has no checklist.</p>
-            ) : (
-              <ol className="flex flex-col divide-y divide-slate-100">
-                {lines.map((l) => (
-                  <li key={l.id} className="py-3">
-                    <p className="text-sm font-medium text-slate-900">{l.description}</p>
-                    <p className="text-sm text-slate-700">
-                      {l.outcome ? labels[l.outcome] : "Not answered"}
-                      {l.remarks ? ` · ${l.remarks}` : ""}
-                    </p>
-                  </li>
-                ))}
-              </ol>
-            )}
-          </div>
-        ) : (
-          <SlotForm
-            // Choosing or clearing the line manager changes which lines are editable, and an
-            // assignee's answer changes a line: start fresh.
-            key={`${c.line_manager_person_id ?? "no-line-manager"}|${othersLatestAnswer}`}
-            caseId={c.id}
-            slotKey={slotKey}
-            lines={lines}
-            labels={labels}
-            waitingFor={waitingFor}
-            signHint={isHrSlot && !savedDetails ? DETAILS_NOT_SAVED : null}
-            signBlocker={
-              assets.length > 0
-                ? `${assets.length} asset${assets.length === 1 ? " is" : "s are"} still assigned: return ${assets.length === 1 ? "it" : "them"} (or mark Lost) above.`
-                : null
-            }
-          />
-        )}
-      </section>
+          {isHrSlot && (
+            <section className={card}>
+              <h2 className={cardTitle}>HR details (page one)</h2>
+              {hrDetailsContent}
+            </section>
+          )}
+
+          <section className={card}>
+            <h2 className={cardTitle}>{FORM_TITLES[slot.form_key]}</h2>
+            {formContent}
+          </section>
+        </>
+      )}
     </div>
   );
 }

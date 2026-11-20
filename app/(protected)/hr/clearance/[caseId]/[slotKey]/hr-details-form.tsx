@@ -89,7 +89,7 @@ export function HrDetailsForm({
       return (
         <div id={`hr-${field.key}`}>
           <p className="text-sm text-slate-900">{initial[field.key] || "—"}</p>
-          <p className="text-xs text-slate-500">Set it with “Line manager” above.</p>
+          <p className="text-xs text-slate-500">Set it in the “Line manager” step.</p>
         </div>
       );
     }

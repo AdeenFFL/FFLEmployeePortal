@@ -3,6 +3,8 @@ import { getCurrentUserNav } from "../../current-user";
 import { PageHeader } from "@/components/page-header";
 import { TicketIcon, BuildingIcon, LogoutIcon } from "@/components/icons";
 import { secondaryButtonClass } from "../../it/_components/ticket-ui";
+import { ClearancePopup } from "../../hr/clearance/clearance-popup";
+import { MyClearanceCard } from "../../hr/clearance/my-clearance-card";
 
 // The front door for raising anything — purely a routing/UX layer in front of the two
 // existing, separate create flows (hr.tickets vs it.tickets). Pairs with /requests the same
@@ -27,12 +29,13 @@ export default async function NewRequestPage() {
       permission: "module:hr",
     },
     {
-      // HR clearance flow: the request is the Offboarding card on the profile page.
+      // HR clearance flow: opens the employee's Clearance card (as on the profile) in a popup.
       href: "/profile",
       label: "Clearance",
-      description: "Submit your clearance request from your profile.",
+      description: "Leaving the company? Submit your clearance request here.",
       icon: LogoutIcon,
       permission: "hr.clearance.request_self",
+      popup: true,
     },
   ].filter((c) => granted.has(c.permission));
 
@@ -58,11 +61,34 @@ export default async function NewRequestPage() {
         <div className="grid gap-4 sm:grid-cols-2">
           {choices.map((c) => {
             const Icon = c.icon;
+            const cardClass =
+              "group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md";
+            if ("popup" in c && c.popup) {
+              return (
+                <ClearancePopup
+                  key={c.label}
+                  triggerClassName={cardClass}
+                  trigger={
+                    <>
+                      <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition-colors group-hover:bg-blue-100">
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      <span className="block">
+                        <span className="block text-base font-semibold text-slate-900">{c.label}</span>
+                        <span className="mt-1 block text-sm text-slate-500">{c.description}</span>
+                      </span>
+                    </>
+                  }
+                >
+                  <MyClearanceCard />
+                </ClearancePopup>
+              );
+            }
             return (
               <Link
                 key={c.href}
                 href={c.href}
-                className="group flex flex-col gap-3 rounded-xl border border-slate-200 bg-white p-6 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-200 hover:shadow-md"
+                className={cardClass}
               >
                 <span className="flex h-10 w-10 items-center justify-center rounded-lg bg-blue-50 text-blue-600 transition-colors group-hover:bg-blue-100">
                   <Icon className="h-5 w-5" />

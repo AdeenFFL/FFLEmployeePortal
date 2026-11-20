@@ -160,7 +160,7 @@ export async function saveClearanceDetails(
   if (caseError || !current) return { error: "Request not found." };
   // App rule (not in the database): the line manager is chosen before the details are saved.
   if (!current.line_manager_person_id) {
-    return { error: "First choose the line manager (in “Line manager” above), then save the details." };
+    return { error: "First choose the line manager (the “Line manager” step), then save the details." };
   }
 
   const { error } = await supabase.schema("hr").rpc("save_clearance_details", {
