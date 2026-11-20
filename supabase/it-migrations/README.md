@@ -177,6 +177,69 @@ Same dual-copy policy as earlier batches: the staged originals stay in `javaria/
 fresh environment. Bodies are byte-for-byte identical to their staged source; only the header
 comment block was replaced with a short replicated-from note.
 
+## Reconciled into the main sequence — 2026-11-20 (batch 5)
+
+Three branches had drifted apart since the last reconciliation: `develop` (this project's own
+work), `IT/dev` / `IT/javaria` (now the same commit — Javaria's track), and `it/talha`. All three
+shared the same base (`c4b4434`, batch 4's own commit), so this was a clean three-way merge, not a
+tangle of unrelated history — done on a dedicated integration branch, nothing pushed to `develop`
+until reviewed.
+
+Code came first (see that merge's own commit messages for the conflict resolution — in short,
+Talha's new HR Clearance system retires the self-offboarding screens this project built on
+`hr.offboarding.*`, kept as the deliberate replacement rather than run in parallel). This batch is
+the migration half: 21 staged files across both branches, none of which touched
+`supabase/migrations/` directly (both authors followed the staging convention), reconciled into
+the main sequence as `0069`–`0089`, continuing straight on from `0068`.
+
+Ordering kept each author's own staged numbering together rather than interleaving by date, same
+as batch 3 (no cross-author dependency needed it): Javaria's `0021`–`0028` first (`0069`–`0076`),
+then Talha's `talha_it_0010`–`0012` (`0077`–`0079`), then Talha's whole new `talha_hr_0001`–`0010`
+Clearance track (`0080`–`0089`), which is self-contained and depends on neither of the others.
+
+**`javaria_it_0023_repairs_and_guides.sql`** is a special case: an earlier draft of "Inventory and
+Procurement working as one" that was itself run live, then immediately superseded in place by
+`javaria_it_0024` once the design was agreed. Both are replicated, in order (`0071` then `0072`),
+reproducing the exact two-step path the live database actually went through — `0071` is not safe
+to run in isolation against a database that already has `0072`'s functions.
+
+**Two files are not already live**, unlike everything else in this and every batch since batch 3:
+`javaria_it_0026_set_person_role.sql` and `javaria_it_0027_repair_flow_fixes.sql`, replicated as
+`0074`/`0075`, both still headered "Applied to live DB: NO". These are genuine pending migrations,
+same status as `0056_hr_onboarding_replacement_permissions.sql` from batch 4 — they need an actual
+`supabase db push` (after `migration repair --status applied` for everything else in this batch,
+same two-step dance as every batch so far), not just a repair.
+
+| Staged file | Replicated as |
+|---|---|
+| `javaria/javaria_it_0021_register_assets_from_receipt.sql` | `supabase/migrations/0069_it_register_assets_from_receipt.sql` |
+| `javaria/javaria_it_0022_consumable_stock.sql` | `supabase/migrations/0070_it_consumable_stock.sql` |
+| `javaria/javaria_it_0023_repairs_and_guides.sql` | `supabase/migrations/0071_it_repairs_and_guides.sql` |
+| `javaria/javaria_it_0024_repairs_in_procurement.sql` | `supabase/migrations/0072_it_repairs_in_procurement.sql` |
+| `javaria/javaria_it_0025_beyond_repair.sql` | `supabase/migrations/0073_it_beyond_repair.sql` |
+| `javaria/javaria_it_0026_set_person_role.sql` | `supabase/migrations/0074_it_set_person_role.sql` (not yet applied) |
+| `javaria/javaria_it_0027_repair_flow_fixes.sql` | `supabase/migrations/0075_it_repair_flow_fixes.sql` (not yet applied) |
+| `javaria/javaria_it_0028_onboarding_task_flow.sql` | `supabase/migrations/0076_it_onboarding_task_flow.sql` |
+| `talha/talha_it_0010_valuation_functions.sql` | `supabase/migrations/0077_it_valuation_functions.sql` |
+| `talha/talha_it_0011_person_delete_rules.sql` | `supabase/migrations/0078_it_person_delete_rules.sql` |
+| `talha/talha_it_0012_keep_assignment_history.sql` | `supabase/migrations/0079_it_keep_assignment_history.sql` |
+| `talha/talha_hr_0001_clearance_system.sql` | `supabase/migrations/0080_hr_clearance_system.sql` |
+| `talha/talha_hr_0002_clearance_permissions.sql` | `supabase/migrations/0081_hr_clearance_permissions.sql` |
+| `talha/talha_hr_0003_clearance_fixes.sql` | `supabase/migrations/0082_hr_clearance_fixes.sql` |
+| `talha/talha_hr_0004_clearance_signer_lookups.sql` | `supabase/migrations/0083_hr_clearance_signer_lookups.sql` |
+| `talha/talha_hr_0005_hrbp_inbox_lookups.sql` | `supabase/migrations/0084_hr_hrbp_inbox_lookups.sql` |
+| `talha/talha_hr_0006_hr_roles_can_sign.sql` | `supabase/migrations/0085_hr_roles_can_sign.sql` |
+| `talha/talha_hr_0007_clearance_hr_details.sql` | `supabase/migrations/0086_hr_clearance_hr_details.sql` |
+| `talha/talha_hr_0008_skip_manager_assets.sql` | `supabase/migrations/0087_hr_skip_manager_assets.sql` |
+| `talha/talha_hr_0009_sign_for_all_roles.sql` | `supabase/migrations/0088_hr_sign_for_all_roles.sql` |
+| `talha/talha_hr_0010_clearance_onboarding_defaults.sql` | `supabase/migrations/0089_hr_clearance_onboarding_defaults.sql` |
+
+Same dual-copy policy as every batch: the staged originals stay in `javaria/`/`talha/` as each
+author's own historical record; the `supabase/migrations/` files are the authoritative ones
+`supabase db push` actually runs on a fresh environment. Every SQL body was verified
+programmatically byte-identical to its staged source; only the header comment block was replaced
+with a short replicated-from note.
+
 ## Applied log
 
 | File | Applied on | By | Notes |
@@ -210,12 +273,25 @@ comment block was replaced with a short replicated-from note.
 | — | 2026-11-05 | Adeen | **Resolved** — there is only ever one Supabase project (confirmed by Javaria), so the open question above was never about *which* project. `supabase migration list` against it shows 0001–0055 recorded applied and 0056–0068 all unrecorded, which is the real explanation: everything from `0057_it_procurement_masters.sql` onward (Javaria's whole procurement + employee-lookup + approver-routing sequence) was run by hand through the Supabase SQL Editor rather than `supabase db push`, so it's live but was never written into `supabase_migrations.schema_migrations`, the CLI's own tracking table — consistent with every one of those files' own "Applied to live DB: YES" header. `0056_hr_onboarding_replacement_permissions.sql` is the one real exception: it is genuinely unapplied. **Before the next `supabase db push`:** repair the CLI's tracking table for 0057–0068 (`supabase migration repair --status applied 0057 0058 0059 0060 0061 0062 0063 0064 0065 0066 0067 0068`) so it stops trying to re-create objects that already exist, *then* push — which at that point only actually runs 0056. |
 | `javaria/javaria_it_0019_route_waiting_on_new_approver.sql` | 2026-11-02 (confirmed live by read-only check) | Javaria | Adding a department approver (or flipping their approve-demands/approve-invoices switch on) routes that department's waiting Categorized demands / Verified invoices straight to Pending Approval, instead of needing a manual "Send for approval" per item. Replicated as `0067_it_route_waiting_on_new_approver.sql` |
 | `javaria/javaria_it_0020_demands_without_hq_site.sql` | 2026-11-03 (applied by Javaria via Supabase SQL Editor) | Javaria | Fixes `it.demands_before_insert`, broken by 0053's removal of `it.hq_site_id()`/`it.settings` (HQ-site routing removal) — the no-site fallback is now the requester's own site. Replicated as `0068_it_demands_without_hq_site.sql` |
-| `talha/talha_hr_0001_clearance_system.sql` | 2026-11-12 | Talha | Offboarding clearance system, HR module: tables, functions, form lines. Not yet in the main sequence |
-| `talha/talha_hr_0002_clearance_permissions.sql` | 2026-11-12 | Talha | Offboarding clearance permissions, roles HRBP and Clearance Signer. Not yet in the main sequence |
-| `talha/talha_hr_0003_clearance_fixes.sql` | 2026-11-13 | Talha | Clearance review fixes: page-one tick reflects answers, own-clearance block, line consistency trigger, date limits. Not yet in the main sequence |
-| `talha/talha_hr_0004_clearance_signer_lookups.sql` | 2026-11-13 | Talha | Clearance signers screen: 6 lookup and management functions (list units, list signers, search people, add, remove, set primary). Not yet in the main sequence |
-| `talha/talha_it_0010_valuation_functions.sql` | 2026-11-13 | Talha | Phase 6 valuation: it.compute_depreciation and it.record_asset_valuation (straight line, completed months). Not yet in the main sequence |
-| `talha/talha_hr_0005_hrbp_inbox_lookups.sql` | 2026-11-16 | Talha | HRBP inbox lookups: hr.clearance_search_employees and hr.refresh_clearance_case_org. Not yet in the main sequence |
-| `talha/talha_hr_0006_hr_roles_can_sign.sql` | 2026-11-17 | Talha | Lets the HR and HRBP roles open the signer inbox (hr.clearance.sign). Not yet in the main sequence |
-| `talha/talha_hr_0007_clearance_hr_details.sql` | 2026-11-18 | Talha | Clearance page one: hr.clearance_hr_details and hr.save_clearance_details (details the HR signer fills in). Not yet in the main sequence |
-| `talha/talha_hr_0008_skip_manager_assets.sql` | 2026-11-19 | Talha | Clearance: skip a part per request, line manager confirms data received, IT assets returned from the clearance form; replaces 4 functions. Not yet in the main sequence |
+| `javaria/javaria_it_0021_register_assets_from_receipt.sql` | 2026-11-06 (applied by Javaria via Supabase SQL Editor) | Javaria | Receiving → assets: register each accepted unit of a fixed-asset delivery as an asset, with its first valuation. Replicated as `0069_it_register_assets_from_receipt.sql` |
+| `javaria/javaria_it_0022_consumable_stock.sql` | 2026-11-06 (applied by Javaria via Supabase SQL Editor) | Javaria | Consumable stock ledger, on-hand view, record_stock_movement(); receiving a consumable adds stock automatically. Replicated as `0070_it_consumable_stock.sql` |
+| `javaria/javaria_it_0023_repairs_and_guides.sql` | 2026-11-06 (first draft, superseded in place by 0024) | Javaria | Inventory and Procurement working as one, first draft. Replicated as `0071_it_repairs_and_guides.sql`, immediately followed by its own replicated 0024 — do not run in isolation against an already-current database. |
+| `javaria/javaria_it_0024_repairs_in_procurement.sql` | 2026-11-10 (applied by Javaria via Supabase SQL Editor) | Javaria | Brings 0023's first draft to the agreed repairs-as-demands design. Replicated as `0072_it_repairs_in_procurement.sql` |
+| `javaria/javaria_it_0025_beyond_repair.sql` | 2026-11-16 (confirmed live: 9-argument it.record_device_back installed) | Javaria | Beyond repair at Device back: retire, notify the holder, keep the ticket open for Replace device. Replicated as `0073_it_beyond_repair.sql` |
+| `javaria/javaria_it_0026_set_person_role.sql` | **Not applied** | Javaria | Role changes stick and notify the person. Replicated as `0074_it_set_person_role.sql` — genuinely pending, not yet pushed. |
+| `javaria/javaria_it_0027_repair_flow_fixes.sql` | **Not applied** | Javaria | Three repair-flow fixes (quantity fixed at 1, bill counted once, replace once). Replicated as `0075_it_repair_flow_fixes.sql` — genuinely pending, not yet pushed. |
+| `javaria/javaria_it_0028_onboarding_task_flow.sql` | 2026-11-19 (first version applied; this is the safe-to-rerun revision) | Javaria | Checklist tasks always have an owner (primary task-type owner, else the request's IT Executive); tasks follow a later-assigned IT Executive. Replicated as `0076_it_onboarding_task_flow.sql` |
+| `talha/talha_it_0010_valuation_functions.sql` | 2026-11-13 | Talha | Phase 6 valuation: it.compute_depreciation and it.record_asset_valuation (straight line, completed months). Replicated as `0077_it_valuation_functions.sql` |
+| `talha/talha_it_0011_person_delete_rules.sql` | 2026-11-19 | Talha | Admin > Users can delete a person who only touched inventory records (assigned_by/returned_to go ON DELETE SET NULL). Replicated as `0078_it_person_delete_rules.sql` |
+| `talha/talha_it_0012_keep_assignment_history.sql` | 2026-11-19 | Talha | Asset assignment history keeps the holder/assigner/returned-to name after the person is deleted (holder_name, holder_employee_code, assigned_by_name, returned_to_name columns). Replicated as `0079_it_keep_assignment_history.sql` |
+| `talha/talha_hr_0001_clearance_system.sql` | 2026-11-12 | Talha | Offboarding clearance system, HR module: tables, functions, form lines. Replicated as `0080_hr_clearance_system.sql` |
+| `talha/talha_hr_0002_clearance_permissions.sql` | 2026-11-12 | Talha | Offboarding clearance permissions, roles HRBP and Clearance Signer. Replicated as `0081_hr_clearance_permissions.sql` |
+| `talha/talha_hr_0003_clearance_fixes.sql` | 2026-11-13 | Talha | Clearance review fixes: page-one tick reflects answers, own-clearance block, line consistency trigger, date limits. Replicated as `0082_hr_clearance_fixes.sql` |
+| `talha/talha_hr_0004_clearance_signer_lookups.sql` | 2026-11-13 | Talha | Clearance signers screen: 6 lookup and management functions (list units, list signers, search people, add, remove, set primary). Replicated as `0083_hr_clearance_signer_lookups.sql` |
+| `talha/talha_hr_0005_hrbp_inbox_lookups.sql` | 2026-11-16 | Talha | HRBP inbox lookups: hr.clearance_search_employees and hr.refresh_clearance_case_org. Replicated as `0084_hr_hrbp_inbox_lookups.sql` |
+| `talha/talha_hr_0006_hr_roles_can_sign.sql` | 2026-11-17 | Talha | Lets the HR and HRBP roles open the signer inbox (hr.clearance.sign). Replicated as `0085_hr_roles_can_sign.sql` |
+| `talha/talha_hr_0007_clearance_hr_details.sql` | 2026-11-18 | Talha | Clearance page one: hr.clearance_hr_details and hr.save_clearance_details (details the HR signer fills in). Replicated as `0086_hr_clearance_hr_details.sql` |
+| `talha/talha_hr_0008_skip_manager_assets.sql` | 2026-11-19 | Talha | Clearance: skip a part per request, line manager confirms data received, IT assets returned from the clearance form; replaces 4 functions. Replicated as `0087_hr_skip_manager_assets.sql` |
+| `talha/talha_hr_0009_sign_for_all_roles.sql` | 2026-11-19 | Talha | hr.clearance.sign also granted to Employee and IT roles, so a signer keeps their normal role. Replicated as `0088_hr_sign_for_all_roles.sql` |
+| `talha/talha_hr_0010_clearance_onboarding_defaults.sql` | 2026-11-19 | Talha | Prefills clearance from the employee's own onboarding request where one exists. Replicated as `0089_hr_clearance_onboarding_defaults.sql` |
+| — | 2026-11-20 | Adeen | Reconciled `IT/dev` (Javaria, `javaria_it_0021`–`0028`) and `it/talha` (Talha, `talha_it_0010`–`0012` and the new `talha_hr_0001`–`0010` Clearance system) into one integration branch alongside `develop`, merging code first (conflict: Talha's Clearance system retires the self-offboarding screens built on `hr.offboarding.*` — resolved in the user's favor of Clearance as the deliberate replacement) and then these 21 staged files into the main sequence as `0069`–`0089`, continuing straight on from `0068`. `javaria_it_0026` and `javaria_it_0027` are the only two **not** already live — everything else here was applied by hand through the SQL Editor, same pattern as every batch since batch 3. |
