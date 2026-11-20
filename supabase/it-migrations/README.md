@@ -252,6 +252,22 @@ continuing on from `0089`.
 |---|---|
 | `javaria/javaria_it_0029_task_notification_link.sql` | `supabase/migrations/0090_it_task_notification_link.sql` (not yet applied) |
 
+## Reconciled into the main sequence — 2026-11-20 (batch 7)
+
+Two more staged `talha/` files landed on `it/talha` after batch 5/6 were cut: `talha_hr_0011`
+(the IT Team Lead can hand out individual clearance lines to IT staff, "My clearance tasks") and
+`talha_hr_0012` (signer/line-manager email notifications on case changes, plus the same
+hand-out mechanism for individual asset returns). Both are headered `Applied to live DB: YES
+(2026-11-20, by Talha)` with no drift to check. Merged from `it/talha` into
+`merge/all-branches-2026-11-20` (one real conflict, in `app/(protected)/layout.tsx` — Talha's
+branch didn't have this session's sidebar-overflow fix (`min-w-0`) or its `navKeys` clearance-nav
+flag at the same time; both were kept). Replicated as `0093`-`0094`, continuing on from `0092`.
+
+| Staged file | Replicated as |
+|---|---|
+| `talha/talha_hr_0011_clearance_line_assignments.sql` | `supabase/migrations/0093_hr_clearance_line_assignments.sql` |
+| `talha/talha_hr_0012_clearance_notify_and_asset_tasks.sql` | `supabase/migrations/0094_hr_clearance_notify_and_asset_tasks.sql` |
+
 ## Applied log
 
 | File | Applied on | By | Notes |
@@ -308,3 +324,5 @@ continuing on from `0089`.
 | `talha/talha_hr_0010_clearance_onboarding_defaults.sql` | 2026-11-19 | Talha | Prefills clearance from the employee's own onboarding request where one exists. Replicated as `0089_hr_clearance_onboarding_defaults.sql` |
 | — | 2026-11-20 | Adeen | Reconciled `IT/dev` (Javaria, `javaria_it_0021`–`0028`) and `it/talha` (Talha, `talha_it_0010`–`0012` and the new `talha_hr_0001`–`0010` Clearance system) into one integration branch alongside `develop`, merging code first (conflict: Talha's Clearance system retires the self-offboarding screens built on `hr.offboarding.*` — resolved in the user's favor of Clearance as the deliberate replacement) and then these 21 staged files into the main sequence as `0069`–`0089`, continuing straight on from `0068`. `javaria_it_0026`/`0027` were initially flagged as the only two not already live (their own headers say "Applied to live DB: NO"), but a same-day read-only check against the live DB (`pg_proc`/`pg_trigger`) confirmed both are live too — every file in this batch needs only `migration repair`, not a real `db push`. |
 | `javaria/javaria_it_0029_task_notification_link.sql` | **Not applied** | Javaria | "Task assigned" notification now opens the task's own page (`/it/onboarding/<request>/tasks/<task>`) instead of the whole request. Replicated as `0090_it_task_notification_link.sql` — genuinely pending, not yet pushed. |
+| `talha/talha_hr_0011_clearance_line_assignments.sql` | 2026-11-20 | Talha | IT Team Lead hands out individual clearance lines to IT staff ("My clearance tasks"); assignee may answer their own line. Replicated as `0093_hr_clearance_line_assignments.sql` |
+| `talha/talha_hr_0012_clearance_notify_and_asset_tasks.sql` | 2026-11-20 | Talha | Signer + line-manager email notifications on case changes; IT Team Lead hands out individual asset returns the same way as 0011. Replicated as `0094_hr_clearance_notify_and_asset_tasks.sql` |

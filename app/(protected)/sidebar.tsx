@@ -113,6 +113,14 @@ export function Sidebar({
     { type: "link", href: effectiveHomePath, label: "Home", icon: HomeIcon },
     { type: "link", href: "/profile", label: "My Profile", icon: UserIcon },
     { type: "link", href: "/requests", label: "My Requests", icon: TicketIcon },
+    // Clearance lines and asset returns the IT Team Lead hands out; only IT staff can get them.
+    {
+      type: "link",
+      href: "/hr/clearance/tasks",
+      label: "My Tasks",
+      icon: TicketIcon,
+      permission: "it.tickets.update",
+    },
     {
       type: "link",
       href: "/hr/tickets",
@@ -148,8 +156,14 @@ export function Sidebar({
           label: "Onboarding",
           permission: ["hr.onboarding.create", "it.onboarding.read"],
         },
-        { href: "/hr/clearance-requests", label: "Clearance Requests", permission: "hr.clearance.read_all" },
-        { href: "/hr/clearance", label: "Clearance to sign", permission: "hr.clearance.sign" },
+        // One entry for the whole clearance flow: the page shows Requests, To sign, Signers and
+        // My tasks as cards, each only with its own permission. Not hr.clearance.sign: every role
+        // holds it; "clearance:is_signer" is added by the layout for people set as a signer.
+        {
+          href: "/hr/clearance-home",
+          label: "Clearance",
+          permission: ["hr.clearance.read_all", "clearance:is_signer"],
+        },
         {
           href: "/hr/feedback/anonymous",
           label: "Anonymous Feedback",
@@ -159,11 +173,6 @@ export function Sidebar({
           href: "/hr/admin/categories",
           label: "Ticket Categories",
           permission: "hr.categories.update",
-        },
-        {
-          href: "/hr/admin/clearance-signers",
-          label: "Clearance Signers",
-          permission: "hr.clearance.read_all",
         },
         {
           href: "/hr/admin/roles",
