@@ -2,9 +2,11 @@ import { StatusPill } from "@/components/status-pill";
 import { formatDate } from "@/lib/it/tickets";
 import { DOCUMENT_ACCEPT, formatMoney, RECEIVING_CONDITIONS, todayIso } from "@/lib/it/procurement";
 import type { ItDemand, ItDocument, ItInvoice, ItPayment, ItReceivingRecord } from "@/types/database";
+import Link from "next/link";
 import { DocumentLinks } from "./document-links";
+import { RegisterAssetsForm } from "./register-assets-form";
 import { InvoiceBlock } from "./invoice-panel";
-import { assignVendor, recordReceiving, updateReceivingRefs, uploadDemandDocuments } from "../actions";
+import { assignVendor, recordDeviceBack, recordReceiving, registerAssets, updateReceivingRefs, uploadDemandDocuments } from "../actions";
 import { cardClass, inputClass, labelClass, primaryButtonClass, secondaryButtonClass } from "../../../_components/ticket-ui";
 
 // Phase 4 panels for the demand page (javaria_it_0012): vendor, deliveries, documents.
@@ -61,6 +63,9 @@ export function DeliverySection({
   payments,
   isFinance,
   vendorHasEmail,
+  productName,
+  showAmounts,
+  assetRegistration,
 }: {
   demand: ItDemand;
   unit: string;
@@ -77,6 +82,10 @@ export function DeliverySection({
   payments: ItPayment[];
   isFinance: boolean;
   vendorHasEmail: boolean;
+  productName: string;
+  showAmounts: boolean;
+  // Set only for fixed-asset products (asset type classified Fixed).
+  assetRegistration: { assets: ReceiptAsset[]; canRegister: boolean; companies: { id: string; name: string }[] } | null;
 }) {
   const unitPrice = demand.agreed_unit_price ?? demand.estimated_unit_price;
   const target = demand.approved_quantity ?? demand.quantity;
@@ -87,7 +96,9 @@ export function DeliverySection({
 
   return (
     <section className={`${cardClass} p-6`}>
-      <h2 className="mb-4 text-base font-semibold text-slate-900">Vendor &amp; delivery</h2>
+      <h2 className="mb-4 text-base font-semibold text-slate-900">
+        {demand.asset_id ? "Vendor & repair" : "Vendor & delivery"}
+      </h2>
 
       <dl className="mb-4 grid gap-4 sm:grid-cols-3">
         <div>
@@ -103,7 +114,7 @@ export function DeliverySection({
         <div>
           <dt className="text-xs font-medium uppercase tracking-wide text-slate-400">Expected delivery</dt>
           <dd className="mt-0.5 text-sm text-slate-800">{formatDate(demand.expected_delivery_date) || "—"}</dd>
-          {demand.agreed_unit_price !== null && (
+          {showAmounts && demand.agreed_unit_price !== null && (
             <dd className="text-xs text-slate-500">
               Agreed {formatMoney(demand.agreed_unit_price)} each ·{" "}
               {formatMoney(Number(demand.agreed_unit_price) * target)} total
@@ -135,7 +146,9 @@ export function DeliverySection({
         <ul className="space-y-3">
           {receivings.map((r) => {
             const docs = documents.filter((d) => d.entity_type === "receiving" && d.entity_id === r.id);
-            const hasGateProof = Boolean(r.gate_pass_no) || docs.some((d) => d.doc_type === "Gate Pass");
+            // A repair needs no gate pass (javaria_it_0023).
+            const hasGateProof =
+              Boolean(demand.asset_id) || Boolean(r.gate_pass_no) || docs.some((d) => d.doc_type === "Gate Pass");
             return (
               <li key={r.id} className="rounded-lg border border-slate-200 px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2 text-sm">
@@ -159,6 +172,10 @@ export function DeliverySection({
                 </p>
                 {r.remarks && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-700">{r.remarks}</p>}
                 <DocumentLinks documents={docs} urls={urls} />
+
+                {assetRegistration && r.accepted_quantity > 0 && (
+                  <ReceiptAssets demandId={demand.id} receiving={r} productName={productName} {...assetRegistration} />
+                )}
 
                 {canProcess && open && (
                   <details className="mt-2">
@@ -235,6 +252,84 @@ export function DeliverySection({
   );
 }
 
+export type ReceiptAsset = {
+  id: string;
+  asset_tag: string;
+  serial_number: string;
+  status: string;
+  receiving_id: string | null;
+};
+
+// Receiving → assets (javaria_it_0021): which accepted items of this delivery are already in the
+// Asset Register, and the form to register the rest.
+function ReceiptAssets({
+  demandId,
+  receiving,
+  productName,
+  assets,
+  canRegister,
+  companies,
+}: {
+  demandId: string;
+  receiving: ItReceivingRecord;
+  productName: string;
+  assets: ReceiptAsset[];
+  canRegister: boolean;
+  companies: { id: string; name: string }[];
+}) {
+  const mine = assets.filter((a) => a.receiving_id === receiving.id);
+  const remaining = Math.max(0, receiving.accepted_quantity - mine.length);
+  return (
+    <div className="mt-3 rounded-lg border border-slate-100 bg-slate-50/60 px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="text-sm font-medium text-slate-800">
+          Assets{" "}
+          <span className="font-normal text-slate-500">
+            · {mine.length} of {receiving.accepted_quantity} registered
+          </span>
+        </p>
+        {remaining === 0 ? (
+          <StatusPill label="All registered" tone="positive" />
+        ) : (
+          <StatusPill label={`${remaining} to register`} tone="warning" />
+        )}
+      </div>
+      {mine.length > 0 && (
+        <ul className="mt-2 flex flex-wrap gap-1.5">
+          {mine.map((a) => (
+            <li key={a.id}>
+              <Link
+                href={`/it/inventory/${a.id}`}
+                title={`Serial ${a.serial_number} · ${a.status}`}
+                className="inline-block rounded-md border border-slate-200 bg-white px-2 py-0.5 font-mono text-xs text-slate-700 hover:border-blue-300 hover:text-blue-700"
+              >
+                {a.asset_tag}
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+      {remaining > 0 &&
+        (canRegister ? (
+          <details className="mt-2" open={mine.length === 0}>
+            <summary className="cursor-pointer text-sm font-medium text-blue-700">
+              Register {remaining} asset{remaining === 1 ? "" : "s"}
+            </summary>
+            <RegisterAssetsForm
+              key={remaining}
+              action={registerAssets.bind(null, demandId, receiving.id)}
+              remaining={remaining}
+              productName={productName}
+              companies={companies}
+            />
+          </details>
+        ) : (
+          <p className="mt-1 text-xs text-slate-500">IT inventory staff register these in the Asset Register.</p>
+        ))}
+    </div>
+  );
+}
+
 // Aside: choose / change the vendor.
 export function VendorPanel({
   demand,
@@ -304,6 +399,96 @@ export function VendorPanel({
           </button>
         </form>
       )}
+    </section>
+  );
+}
+
+// Aside on a repair demand: the device is back. Takes the place of Record delivery.
+export function DeviceBackPanel({
+  demandId,
+  parts,
+}: {
+  demandId: string;
+  parts: { id: string; name: string; unit: string; onHand: number }[];
+}) {
+  return (
+    <section className={`${cardClass} p-6`}>
+      <h2 className="mb-1 text-base font-semibold text-slate-900">Device back</h2>
+      <p className="mb-4 text-xs text-slate-500">
+        The asset goes back to its holder or to stock, and a linked ticket resolves.
+      </p>
+      <form action={recordDeviceBack.bind(null, demandId)} className="space-y-3">
+        <label className="block">
+          <span className={labelClass}>How was it fixed? *</span>
+          <textarea name="resolution" required rows={2} placeholder="e.g. Battery replaced" className={inputClass} />
+        </label>
+        <label className="block">
+          <span className={labelClass}>Date back</span>
+          <input type="date" name="returnedDate" defaultValue={todayIso()} max={todayIso()} className={inputClass} />
+        </label>
+        <label className="block">
+          <span className={labelClass}>Condition</span>
+          <select name="condition" defaultValue="Good" className={inputClass}>
+            {RECEIVING_CONDITIONS.map((c) => (
+              <option key={c}>{c}</option>
+            ))}
+          </select>
+        </label>
+        <fieldset>
+          <legend className={labelClass}>Spare parts from stock</legend>
+          {parts.length === 0 ? (
+            <p className="text-xs text-slate-500">Nothing in stock at this site.</p>
+          ) : (
+            <div className="space-y-2">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="grid grid-cols-[1fr_4rem] gap-2">
+                  <select name="partProduct" defaultValue="" aria-label={`Part ${i + 1}`} className={inputClass}>
+                    <option value="">No part</option>
+                    {parts.map((p) => (
+                      <option key={p.id} value={p.id}>
+                        {p.name} ({p.onHand} {p.unit})
+                      </option>
+                    ))}
+                  </select>
+                  <input
+                    name="partQty"
+                    type="number"
+                    min={1}
+                    step={1}
+                    defaultValue={1}
+                    aria-label={`Quantity of part ${i + 1}`}
+                    className={inputClass}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </fieldset>
+        <label className="block">
+          <span className={labelClass}>Gate pass no. (if it left the site)</span>
+          <input name="gatePassNo" className={inputClass} />
+        </label>
+        <label className="block">
+          <span className={labelClass}>Remarks</span>
+          <input name="remarks" className={inputClass} />
+        </label>
+        <label className="flex items-center gap-2 text-sm text-slate-700">
+          <input type="checkbox" name="noBill" className="h-4 w-4 rounded border-slate-300" />
+          No bill (warranty or free): close the demand now
+        </label>
+        <label className="flex items-start gap-2 rounded-lg border border-red-100 bg-red-50/50 p-2.5 text-sm text-slate-700">
+          <input type="checkbox" name="beyondRepair" className="mt-0.5 h-4 w-4 rounded border-slate-300" />
+          <span>
+            <span className="font-medium text-red-700">Beyond repair</span>
+            <span className="block text-xs text-slate-500">
+              The device is retired instead of going back. The ticket stays open so IT can use Replace device.
+            </span>
+          </span>
+        </label>
+        <button type="submit" className={primaryButtonClass}>
+          Record device back
+        </button>
+      </form>
     </section>
   );
 }
@@ -389,13 +574,18 @@ export function ReceivingPanel({
             name="remarks"
             rows={3}
             className={inputClass}
-            placeholder={isFixedAsset ? "Serial numbers of the items received, one per line" : "Anything to note"}
+            placeholder="Anything to note"
           />
         </label>
         {isFixedAsset && (
           <p className="text-xs text-slate-500">
-            Fixed-asset product: note the serial numbers above, then register the items on the Asset
-            Register (automatic registration comes with the inventory module).
+            Fixed-asset product: after saving, register each accepted item as an asset (tag + serial)
+            on the delivery.
+          </p>
+        )}
+        {!isFixedAsset && (
+          <p className="text-xs text-slate-500">
+            Consumable: the accepted quantity is added to stock at this site automatically.
           </p>
         )}
         <p className="text-xs text-slate-400">

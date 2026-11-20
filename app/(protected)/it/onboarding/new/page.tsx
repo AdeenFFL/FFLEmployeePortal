@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
@@ -7,6 +8,7 @@ import type { ItLifecycleKind } from "@/types/database";
 import { createLifecycleRequest } from "../actions";
 import { ReportingManagerPicker } from "../_components/reporting-manager-picker";
 import { EmployeePicker } from "../_components/employee-picker";
+import { EmailRequiredToggle } from "../_components/email-required-toggle";
 import {
   cardClass,
   FormMessage,
@@ -59,7 +61,7 @@ export default async function NewLifecycleRequestPage({
         title={`New ${kind.toLowerCase()} request`}
         action={
           <Link
-            href={isReplacement ? "/it/inventory" : "/it/onboarding"}
+            href={isReplacement ? "/it/inventory" : "/hr/onboarding"}
             className={secondaryButtonClass}
           >
             {isReplacement ? "Back to Asset Register" : "Back to list"}
@@ -68,7 +70,14 @@ export default async function NewLifecycleRequestPage({
       />
       <FormMessage error={params.error} />
 
-      <form action={createLifecycleRequest} className={`${cardClass} space-y-6 p-6`}>
+      {/* key: a fresh, empty form on every visit (no date or name left over from the last
+          request); autoComplete off so the browser doesn't fill in old values either. */}
+      <form
+        key={randomUUID()}
+        action={createLifecycleRequest}
+        autoComplete="off"
+        className={`${cardClass} space-y-6 p-6`}
+      >
         <input type="hidden" name="kind" value={kind} />
 
         {isReplacement && <EmployeePicker sites={sites} inputClass={inputClass} labelClass={labelClass} />}
@@ -86,16 +95,16 @@ export default async function NewLifecycleRequestPage({
           )}
           {isOnboarding && (
             <>
-              <Field label="Designation / job title">
-                <input name="designation" className={inputClass} />
+              <Field label="Designation / job title" required>
+                <input name="designation" required className={inputClass} />
               </Field>
               <Field label="Grade">
                 <input name="grade" className={inputClass} />
               </Field>
             </>
           )}
-          <Field label="Department">
-            <select name="departmentId" defaultValue="" className={inputClass}>
+          <Field label="Department" required={isOnboarding}>
+            <select name="departmentId" defaultValue="" required={isOnboarding} className={inputClass}>
               <option value="">—</option>
               {departments.map((d) => (
                 <option key={d.id} value={d.id}>
@@ -105,8 +114,8 @@ export default async function NewLifecycleRequestPage({
             </select>
           </Field>
           {isOnboarding && (
-            <Field label="Work location">
-              <select name="siteId" defaultValue="" className={inputClass}>
+            <Field label="Work location" required>
+              <select name="siteId" defaultValue="" required className={inputClass}>
                 <option value="">—</option>
                 {sites.map((s) => (
                   <option key={s.id} value={s.id}>
@@ -116,15 +125,15 @@ export default async function NewLifecycleRequestPage({
               </select>
             </Field>
           )}
-          <Field label="Reporting manager">
-            <ReportingManagerPicker name="reportingManagerId" />
+          <Field label="Reporting manager" required={isOnboarding}>
+            <ReportingManagerPicker name="reportingManagerId" required={isOnboarding} />
           </Field>
           {/* Replacement: designation, location and category come from the employee card above
               (javaria_it_0018). */}
           {isOnboarding && (
             <>
-              <Field label="Employee category">
-                <select name="employeeCategory" defaultValue="" className={inputClass}>
+              <Field label="Employee category" required>
+                <select name="employeeCategory" defaultValue="" required className={inputClass}>
                   <option value="">—</option>
                   <option value="Permanent">Permanent</option>
                   <option value="Contractual">Contractual</option>
@@ -133,7 +142,7 @@ export default async function NewLifecycleRequestPage({
               <Field label="Joining date" required>
                 <input type="date" name="joiningDate" required className={inputClass} />
               </Field>
-              <Field label="Personal email">
+              <Field label="Personal email (required without a company email)">
                 <input
                   type="email"
                   name="personalEmail"
@@ -157,10 +166,7 @@ export default async function NewLifecycleRequestPage({
         {isOnboarding ? (
           <section className="space-y-4">
             <div className="flex flex-wrap gap-6">
-              <label className="flex items-center gap-2 text-sm text-slate-700">
-                <input type="checkbox" name="emailRequired" defaultChecked className="h-4 w-4" />
-                Company email required
-              </label>
+              <EmailRequiredToggle />
               <label className="flex items-center gap-2 text-sm text-slate-700">
                 <input type="checkbox" name="laptopRequired" className="h-4 w-4" />
                 Laptop / equipment required

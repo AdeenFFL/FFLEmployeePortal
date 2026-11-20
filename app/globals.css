@@ -119,3 +119,12 @@ body {
     animation: none;
   }
 }
+
+/* components/submit-guard.tsx: a form that is being saved can't be clicked again. */
+form[data-submitting] button[type="submit"],
+form[data-submitting] button:not([type]),
+form[data-submitting] input[type="submit"] {
+  opacity: 0.6;
+  cursor: progress;
+  pointer-events: none;
+}

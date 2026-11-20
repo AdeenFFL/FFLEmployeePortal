@@ -27,6 +27,9 @@ import type { Database } from "@/types/database";
 //   5. createLifecycleRequest also inserts one checklist_items row per requested access
 //      (splitting the "access required" field) right after creating the request — same
 //      write-permission gap as use 3, same same-request system default reasoning.
+//   R. lib/admin/role-permissions.ts writes role_permissions rows for the Roles & Permissions
+//      screens (admin, HR) after the caller's requirePermission and its own check of which
+//      permissions it may change: RLS there only lets core.full_access holders write.
 //   6. completeHandoverTask reads it.asset_assignments.acknowledged_at to confirm a handover —
 //      that table needs it.assets.read or being the asset's holder, neither of which an IT
 //      Executive working onboarding (it.onboarding.assign) necessarily has.

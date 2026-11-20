@@ -94,6 +94,11 @@ export function OwnerChips({
       {optimisticOwners.length === 0 && !canEdit && (
         <span className="text-xs text-slate-400">No owner</span>
       )}
+      {optimisticOwners.length === 0 && canEdit && remaining.length === 0 && (
+        <span className="text-xs text-slate-400">
+          No eligible staff for this site — add someone to Sites &amp; IT Staff first.
+        </span>
+      )}
       {optimisticOwners.map((o) => (
         <span
           key={o.personId}

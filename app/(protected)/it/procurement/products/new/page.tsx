@@ -19,7 +19,7 @@ export default async function NewProductPage({
   if (!(await hasItPermission(supabase, "it.products.update"))) notFound();
 
   const [typesRes, categoriesRes] = await Promise.all([
-    supabase.schema("it").from("asset_types").select("id, name, is_active").order("name"),
+    supabase.schema("it").from("asset_types").select("id, name, is_active, classification").order("name"),
     supabase.schema("it").from("products").select("category").not("category", "is", null),
   ]);
   const assetTypes: AssetTypeOption[] = checked(typesRes).data ?? [];
