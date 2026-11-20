@@ -235,6 +235,12 @@ export default async function LifecycleRequestPage({
     label: i.task_name,
     state: ballStateOf(i.status),
   }));
+  // Structured task responses, promoted up into the request's own summary (Unified Ticket/Task
+  // Tracker, Phase 2) instead of staying buried under the task that recorded them.
+  const taskResponses = checklist.flatMap((i) => {
+    const recorded = (TASK_DETAIL_FIELDS[i.task_type] ?? []).filter((f) => i.details?.[f.key]);
+    return recorded.length > 0 ? [{ id: i.id, label: i.task_name, recorded, details: i.details }] : [];
+  });
 
   return (
     <div className="py-6">
@@ -252,7 +258,7 @@ export default async function LifecycleRequestPage({
       <div className="grid gap-6 xl:grid-cols-3">
         {/* ---------------- Main column ---------------- */}
         <div className="space-y-6 xl:col-span-2">
-          <RequestDetails request={request} nameById={orgUnits.nameById} />
+          <RequestDetails request={request} nameById={orgUnits.nameById} taskResponses={taskResponses} />
 
           {/* Checklist */}
           {showChecklist ? (

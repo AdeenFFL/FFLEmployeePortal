@@ -6,7 +6,13 @@ import { requirePermission } from "@/lib/auth/require-permission";
 import { queueItEmails } from "@/lib/it/notifications";
 import { parseMoney } from "@/lib/it/procurement";
 import { TASK_STATUSES, TICKET_PRIORITIES, WORKING_STATUSES } from "@/lib/it/tickets";
-import type { ItTicketPriority, ItTicketStatus, ItTicketTaskStatus } from "@/types/database";
+import { TASK_KIND_DETAIL_FIELDS } from "@/lib/it/ticket-tasks";
+import type {
+  ItTicketPriority,
+  ItTicketStatus,
+  ItTicketTaskKind,
+  ItTicketTaskStatus,
+} from "@/types/database";
 
 // Every action checks its permission here (defense in depth — proxy.ts already gates the page)
 // AND is re-checked by the database: RLS decides which rows the caller may touch, and
@@ -28,6 +34,22 @@ function done(ticketId: string, message: string): never {
 
 function text(formData: FormData, key: string) {
   return String(formData.get(key) ?? "").trim();
+}
+
+// device_check is the only task_kind today (lib/it/ticket-tasks.ts) — task_kind is set only when
+// at least one of its fields is filled, so a plain task (none filled) behaves exactly as it did
+// before this column existed.
+function readTaskDetails(formData: FormData): {
+  task_kind: ItTicketTaskKind | null;
+  details: Record<string, string>;
+} {
+  const kind: ItTicketTaskKind = "device_check";
+  const details: Record<string, string> = {};
+  for (const f of TASK_KIND_DETAIL_FIELDS[kind]) {
+    const value = text(formData, `detail_${f.key}`);
+    if (value) details[f.key] = value;
+  }
+  return Object.keys(details).length > 0 ? { task_kind: kind, details } : { task_kind: null, details: {} };
 }
 
 // BRD §5.3.5–5.3.7 — IT Executive classifies, prioritises and assigns.
@@ -240,6 +262,7 @@ export async function addTask(ticketId: string, formData: FormData) {
   if (!taskType) fail(ticketId, "Task name is required.");
 
   const leadId = text(formData, "assigneeId") || null;
+  const { task_kind, details } = readTaskDetails(formData);
   const { data: task, error } = await supabase
     .schema("it")
     .from("ticket_tasks")
@@ -248,6 +271,8 @@ export async function addTask(ticketId: string, formData: FormData) {
       task_type: taskType,
       description: text(formData, "description") || null,
       assigned_to_person_id: leadId,
+      task_kind,
+      details,
     })
     .select("id")
     .single();
@@ -310,10 +335,27 @@ export async function updateTaskStatus(ticketId: string, taskId: string, formDat
   const status = text(formData, "status") as ItTicketTaskStatus;
   if (!TASK_STATUSES.includes(status)) fail(ticketId, "Invalid task status.");
 
+  const { data: existing } = await supabase
+    .schema("it")
+    .from("ticket_tasks")
+    .select("task_kind, details")
+    .eq("id", taskId)
+    .eq("ticket_id", ticketId)
+    .maybeSingle();
+
+  const details: Record<string, string> = { ...(existing?.details ?? {}) };
+  if (existing?.task_kind) {
+    for (const f of TASK_KIND_DETAIL_FIELDS[existing.task_kind]) {
+      const value = text(formData, `detail_${f.key}`);
+      if (value) details[f.key] = value;
+      else delete details[f.key];
+    }
+  }
+
   const { data, error } = await supabase
     .schema("it")
     .from("ticket_tasks")
-    .update({ status })
+    .update({ status, ...(existing?.task_kind ? { details } : {}) })
     .eq("id", taskId)
     .eq("ticket_id", ticketId)
     .select("id");

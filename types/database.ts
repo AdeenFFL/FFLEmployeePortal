@@ -763,6 +763,11 @@ export type ItTicketUpdate = {
   created_at: string;
 };
 
+// Nullable, single value today (0091_it_ticket_task_details.sql) — most tasks stay plain free
+// text (task_kind null); a task_kind drives the extra structured fields in
+// lib/it/ticket-tasks.ts's TASK_KIND_DETAIL_FIELDS, stored in `details`.
+export type ItTicketTaskKind = "device_check";
+
 export type ItTicketTask = {
   id: string;
   ticket_id: string;
@@ -770,6 +775,8 @@ export type ItTicketTask = {
   task_type: string;
   description: string | null;
   status: ItTicketTaskStatus;
+  task_kind: ItTicketTaskKind | null;
+  details: Record<string, string>;
   created_by: string | null;
   created_at: string;
   updated_at: string;
