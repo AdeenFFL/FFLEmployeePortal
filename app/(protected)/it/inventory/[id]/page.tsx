@@ -279,7 +279,10 @@ export default async function AssetDetailPage({
         tone: "emerald",
         title: `Assigned to ${historyName(a.person_id, a.holder_name, a.holder_employee_code)}`,
         lines: [
-          [`by ${historyName(a.assigned_by_person_id, a.assigned_by_name)}`, a.assigned_condition && `condition ${a.assigned_condition}`]
+          [
+            `by ${historyName(a.assigned_by_person_id, a.assigned_by_name)}`,
+            a.assigned_condition && `condition ${a.assigned_condition}`,
+          ]
             .filter(Boolean)
             .join(" · "),
           a.acknowledged_at ? `Acknowledged ${formatDateTime(a.acknowledged_at)}` : "Not acknowledged yet",
@@ -294,7 +297,10 @@ export default async function AssetDetailPage({
               tone: "blue" as const,
               title: `Returned by ${historyName(a.person_id, a.holder_name, a.holder_employee_code)}`,
               lines: [
-                [`to ${historyName(a.returned_to_person_id, a.returned_to_name)}`, a.returned_condition && `condition ${a.returned_condition}`]
+                [
+                  `to ${historyName(a.returned_to_person_id, a.returned_to_name)}`,
+                  a.returned_condition && `condition ${a.returned_condition}`,
+                ]
                   .filter(Boolean)
                   .join(" · "),
                 ...(a.remarks ? [a.remarks] : []),

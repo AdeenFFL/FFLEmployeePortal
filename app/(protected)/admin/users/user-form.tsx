@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
+import type { ChangeEvent } from "react";
 import { useDismissable } from "@/components/use-dismissable";
 import { XIcon } from "@/components/icons";
 import type { Role, UserStatus, AuthMethod, EmploymentType } from "@/types/database";
@@ -49,6 +50,7 @@ export function UserFormPanel({
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
+  const [authMethod, setAuthMethod] = useState<AuthMethod>("microsoft");
 
   if (!visible) return null;
 
@@ -133,27 +135,34 @@ export function UserFormPanel({
             <>
               <label className="flex flex-col gap-1 text-sm">
                 <span className="font-medium text-slate-700">Sign-in Method</span>
-                <select name="auth_method" defaultValue="microsoft" className={inputClass}>
+                <select
+                  name="auth_method"
+                  value={authMethod}
+                  onChange={(e: ChangeEvent<HTMLSelectElement>) => setAuthMethod(e.target.value as AuthMethod)}
+                  className={inputClass}
+                >
                   <option value="microsoft">Microsoft (invite)</option>
                   <option value="password">Email &amp; Password</option>
                 </select>
               </label>
 
-              <label className="flex flex-col gap-1 text-sm">
-                <span className="font-medium text-slate-700">Initial Password</span>
-                <input
-                  name="password"
-                  type="password"
-                  minLength={6}
-                  autoComplete="new-password"
-                  className={inputClass}
-                />
-                <span className="text-xs text-slate-400">
-                  Only used if Sign-in Method is Email &amp; Password. Minimum 6 characters.
-                  There is no email delivery in this system — you must share this password with
-                  the employee directly (verbally, chat, etc.) after saving.
-                </span>
-              </label>
+              {authMethod === "password" && (
+                <label className="flex flex-col gap-1 text-sm">
+                  <span className="font-medium text-slate-700">Initial Password</span>
+                  <input
+                    name="password"
+                    type="password"
+                    minLength={6}
+                    autoComplete="new-password"
+                    className={inputClass}
+                  />
+                  <span className="text-xs text-slate-400">
+                    Minimum 6 characters. There is no email delivery in this system — you must
+                    share this password with the employee directly (verbally, chat, etc.) after
+                    saving.
+                  </span>
+                </label>
+              )}
             </>
           ) : (
             <div className="flex flex-col gap-1 text-sm">

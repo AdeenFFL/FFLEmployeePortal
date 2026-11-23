@@ -68,16 +68,24 @@ export async function GET(request: NextRequest) {
       .eq("email", normalizedEmail)
       .maybeSingle();
 
-    // An invite staged by an onboarding request (Email Account task): the new hire's site and
-    // joining date come from that request.
+    // An invite staged by an onboarding request (Email Account task): the new hire's site,
+    // joining date and employment type come from that request.
     const { data: onboardingRequest } = invitation?.onboarding_request_id
       ? await admin
           .schema("it")
           .from("onboarding_offboarding")
-          .select("id, site_id, joining_date, person_id")
+          .select("id, site_id, joining_date, employee_category, person_id")
           .eq("id", invitation.onboarding_request_id)
           .maybeSingle()
       : { data: null };
+
+    // Company email means this is always "with email"; employee_category only distinguishes
+    // permanent vs. contractual (0066_it_employee_lookup.sql's own comment on employment_type).
+    const employmentType = onboardingRequest
+      ? onboardingRequest.employee_category === "Permanent"
+        ? "permanent"
+        : "contractual_with_email"
+      : null;
 
     const { data: createdPerson, error: personError } = await admin
       .from("persons")
@@ -89,6 +97,7 @@ export async function GET(request: NextRequest) {
         designation: invitation?.designation ?? null,
         date_of_joining: invitation?.date_of_joining ?? onboardingRequest?.joining_date ?? null,
         department_id: invitation?.department_id ?? null,
+        employment_type: employmentType,
       })
       .select("id, status")
       .single();

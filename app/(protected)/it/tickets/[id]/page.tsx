@@ -14,14 +14,7 @@ import {
   hasItPermission,
   signedAttachmentUrls,
 } from "@/lib/it/ticket-data";
-import {
-  formatDate,
-  formatDateTime,
-  TASK_STATUS_TONE,
-  TASK_STATUSES,
-  TICKET_PRIORITIES,
-  WORKING_STATUSES,
-} from "@/lib/it/tickets";
+import { formatDate, formatDateTime, TICKET_PRIORITIES, WORKING_STATUSES } from "@/lib/it/tickets";
 import {
   addStaffUpdate,
   addTask,
@@ -34,11 +27,12 @@ import {
   addHelper,
   removeHelper,
   triageTicket,
-  updateTaskStatus,
   updateTicketStatus,
 } from "../actions";
 import { CategorySelect } from "../../_components/category-select";
 import { Modal } from "@/components/modal";
+import { TaskProgressSummary, type TaskBallState } from "@/components/task-progress";
+import { TASK_KIND_DETAIL_FIELDS, TASK_KIND_LABELS } from "@/lib/it/ticket-tasks";
 import {
   AttachmentList,
   cardClass,
@@ -156,10 +150,6 @@ export default async function ItTicketWorkspacePage({
     ]);
   const helpers = (assignees ?? []).filter((a) => a.role === "helper");
   const isHelper = Boolean(personId) && helpers.some((h) => h.person_id === personId);
-  const extrasByTask = new Map<string, string[]>();
-  for (const ta of taskAssignees ?? []) {
-    extrasByTask.set(ta.task_id, [...(extrasByTask.get(ta.task_id) ?? []), ta.person_id]);
-  }
   // Same precedence as auto-assignment: subcategory owners at the handling site, else category's.
   const siteOwners = (owners ?? []).filter((o) => o.site_id === ticket.handling_site_id);
   const subOwners = siteOwners.filter((o) => o.category_id === ticket.subcategory_id);
@@ -188,6 +178,21 @@ export default async function ItTicketWorkspacePage({
   ]);
 
   const nameOf = (pid: string | null) => (pid ? (names.get(pid) ?? "—") : "—");
+  const taskBallStateOf = (status: NonNullable<typeof tasks>[number]["status"]): TaskBallState =>
+    status === "Completed" ? "done" : status === "Cancelled" ? "skipped" : status === "In Progress" ? "active" : "pending";
+  const taskBalls = (tasks ?? []).map((t) => ({
+    id: t.id,
+    label: t.task_type,
+    state: taskBallStateOf(t.status),
+    href: `/it/tickets/${ticket.id}/tasks/${t.id}`,
+  }));
+  // Structured task responses, promoted up into the ticket's own summary (Unified Ticket/Task
+  // Tracker, Phase 2) instead of staying buried under the task that recorded them.
+  const taskResponses = (tasks ?? []).flatMap((t) => {
+    if (!t.task_kind) return [];
+    const recorded = TASK_KIND_DETAIL_FIELDS[t.task_kind].filter((f) => t.details?.[f.key]);
+    return recorded.length > 0 ? [{ task: t, recorded }] : [];
+  });
 
   // After diagnosing: Fixed it, Send for repair or Replace device (the last two need the device).
   const [canRepair, canReplace, { data: device }, { data: openRepair }, { data: replacement }] = await Promise.all([
@@ -314,56 +319,7 @@ export default async function ItTicketWorkspacePage({
             {(tasks ?? []).length === 0 ? (
               <p className="mb-4 text-sm text-slate-400">No tasks on this ticket.</p>
             ) : (
-              <ul className="mb-4 divide-y divide-slate-100">
-                {(tasks ?? []).map((task) => {
-                  const canEditTask =
-                    !isClosed &&
-                    (canAssign ||
-                      (canUpdate &&
-                        (task.assigned_to_person_id === personId ||
-                          (extrasByTask.get(task.id) ?? []).includes(personId ?? ""))));
-                  const extras = extrasByTask.get(task.id) ?? [];
-                  return (
-                    <li key={task.id} className="flex flex-wrap items-center gap-3 py-3">
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium text-slate-800">{task.task_type}</p>
-                        {task.description && (
-                          <p className="text-sm text-slate-500">{task.description}</p>
-                        )}
-                        <p className="text-xs text-slate-400">
-                          {nameOf(task.assigned_to_person_id)}
-                          {extras.length > 0 && ` + ${extras.map((pid) => nameOf(pid)).join(", ")}`}
-                          {task.completed_at && ` · completed ${formatDateTime(task.completed_at)}`}
-                        </p>
-                      </div>
-                      {canEditTask ? (
-                        <form
-                          action={updateTaskStatus.bind(null, ticket.id, task.id)}
-                          className="flex items-center gap-2"
-                        >
-                          <select
-                            name="status"
-                            defaultValue={task.status}
-                            aria-label="Task status"
-                            className="rounded-lg border border-slate-300 px-2 py-1 text-sm"
-                          >
-                            {TASK_STATUSES.map((s) => (
-                              <option key={s} value={s}>
-                                {s}
-                              </option>
-                            ))}
-                          </select>
-                          <button type="submit" className="text-sm font-medium text-blue-700">
-                            Save
-                          </button>
-                        </form>
-                      ) : (
-                        <StatusPill label={task.status} tone={TASK_STATUS_TONE[task.status]} />
-                      )}
-                    </li>
-                  );
-                })}
-              </ul>
+              <TaskProgressSummary tasks={taskBalls} className="mb-4" />
             )}
 
             {canComment && (
@@ -407,6 +363,22 @@ export default async function ItTicketWorkspacePage({
                     </div>
                   </fieldset>
                 )}
+                <fieldset className="md:col-span-3">
+                  <legend className="mb-1 text-xs font-medium text-slate-500">
+                    Device check (optional — fill in if this task is about a specific device)
+                  </legend>
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    {TASK_KIND_DETAIL_FIELDS.device_check.map((f) => (
+                      <input
+                        key={f.key}
+                        name={`detail_${f.key}`}
+                        placeholder={f.placeholder ?? f.label}
+                        aria-label={f.label}
+                        className={inputClass}
+                      />
+                    ))}
+                  </div>
+                </fieldset>
                 <div className="md:col-span-3">
                   <button type="submit" className={secondaryButtonClass}>
                     Add task
@@ -962,6 +934,11 @@ export default async function ItTicketWorkspacePage({
                       .join(", ")}`
                   : "No category owner here — site manager assigns"}
               </Fact>
+              {taskResponses.map(({ task, recorded }) => (
+                <Fact key={task.id} label={`${task.task_type} — ${TASK_KIND_LABELS[task.task_kind!]}`}>
+                  {recorded.map((f) => `${f.label}: ${task.details[f.key]}`).join(" · ")}
+                </Fact>
+              ))}
               {closure && (
                 <Fact label="Closure record">
                   Captured {formatDateTime(closure.closed_at)}

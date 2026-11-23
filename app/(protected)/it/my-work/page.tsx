@@ -144,7 +144,7 @@ export default async function MyWorkPage({
       return {
         key: `tt-${t.id}`,
         kind: "ticket_task" as const,
-        href: `/it/tickets/${t.ticket_id}`,
+        href: `/it/tickets/${t.ticket_id}/tasks/${t.id}`,
         reference: parent?.ticket_number ?? "Ticket",
         title: t.description ? `${t.task_type}: ${t.description}` : t.task_type,
         context: parent?.subject ?? "",
