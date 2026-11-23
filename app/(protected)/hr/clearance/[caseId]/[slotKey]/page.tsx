@@ -2,6 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
+import { TaskProgressSummary } from "@/components/task-progress";
 import {
   STATUS_TONE,
   cleanSlotLabel,
@@ -10,6 +11,7 @@ import {
   formatTimestamp,
   karachiToday,
   orderSlotsHrLast,
+  progressStepStates,
 } from "../../../clearance-requests/clearance-view";
 import {
   ANSWER_LABELS,
@@ -293,6 +295,30 @@ export default async function ClearanceSlotPage({
   // The three sections of the HR part, shown either inside the wizard (an open HR part) or as
   // stacked cards (every other part, or a signed / closed HR part).
   const managerChosen = Boolean(c.line_manager_person_id);
+
+  // Signatures as the shared vertical stepper: one step per part, HR last.
+  const signatureSlots = orderSlotsHrLast(setup.slots).map((s) => {
+    const so = signoffBySlot.get(s.slot_key);
+    const skip = skipBySlot.get(s.slot_key);
+    return {
+      key: s.slot_key,
+      label: cleanSlotLabel(s.label),
+      done: Boolean(so),
+      skipped: !so && Boolean(skip),
+      detail: so
+        ? `Signed by ${so.signer_name}${so.signer_designation ? ` (${so.signer_designation})` : ""} on ${formatTimestamp(so.signed_at)}`
+        : skip
+          ? `Skipped: ${skip.reason}`
+          : "Waiting",
+    };
+  });
+  const signatureStates = progressStepStates(signatureSlots, c.status);
+  const signatureSteps = signatureSlots.map((s, i) => ({
+    id: s.key,
+    label: s.key === slotKey ? `${s.label} (this part)` : s.label,
+    state: signatureStates[i],
+    meta: s.detail,
+  }));
   const useWizard = isHrSlot && canEdit && !loadError;
 
   const lineManagerContent = isHrSlot ? (
@@ -448,24 +474,8 @@ export default async function ClearanceSlotPage({
 
       <section className={card}>
         <h2 className={cardTitle}>Signatures</h2>
-        <ul className="flex flex-col gap-2">
-          {orderSlotsHrLast(setup.slots).map((s) => {
-            const so = signoffBySlot.get(s.slot_key);
-            const skip = skipBySlot.get(s.slot_key);
-            return (
-              <li key={s.slot_key} className="flex flex-wrap justify-between gap-2 text-sm lg:flex-col lg:gap-0">
-                <span className="font-medium text-slate-900">{cleanSlotLabel(s.label)}</span>
-                <span className={so ? "text-green-700" : "text-slate-500"}>
-                  {so
-                    ? `Signed by ${so.signer_name}${so.signer_designation ? ` (${so.signer_designation})` : ""} on ${formatTimestamp(so.signed_at)}`
-                    : skip
-                      ? `Skipped: ${skip.reason}`
-                      : "Waiting"}
-                </span>
-              </li>
-            );
-          })}
-        </ul>
+        {/* The shared vertical stepper (as on onboarding). */}
+        <TaskProgressSummary tasks={signatureSteps} />
       </section>
 
       {showAssets && (

@@ -95,6 +95,7 @@ export function AssetReturns({
               target={{ kind: "asset", assignmentId: a.assignment_id }}
               assignee={a.assignee}
               disabled={false}
+              label={`Return ${a.asset_tag} · ${a.asset_name}`}
             />
           )}
         </li>

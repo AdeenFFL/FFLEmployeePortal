@@ -2,10 +2,12 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
+import { TaskProgressSummary } from "@/components/task-progress";
 import { CaseActions, RefreshOrgButton, SlotSkipControl } from "./case-actions";
 import {
   STATUS_TONE,
   caseReadiness,
+  progressStepStates,
   cleanSlotLabel,
   daysLeftText,
   formatDay,
@@ -185,6 +187,8 @@ export default async function ClearanceRequestDetailPage({
     },
   ];
 
+  const stepStates = progressStepStates(steps, c.status);
+
   // Active lines, plus any retired line that was already answered on this case.
   const lines = (linesResult.data ?? []).filter(
     (l) => l.is_active || responseByLine.get(l.id)?.outcome,
@@ -305,34 +309,23 @@ export default async function ClearanceRequestDetailPage({
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500">
             Progress
           </h2>
-          <ol className="flex flex-col gap-3">
-            {steps.map((step) => (
-              <li key={step.key} className="flex items-start gap-3">
-                <span
-                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs ${
-                    step.done ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-400"
-                  }`}
-                  aria-hidden
-                >
-                  {step.done ? "✓" : step.skipped ? "–" : "○"}
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{step.label}</p>
-                  <p className={`text-xs ${step.missing ? "text-red-600" : "text-slate-500"}`}>
-                    {step.detail}
-                  </p>
-                  {step.skip && (
-                    <SlotSkipControl
-                      caseId={c.id}
-                      slotKey={step.key}
-                      skipped={Boolean(step.skipped)}
-                      undoBlockedReason={step.skip.undoBlockedReason}
-                    />
-                  )}
-                </div>
-              </li>
-            ))}
-          </ol>
+          {/* The shared vertical stepper (as on onboarding): skip / undo sit on the right. */}
+          <TaskProgressSummary
+            tasks={steps.map((step, i) => ({
+              id: step.key,
+              label: step.label,
+              state: stepStates[i],
+              meta: step.missing ? `⚠ ${step.detail}` : step.detail,
+              extra: step.skip ? (
+                <SlotSkipControl
+                  caseId={c.id}
+                  slotKey={step.key}
+                  skipped={Boolean(step.skipped)}
+                  undoBlockedReason={step.skip.undoBlockedReason}
+                />
+              ) : undefined,
+            }))}
+          />
         </div>
       </div>
 

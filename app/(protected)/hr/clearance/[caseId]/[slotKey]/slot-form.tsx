@@ -217,6 +217,7 @@ export function SlotForm({
                     target={{ kind: "line", lineId: line.id }}
                     assignee={line.assignee}
                     disabled={busy}
+                    label={line.description}
                   />
                 )}
               </li>

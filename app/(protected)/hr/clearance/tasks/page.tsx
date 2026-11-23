@@ -2,6 +2,7 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
+import { TaskProgressSummary, type TaskBallState } from "@/components/task-progress";
 import {
   STATUS_TONE,
   daysLeftText,
@@ -128,6 +129,25 @@ export default async function MyClearanceTasksPage() {
             <p className="text-xs text-slate-400">
               Assigned by {c.assigned_by_name ?? "the IT Team Lead"} on {formatTimestamp(c.assigned_at)}
             </p>
+
+            {/* Progress as the shared vertical stepper (as on onboarding); the work itself is below. */}
+            <TaskProgressSummary
+              className="mt-4 rounded-lg bg-slate-50 p-3"
+              tasks={[
+                ...lines.map((t) => ({
+                  id: `l-${t.line_id}`,
+                  label: t.line_description,
+                  state: (t.outcome === "N/A" ? "skipped" : t.outcome ? "done" : "active") as TaskBallState,
+                  meta: t.outcome ? `Answered: ${t.outcome}` : "To do",
+                })),
+                ...assets.map((a) => ({
+                  id: `a-${a.assignment_id}`,
+                  label: `Collect ${a.asset_tag} · ${a.asset_name}`,
+                  state: (a.returned ? "done" : "active") as TaskBallState,
+                  meta: a.returned ? "Returned" : a.asset_status === "In Repair" ? "In repair" : "To do",
+                })),
+              ]}
+            />
 
             {lines.length > 0 && (
               <ol className="flex flex-col divide-y divide-slate-100">

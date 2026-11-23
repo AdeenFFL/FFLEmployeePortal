@@ -1,8 +1,10 @@
 import { createClient } from "@/lib/supabase/server";
+import { TaskProgressSummary } from "@/components/task-progress";
 import {
   cleanSlotLabel,
   formatTimestamp,
   orderSlotsHrLast,
+  progressStepStates,
   signatureProgress,
 } from "../clearance-requests/clearance-view";
 
@@ -117,24 +119,16 @@ export async function ClearanceTracker({ clearanceCase: c }: { clearanceCase: Tr
     },
   ];
 
+  // The shared vertical stepper (as on onboarding).
+  const states = progressStepStates(steps, c.status);
   return (
-    <ol className="flex flex-col gap-3">
-      {steps.map((step) => (
-        <li key={step.key} className="flex items-start gap-3">
-          <span
-            className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-xs ${
-              step.done ? "bg-green-100 text-green-700" : "bg-slate-100 text-slate-400"
-            }`}
-            aria-hidden
-          >
-            {step.done ? "✓" : step.skipped ? "–" : "○"}
-          </span>
-          <div>
-            <p className="text-sm font-medium text-slate-900">{step.label}</p>
-            <p className="text-xs text-slate-500">{step.detail}</p>
-          </div>
-        </li>
-      ))}
-    </ol>
+    <TaskProgressSummary
+      tasks={steps.map((step, i) => ({
+        id: step.key,
+        label: step.label,
+        state: states[i],
+        meta: step.detail,
+      }))}
+    />
   );
 }

@@ -21,11 +21,14 @@ export function LineAssign({
   target,
   assignee,
   disabled,
+  label,
 }: {
   caseId: string;
   target: AssignTarget;
   assignee: LineAssignee | null;
   disabled: boolean;
+  // What is handed out (the line or the asset), shown under the popup's title.
+  label?: string;
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -33,6 +36,13 @@ export function LineAssign({
   const [error, setError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
   const { results, error: searchError, searching, tooShort } = useLiveSearch(query, searchItStaff);
+  const title = assignee ? "Reassign to IT staff" : "Assign to IT staff";
+
+  function close() {
+    setOpen(false);
+    setQuery("");
+    setError(null);
+  }
 
   function assign(personId: string | null) {
     setError(null);
@@ -46,8 +56,7 @@ export function LineAssign({
           setError(result.error);
           return;
         }
-        setOpen(false);
-        setQuery("");
+        close();
         router.refresh();
       } catch {
         setError("Something went wrong. Please try again.");
@@ -70,12 +79,12 @@ export function LineAssign({
               : "Not assigned: return it yourself or assign it."}
           </span>
         )}
-        {!disabled && !open && (
+        {!disabled && (
           <button type="button" className={smallButton} disabled={isPending} onClick={() => setOpen(true)}>
             {assignee ? "Reassign" : "Assign to IT staff"}
           </button>
         )}
-        {!disabled && assignee && !open && (
+        {!disabled && assignee && (
           <button type="button" className={smallButton} disabled={isPending} onClick={() => assign(null)}>
             Take back
           </button>
@@ -83,8 +92,32 @@ export function LineAssign({
       </div>
 
       {open && (
-        <div className="flex flex-col gap-2">
-          <div className="flex gap-2">
+        // A popup (same look as the portal's other popups), not a panel opening inside the line.
+        <div
+          className="fixed inset-0 z-30 flex items-center justify-center p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-label={title}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") close();
+          }}
+        >
+          <div className="absolute inset-0 bg-slate-900/40" onClick={close} />
+          <div className="relative flex max-h-[85vh] w-full max-w-md flex-col gap-3 rounded-xl bg-white p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold text-slate-900">{title}</h2>
+                {label && <p className="truncate text-sm text-slate-500">{label}</p>}
+              </div>
+              <button
+                type="button"
+                onClick={close}
+                className="text-xl leading-none text-slate-400 hover:text-slate-600"
+                aria-label="Close"
+              >
+                ✕
+              </button>
+            </div>
             <input
               type="search"
               autoFocus
@@ -92,53 +125,44 @@ export function LineAssign({
               onChange={(e) => setQuery(e.target.value)}
               placeholder="Type an IT staff name or employee code"
               aria-label="Search IT staff"
-              className="w-full max-w-sm rounded-lg border border-slate-300 px-3 py-1.5 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
+              className="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500"
             />
-            <button
-              type="button"
-              className={smallButton}
-              onClick={() => {
-                setOpen(false);
-                setQuery("");
-              }}
-            >
-              Cancel
-            </button>
+            {tooShort && (
+              <p className="text-xs text-slate-400">Type at least {LIVE_SEARCH_MIN} letters.</p>
+            )}
+            {searching && <p className="text-xs text-slate-400">Searching…</p>}
+            {searchError && <p className="text-xs text-red-700">{searchError}</p>}
+            {results && results.length === 0 && (
+              <p className="text-xs text-slate-400">No active IT staff member matches.</p>
+            )}
+            {results && results.length > 0 && (
+              <ul className="min-h-0 divide-y divide-slate-100 overflow-y-auto rounded-lg border border-slate-200 bg-white">
+                {results.map((p) => (
+                  <li key={p.person_id} className="flex items-start justify-between gap-3 p-2">
+                    <div className="min-w-0">
+                      <p className="text-sm text-slate-900">{p.full_name}</p>
+                      <p className="text-xs text-slate-500">
+                        {[p.employee_code, p.designation].filter(Boolean).join(" · ") || "—"}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      className={smallButton}
+                      disabled={isPending || p.person_id === assignee?.personId}
+                      onClick={() => assign(p.person_id)}
+                    >
+                      {p.person_id === assignee?.personId ? "Assigned" : "Assign"}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {error && <p className="text-xs text-red-700">{error}</p>}
           </div>
-          {tooShort && (
-            <p className="text-xs text-slate-400">Type at least {LIVE_SEARCH_MIN} letters.</p>
-          )}
-          {searching && <p className="text-xs text-slate-400">Searching…</p>}
-          {searchError && <p className="text-xs text-red-700">{searchError}</p>}
-          {results && results.length === 0 && (
-            <p className="text-xs text-slate-400">No active IT staff member matches.</p>
-          )}
-          {results && results.length > 0 && (
-            <ul className="max-w-sm divide-y divide-slate-100 rounded-lg border border-slate-200 bg-white">
-              {results.map((p) => (
-                <li key={p.person_id} className="flex items-start justify-between gap-3 p-2">
-                  <div className="min-w-0">
-                    <p className="text-sm text-slate-900">{p.full_name}</p>
-                    <p className="text-xs text-slate-500">
-                      {[p.employee_code, p.designation].filter(Boolean).join(" · ") || "—"}
-                    </p>
-                  </div>
-                  <button
-                    type="button"
-                    className={smallButton}
-                    disabled={isPending || p.person_id === assignee?.personId}
-                    onClick={() => assign(p.person_id)}
-                  >
-                    {p.person_id === assignee?.personId ? "Assigned" : "Assign"}
-                  </button>
-                </li>
-              ))}
-            </ul>
-          )}
         </div>
       )}
 
-      {error && <p className="text-xs text-red-700">{error}</p>}
+      {!open && error && <p className="text-xs text-red-700">{error}</p>}
     </div>
   );
 }

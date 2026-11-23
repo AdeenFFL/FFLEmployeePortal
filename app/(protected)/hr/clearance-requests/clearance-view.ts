@@ -170,3 +170,24 @@ export function caseReadiness(
     ready: messages.length === 0,
   };
 }
+
+// One step of the clearance progress, as a circle of the shared vertical stepper
+// (components/task-progress.tsx). Waiting parts are "active" while the case is In Clearance —
+// they can all sign at the same time — except HR, which signs last: it becomes active only once
+// every other part is signed or skipped.
+export type ProgressStepState = "done" | "active" | "pending" | "skipped";
+type ProgressStepLike = { key: string; done: boolean; skipped?: boolean };
+const NON_SLOT_STEPS = new Set(["submitted", "forwarded", "completed"]);
+
+export function progressStepStates(steps: ProgressStepLike[], caseStatus: string): ProgressStepState[] {
+  const othersFinished = steps
+    .filter((s) => !NON_SLOT_STEPS.has(s.key) && s.key !== "hr")
+    .every((s) => s.done || s.skipped);
+  return steps.map((s) => {
+    if (s.done) return "done";
+    if (s.skipped) return "skipped";
+    if (s.key === "forwarded") return caseStatus === "Submitted" ? "active" : "pending";
+    if (s.key === "completed") return "pending";
+    return caseStatus === "In Clearance" && (s.key !== "hr" || othersFinished) ? "active" : "pending";
+  });
+}
