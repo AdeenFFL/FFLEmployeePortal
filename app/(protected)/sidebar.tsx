@@ -27,7 +27,8 @@ type IconComponent = (props: { className?: string }) => React.ReactElement;
 // used for nav entries that front more than one underlying permission-gated resource (e.g. the
 // unified Requests queue, which needs it.tickets.read OR it.onboarding.read).
 type Permission = string | string[];
-type NavChild = { href: string; label: string; permission?: Permission };
+// `match`: other paths that belong to this entry (pages reached from it with no entry of their own).
+type NavChild = { href: string; label: string; permission?: Permission; match?: string[] };
 type NavLeaf = { type: "link"; href: string; label: string; icon: IconComponent; permission?: Permission };
 type NavGroup = {
   type: "group";
@@ -113,13 +114,14 @@ export function Sidebar({
     { type: "link", href: effectiveHomePath, label: "Home", icon: HomeIcon },
     { type: "link", href: "/profile", label: "My Profile", icon: UserIcon },
     { type: "link", href: "/requests", label: "My Requests", icon: TicketIcon },
-    // Clearance lines and asset returns the IT Team Lead hands out; only IT staff can get them.
+    // Everything assigned to me in IT: tickets, ticket tasks, on/offboarding tasks and the
+    // clearance lines / asset returns the IT Team Lead hands out. Only IT staff get work.
     {
       type: "link",
-      href: "/hr/clearance/tasks",
+      href: "/it/my-work",
       label: "My Tasks",
       icon: TicketIcon,
-      permission: "it.tickets.update",
+      permission: ["it.tickets.read", "it.tickets.update", "it.onboarding.read", "it.onboarding.update", "it.onboarding.assign"],
     },
     {
       type: "link",
@@ -163,6 +165,7 @@ export function Sidebar({
           href: "/hr/clearance-home",
           label: "Clearance",
           permission: ["hr.clearance.read_all", "clearance:is_signer"],
+          match: ["/hr/clearance", "/hr/clearance-requests", "/hr/admin/clearance-signers"],
         },
         {
           href: "/hr/feedback/anonymous",
@@ -187,17 +190,13 @@ export function Sidebar({
       icon: BuildingIcon,
       children: [
         { href: "/it/dashboard", label: "Dashboard", permission: "it.tickets.read" },
-        {
-          href: "/it/my-work",
-          label: "My Tasks",
-          permission: ["it.tickets.read", "it.tickets.update", "it.onboarding.read", "it.onboarding.update", "it.onboarding.assign"],
-        },
         // Unified queue: tickets + onboarding/offboarding/replacement in one list, filterable by
         // type (replaces the separate Ticket Queue / Onboarding / Offboarding entries).
         {
           href: "/it/requests",
           label: "Requests",
           permission: ["it.tickets.read", "it.onboarding.read"],
+          match: ["/it/tickets", "/it/onboarding"],
         },
         { href: "/it/reports", label: "Reports", permission: "it.tickets.read" },
         {
@@ -268,32 +267,43 @@ export function Sidebar({
     return href.split("#")[0];
   }
 
+  // How closely a path covers the current page: its length when it is the page or a parent of
+  // it, else -1. The nav lights up only the closest entry, so /it/inventory/stock lights up
+  // Stock, not Asset Register as well.
+  function matchLength(path: string) {
+    return pathname === path || pathname.startsWith(`${path}/`) ? path.length : -1;
+  }
+  function childScore(child: NavChild) {
+    return Math.max(matchLength(hrefPath(child.href)), ...(child.match ?? []).map(matchLength));
+  }
+  const allEntries: NavEntry[] = [...baseItems, ...moduleSections];
+  const scores = allEntries.flatMap((entry) =>
+    entry.type === "link"
+      ? [{ href: entry.href, score: matchLength(hrefPath(entry.href)) }]
+      : entry.children.map((child) => ({ href: child.href, score: childScore(child) })),
+  );
+  const bestScore = Math.max(-1, ...scores.map((s) => s.score));
+  const activeHref = bestScore >= 0 ? scores.find((s) => s.score === bestScore)?.href : undefined;
+
   function isEntryActive(entry: NavEntry) {
-    if (entry.type === "link") {
-      const path = hrefPath(entry.href);
-      return pathname === path || pathname.startsWith(`${path}/`);
-    }
-    return entry.children.some((child) => {
-      const path = hrefPath(child.href);
-      return pathname === path || pathname.startsWith(`${path}/`);
-    });
+    if (entry.type === "link") return entry.href === activeHref;
+    return entry.children.some((child) => child.href === activeHref);
   }
 
   const allGroupLabels = [...baseItems, ...adminCentreItems]
     .filter((entry): entry is NavGroup => entry.type === "group")
     .map((entry) => entry.label);
 
+  const activeGroup = allEntries.find((e): e is NavGroup => e.type === "group" && isEntryActive(e))?.label;
   const [expanded, setExpanded] = useState<Set<string>>(
-    () =>
-      new Set(
-        allGroupLabels.filter((label) => {
-          const entry = [...baseItems, ...adminCentreItems].find(
-            (e) => e.type === "group" && e.label === label,
-          );
-          return entry ? isEntryActive(entry) : false;
-        }),
-      ),
+    () => new Set(allGroupLabels.filter((label) => label === activeGroup)),
   );
+  // Reached a page from a link inside another page: open its group too (others stay as they are).
+  const [openedFor, setOpenedFor] = useState(activeGroup);
+  if (activeGroup !== openedFor) {
+    setOpenedFor(activeGroup);
+    if (activeGroup && !expanded.has(activeGroup)) setExpanded(new Set(expanded).add(activeGroup));
+  }
 
   function toggleGroup(label: string) {
     setExpanded((prev) => {
@@ -368,9 +378,7 @@ export function Sidebar({
         {isOpen && (
           <div className="ml-6 mt-1 space-y-1 border-l border-slate-200 pl-3">
             {entry.children.map((child) => {
-              const childPath = hrefPath(child.href);
-              const childActive =
-                pathname === childPath || pathname.startsWith(`${childPath}/`);
+              const childActive = child.href === activeHref;
               return (
                 <Link
                   key={child.href}

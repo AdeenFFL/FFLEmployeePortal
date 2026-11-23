@@ -43,6 +43,9 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   "/hr/clearance-home": "hr.clearance.sign",
   // Old URL, now only a redirect to /hr/clearance-requests.
   "/hr/resignations": "hr.clearance.read_all",
+  // My clearance tasks: lines and asset returns the IT Team Lead hands to IT staff, who may not
+  // hold hr.clearance.sign (hr.my_clearance_tasks() returns only their own). Before /hr/clearance.
+  "/hr/clearance/tasks": ["hr.clearance.sign", "it.tickets.update"],
   "/hr/clearance": "hr.clearance.sign",
   // IT module — Service Management track (08-it-service-management-plan.md §4).
   "/it/my-tickets": "module:it",

@@ -8,7 +8,7 @@ import { cardClass, FormMessage, PriorityBadge } from "../_components/ticket-ui"
 import type { ItTicketPriority } from "@/types/database";
 
 type Tone = "positive" | "neutral" | "warning" | "negative" | "info";
-type WorkKind = "ticket" | "ticket_task" | "onboarding";
+type WorkKind = "ticket" | "ticket_task" | "onboarding" | "clearance";
 type Row = {
   key: string;
   kind: WorkKind;
@@ -27,13 +27,29 @@ const KIND_LABEL: Record<WorkKind, string> = {
   ticket: "Ticket",
   ticket_task: "Ticket task",
   onboarding: "Onboarding task",
+  clearance: "Clearance",
 };
+
+// Rows of hr.my_clearance_tasks() / hr.my_clearance_asset_tasks() (only my own; see
+// /hr/clearance/tasks): grouped into one row per leaving employee.
+type ClearanceRow = {
+  case_id: string;
+  case_number: string;
+  employee_name: string;
+  last_working_date: string;
+  case_status: string;
+  part_locked: boolean;
+  assigned_at: string;
+};
+type ClearanceLine = ClearanceRow & { outcome: string | null };
+type ClearanceAsset = ClearanceRow & { returned: boolean };
 
 const SHOWS = ["open", "done"] as const;
 const TYPES = [
   { key: "all", label: "Everything" },
   { key: "tickets", label: "Tickets" },
   { key: "onboarding", label: "On/offboarding tasks" },
+  { key: "clearance", label: "Clearance" },
 ] as const;
 
 // My Tasks: everything assigned to me in IT, in one list — tickets, tasks on tickets, and
@@ -50,11 +66,13 @@ export default async function MyWorkPage({
   const supabase = await createClient();
   const { data: personId } = await supabase.rpc("current_person_id");
 
-  const wantTickets = type !== "onboarding";
-  const wantOnboarding = type !== "tickets";
+  const wantTickets = type === "all" || type === "tickets";
+  const wantOnboarding = type === "all" || type === "onboarding";
+  const wantClearance = type === "all" || type === "clearance";
   const doneLimit = 50;
 
-  const [{ data: tickets }, { data: ticketTasks }, { data: checklist }] = await Promise.all([
+  const [{ data: tickets }, { data: ticketTasks }, { data: checklist }, clearanceLines, clearanceAssets] =
+    await Promise.all([
     personId && wantTickets
       ? (() => {
           const q = supabase
@@ -87,7 +105,30 @@ export default async function MyWorkPage({
           .order("created_at", { ascending: false })
           .limit(show === "open" ? 200 : doneLimit)
       : Promise.resolve({ data: null }),
+    // Missing before the clearance migrations are live: then simply no clearance rows.
+    wantClearance ? supabase.schema("hr").rpc("my_clearance_tasks") : Promise.resolve({ data: null, error: null }),
+    wantClearance ? supabase.schema("hr").rpc("my_clearance_asset_tasks") : Promise.resolve({ data: null, error: null }),
   ]);
+
+  // Clearance: one row per leaving employee, open while their IT part is still being worked.
+  const cases = new Map<string, { info: ClearanceRow; left: number; total: number; latest: string }>();
+  const addClearance = (r: ClearanceRow, done: boolean) => {
+    const c = cases.get(r.case_id) ?? { info: r, left: 0, total: 0, latest: "" };
+    c.total += 1;
+    if (!done) c.left += 1;
+    if (r.assigned_at > c.latest) c.latest = r.assigned_at;
+    cases.set(r.case_id, c);
+  };
+  for (const l of ((clearanceLines.error ? null : clearanceLines.data) ?? []) as ClearanceLine[]) {
+    addClearance(l, Boolean(l.outcome));
+  }
+  for (const a of ((clearanceAssets.error ? null : clearanceAssets.data) ?? []) as ClearanceAsset[]) {
+    addClearance(a, a.returned);
+  }
+  const clearanceRows = [...cases.values()].filter(({ info, left }) => {
+    const open = info.case_status === "In Clearance" && !info.part_locked && left > 0;
+    return show === "open" ? open : !open;
+  });
 
   // The ticket / request each task belongs to.
   const ticketIds = [...new Set((ticketTasks ?? []).map((t) => t.ticket_id))];
@@ -153,6 +194,19 @@ export default async function MyWorkPage({
         sortAt: show === "open" ? t.created_at : (t.completed_at ?? t.created_at),
       };
     }),
+    ...clearanceRows.map(({ info, left, total, latest }) => ({
+      key: `cl-${info.case_id}`,
+      kind: "clearance" as const,
+      href: "/hr/clearance/tasks",
+      reference: info.case_number,
+      title: show === "open" ? `IT clearance: ${left} of ${total} still to do` : `IT clearance: ${total} item(s)`,
+      context: info.employee_name,
+      status: show === "open" ? "To do" : left > 0 ? "Closed" : "Done",
+      tone: (show === "open" ? "warning" : "positive") as Tone,
+      priority: null,
+      due: info.last_working_date,
+      sortAt: latest,
+    })),
   ];
 
   // Open work: soonest due first (no due date last), then oldest first. Done: most recent first.
@@ -183,7 +237,7 @@ export default async function MyWorkPage({
     <div className="py-6">
       <PageHeader
         title="My Tasks"
-        description="Everything assigned to you in IT: tickets, ticket tasks and onboarding / offboarding tasks."
+        description="Everything assigned to you in IT: tickets, ticket tasks, onboarding / offboarding tasks and clearance work."
       />
       <FormMessage error={sp.error} notice={sp.notice} />
 
