@@ -210,8 +210,34 @@ export function SlotForm({
     return a.outcome === "No" && !a.remarks.trim();
   }).length;
 
+  // Lines I can answer that have no answer on screen yet ("Mark all" fills only these).
+  const blankIds = editable.filter((l) => draft.get(l.id)!.outcome === null).map((l) => l.id);
+
+  // On screen only (Save answers stores it); never overwrites an answer already chosen.
+  function markAllYes() {
+    setDraft((prev) => {
+      const next = new Map(prev);
+      for (const id of blankIds) next.set(id, { ...prev.get(id)!, outcome: "Yes" });
+      return next;
+    });
+    setJustSaved(new Set());
+  }
+
   return (
     <div className="flex w-full flex-col gap-4">
+      {blankIds.length > 0 && (
+        <div className="flex justify-end">
+          <button
+            type="button"
+            onClick={markAllYes}
+            disabled={busy}
+            title="Fills only the lines without an answer; you can change any of them before saving."
+            className="inline-flex items-center gap-1.5 rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200 disabled:cursor-not-allowed disabled:opacity-60"
+          >
+            ✓ Mark all {labels.Yes} ({blankIds.length})
+          </button>
+        </div>
+      )}
       {lines.length === 0 ? (
         <p className="text-sm text-slate-600">
           This part has no checklist. Sign to confirm the employee&apos;s

@@ -10,6 +10,7 @@ import {
   formatDay,
   formatTimestamp,
   karachiToday,
+  overdueDays,
 } from "../clearance-requests/clearance-view";
 import { loadSignerSetup, mySlotsForCase, myScopes } from "./signer-work";
 
@@ -47,7 +48,7 @@ export default async function ClearanceInboxPage() {
       ? hr
           .from("clearance_cases")
           .select(
-            "id, case_number, employee_name, employee_code, designation, last_working_date, site_id, department_id",
+            "id, case_number, employee_name, employee_code, designation, last_working_date, site_id, department_id, forwarded_at",
           )
           .eq("status", "In Clearance")
           .neq("person_id", personId)
@@ -247,6 +248,12 @@ export default async function ClearanceInboxPage() {
                     ? `${w.answeredCount}/${w.lineCount} answered`
                     : "Sign only"}
                 </p>
+                {w.othersWaiting === 0 &&
+                  overdueDays(w.c.forwarded_at, today) !== null && (
+                    <p className="text-xs font-medium text-amber-700">
+                      ⏰ Overdue · {overdueDays(w.c.forwarded_at, today)} days
+                    </p>
+                  )}
                 {w.othersWaiting > 0 && (
                   <p className="text-xs text-amber-700">
                     Can sign after the others ({w.othersWaiting} waiting)
@@ -294,6 +301,13 @@ export default async function ClearanceInboxPage() {
                       {w.lineCount > 0
                         ? `${w.answeredCount} of ${w.lineCount} lines answered`
                         : "Sign only"}
+                      {w.othersWaiting === 0 &&
+                        overdueDays(w.c.forwarded_at, today) !== null && (
+                          <p className="text-xs font-medium text-amber-700">
+                            ⏰ Overdue · {overdueDays(w.c.forwarded_at, today)}{" "}
+                            days
+                          </p>
+                        )}
                       {w.othersWaiting > 0 && (
                         <p className="text-xs text-amber-700">
                           Can sign after the others ({w.othersWaiting} waiting)

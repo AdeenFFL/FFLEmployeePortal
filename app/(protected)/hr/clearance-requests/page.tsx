@@ -4,6 +4,7 @@ import { PageHeader } from "@/components/page-header";
 import { StatusPill } from "@/components/status-pill";
 import { StartClearancePanel } from "./start-panel";
 import { CaseFilters } from "./case-filters";
+import { BULK_FORM_ID, BulkForwardBar } from "./bulk-forward";
 import { EmptyState } from "../clearance/empty-state";
 import {
   CASE_STATUSES,
@@ -123,6 +124,8 @@ export default async function ClearanceRequestsPage({
     department_id: g.department_id,
   }));
   const today = karachiToday();
+  // Tick boxes + "Forward selected" on the To forward tab, for people who may forward.
+  const bulk = Boolean(canForward) && status === "Submitted" && rows.length > 0;
 
   return (
     <div className="py-6">
@@ -168,10 +171,18 @@ export default async function ClearanceRequestsPage({
         <EmptyState icon="🔍" text="No requests match these filters." />
       ) : (
         <>
+          {bulk && (
+            <BulkForwardBar
+              caseNumbers={Object.fromEntries(
+                rows.map((r) => [r.id, r.case_number]),
+              )}
+            />
+          )}
           <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
             <table className="min-w-full divide-y divide-slate-200 text-sm">
               <thead className="bg-slate-50">
                 <tr className="text-left text-xs font-medium uppercase tracking-wide text-slate-500">
+                  {bulk && <th className="w-10 px-4 py-3" />}
                   <th className="px-4 py-3">Case no.</th>
                   <th className="px-4 py-3">Employee</th>
                   <th className="px-4 py-3">Designation</th>
@@ -192,6 +203,18 @@ export default async function ClearanceRequestsPage({
                     : "—";
                   return (
                     <tr key={c.id} className="align-top">
+                      {bulk && (
+                        <td className="px-4 py-3">
+                          <input
+                            type="checkbox"
+                            name="ids"
+                            value={c.id}
+                            form={BULK_FORM_ID}
+                            aria-label={`Select ${c.case_number}`}
+                            className="h-4 w-4"
+                          />
+                        </td>
+                      )}
                       <td className="px-4 py-3 font-medium">
                         <Link
                           href={`/hr/clearance-requests/${c.id}`}

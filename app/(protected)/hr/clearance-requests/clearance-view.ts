@@ -72,6 +72,20 @@ export function lastDayBadgeClass(lastWorkingDay: string, today: string, status:
   return "bg-green-50 text-green-700 ring-green-200";
 }
 
+// A part still waiting this many days after the request was forwarded is overdue: the daily
+// sweep reminds its signers (talha_hr_0014) and the screens show "⏰ Overdue".
+export const REMINDER_DAYS = 3;
+
+// Whole days from the forward to today (Karachi day), or null when not forwarded / not overdue.
+export function overdueDays(forwardedAt: string | null, today: string): number | null {
+  if (!forwardedAt) return null;
+  const forwardedDay = new Date(forwardedAt).toLocaleDateString("en-CA", { timeZone: "Asia/Karachi" });
+  const days = Math.round(
+    (Date.parse(`${today}T00:00:00Z`) - Date.parse(`${forwardedDay}T00:00:00Z`)) / 86_400_000,
+  );
+  return days > REMINDER_DAYS ? days : null;
+}
+
 // "HR (page one)" -> "HR", "Department Head (page one)" -> "Department Head".
 export function cleanSlotLabel(label: string) {
   return label.replace(/ \(page one\)$/, "");

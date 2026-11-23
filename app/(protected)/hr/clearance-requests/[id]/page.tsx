@@ -14,6 +14,7 @@ import {
   formatTimestamp,
   karachiToday,
   orderSlotsHrLast,
+  overdueDays,
   signersFor,
   type SlotInfo,
 } from "../clearance-view";
@@ -229,6 +230,8 @@ export default async function ClearanceRequestDetailPage({
   ];
 
   const stepStates = progressStepStates(steps, c.status);
+  // Days since the forward, once past the reminder gap (else null).
+  const overdue = overdueDays(c.forwarded_at, today);
 
   // Active lines, plus any retired line that was already answered on this case.
   const lines = (linesResult.data ?? []).filter(
@@ -425,7 +428,18 @@ export default async function ClearanceRequestDetailPage({
               id: step.key,
               label: step.label,
               state: stepStates[i],
-              meta: step.missing ? `⚠ ${step.detail}` : step.detail,
+              meta: step.missing
+                ? `⚠ ${step.detail}`
+                : stepStates[i] === "active" &&
+                    c.status === "In Clearance" &&
+                    overdue !== null
+                  ? `⏰ Overdue · ${overdue} days`
+                  : step.detail,
+              warn:
+                step.missing ||
+                (stepStates[i] === "active" &&
+                  c.status === "In Clearance" &&
+                  overdue !== null),
               extra: step.skip ? (
                 <SlotSkipControl
                   caseId={c.id}

@@ -6,6 +6,8 @@ type Step = {
   state: TaskBallState;
   // Who signed / why skipped / waiting: shown small, in full on hover.
   meta?: string;
+  // Show the meta in amber (missing signer, overdue).
+  warn?: boolean;
   // Controls under the step (e.g. Skip / Undo).
   extra?: React.ReactNode;
 };
@@ -61,7 +63,7 @@ export function HorizontalSteps({ steps }: { steps: Step[] }) {
             </span>
             {s.meta && (
               <span
-                className="line-clamp-2 max-w-36 text-[11px] leading-tight text-slate-400"
+                className={`line-clamp-2 max-w-36 text-[11px] leading-tight ${s.warn ? "font-medium text-amber-700" : "text-slate-400"}`}
                 title={s.meta}
               >
                 {s.meta}
