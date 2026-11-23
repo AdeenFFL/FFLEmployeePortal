@@ -25,7 +25,9 @@ export type HrDetailKey =
 // What the form holds: every value as text ("" = empty).
 export type HrDetailsValues = Record<HrDetailKey, string>;
 
-type FieldKind = "text" | "email" | "textarea" | "date" | "whole" | "decimal";
+// "person": a live search of employees; the chosen person is saved as "Name (code)" text, and any
+// typed text can be used as it is too.
+type FieldKind = "text" | "email" | "textarea" | "date" | "whole" | "decimal" | "person";
 
 export type HrDetailField = {
   key: HrDetailKey;
@@ -96,8 +98,8 @@ export const HR_DETAIL_GROUPS: { title: string; fields: HrDetailField[] }[] = [
     // Who holds the leaving employee's charge and mail now (printed on page one of the form).
     title: "Charge handover",
     fields: [
-      { key: "handing_over_to", label: "Handing over done to (Mr. / Ms.)", kind: "text", maxLength: 200 },
-      { key: "email_forward_to", label: "Email forwarding to", kind: "text", maxLength: 200 },
+      { key: "handing_over_to", label: "Handing over done to (Mr. / Ms.)", kind: "person", maxLength: 200 },
+      { key: "email_forward_to", label: "Email forwarding to", kind: "person", maxLength: 200 },
     ],
   },
 ];

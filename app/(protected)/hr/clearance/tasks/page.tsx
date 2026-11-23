@@ -85,12 +85,19 @@ export default async function MyClearanceTasksPage() {
 
   return (
     <div className="flex flex-col gap-6 py-6">
-      <Link href="/hr/clearance-home" className="text-sm text-blue-700 hover:underline">
-        ← Clearance
-      </Link>
-      <PageHeader
-        title="My clearance tasks"
-      />
+      <div className="flex items-start gap-3">
+        <Link
+          href="/hr/clearance-home"
+          title="Back to Clearance"
+          aria-label="Back to Clearance"
+          className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 hover:text-slate-900"
+        >
+          ←
+        </Link>
+        <div className="min-w-0 flex-1">
+          <PageHeader title="My clearance tasks" />
+        </div>
+      </div>
 
       {error && (
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">

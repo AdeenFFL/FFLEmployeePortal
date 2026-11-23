@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 import { saveClearanceAnswer, signClearancePart } from "./actions";
 import { LineAssign, type LineAssignee } from "./line-assign";
 import { LineTag, RemarksButton } from "./remarks-button";
+import { signedFlagKey } from "./signed-toast";
 
 type Outcome = "Yes" | "No" | "N/A";
 type Answer = { outcome: Outcome | null; remarks: string };
@@ -157,12 +158,29 @@ export function SlotForm({
 
   function handleSign() {
     setSignError(null);
+    // The locked view shows a short "Signed ✓" pop-up once (signed-toast.tsx). The flag is set
+    // BEFORE signing: the action's revalidation can swap in the locked view before the result
+    // reaches this code. It is cleared again if signing fails.
+    const flagKey = signedFlagKey(caseId, slotKey);
+    const setFlag = (on: boolean) => {
+      try {
+        if (on) sessionStorage.setItem(flagKey, "1");
+        else sessionStorage.removeItem(flagKey);
+      } catch {
+        // Storage blocked: no pop-up, the locked view still says it is signed.
+      }
+    };
+    setFlag(true);
     startSigning(async () => {
       try {
         const result = await signClearancePart(caseId, slotKey, signRemarks);
-        if (result.error) setSignError(result.error);
+        if (result.error) {
+          setFlag(false);
+          setSignError(result.error);
+        }
         // On success the action revalidates this page, which then shows the locked view.
       } catch {
+        setFlag(false);
         setSignError("Something went wrong. Please try again.");
       }
     });
@@ -314,13 +332,14 @@ export function SlotForm({
         </ol>
       )}
 
-      {/* Save: only while something on screen is not saved yet (outlined, text only). */}
+      {/* Save: only while something on screen is not saved yet (outlined, text only). It sticks
+          to the bottom of the screen, so it stays in reach on a long checklist. */}
       {editable.length > 0 &&
         (noWithoutRemark > 0 ||
           changedIds.length > 0 ||
           isSaving ||
           saveError) && (
-          <div className="flex flex-wrap items-center gap-3">
+          <div className="sticky bottom-0 z-10 -mx-5 flex flex-wrap items-center gap-3 border-t border-slate-200 bg-white/95 px-5 py-3 backdrop-blur">
             {noWithoutRemark > 0 && (
               <p className="w-full text-xs font-medium text-red-700">
                 {noWithoutRemark} “{labels.No}” answer

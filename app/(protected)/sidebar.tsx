@@ -28,7 +28,7 @@ type IconComponent = (props: { className?: string }) => React.ReactElement;
 // unified Requests queue, which needs it.tickets.read OR it.onboarding.read).
 type Permission = string | string[];
 // "myTasks": the number of open tasks (taskCount) on the link; "clearance": the clearance
-// requests waiting to be forwarded (clearanceCount).
+// requests to forward plus the parts waiting for my signature (clearanceCount).
 type NavBadge = "myTasks" | "clearance";
 type NavChild = { href: string; label: string; permission?: Permission; badge?: NavBadge };
 type NavLeaf = {
@@ -64,7 +64,7 @@ export function Sidebar({
   homePath: string;
   // Open tasks of this person (My Tasks badge); refreshed by the same live check as permissions.
   taskCount?: number;
-  // Clearance requests waiting to be forwarded (Clearance badge); same live check.
+  // Clearance requests to forward + parts to sign (Clearance badge); same live check.
   clearanceCount?: number;
 }) {
   // The layout (and so these props) is not re-rendered on client-side navigation, so after an
@@ -393,7 +393,7 @@ export function Sidebar({
     // Collapsing the whole rail also closes every group visually — there's no room to show
     // children in icon-only width, and hovering back in restores whatever was open before.
     const isOpen = !collapsed && expanded.has(entry.label);
-    // A child's number also shows on its group while the group is closed (a dot when collapsed).
+    // A child's number also shows on its group (a dot when the rail is collapsed).
     const groupCount = entry.children.reduce((sum, c) => sum + countFor(c.badge), 0);
     return (
       <div key={entry.label}>
@@ -422,7 +422,7 @@ export function Sidebar({
           >
             {entry.label}
           </span>
-          {groupCount > 0 && !collapsed && !isOpen && countPill(groupCount)}
+          {groupCount > 0 && !collapsed && countPill(groupCount)}
           {!collapsed && (
             <ChevronDownIcon
               className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}

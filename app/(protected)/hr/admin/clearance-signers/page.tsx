@@ -30,8 +30,19 @@ export default async function ClearanceSignersPage() {
   if (loadError) {
     return (
       <div className="py-6">
-        <Link href="/hr/clearance-home" className="mb-3 inline-block text-sm text-slate-500 hover:text-slate-700">← Clearance</Link>
-        <PageHeader title="Clearance Signers" />
+        <div className="flex items-start gap-3">
+          <Link
+            href="/hr/clearance-home"
+            title="Back to Clearance"
+            aria-label="Back to Clearance"
+            className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 hover:text-slate-900"
+          >
+            ←
+          </Link>
+          <div className="min-w-0 flex-1">
+            <PageHeader title="Clearance Signers" />
+          </div>
+        </div>
         <p className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">{loadError.message}</p>
       </div>
     );
@@ -174,11 +185,23 @@ export default async function ClearanceSignersPage() {
 
   return (
     <div className="py-6">
-      <Link href="/hr/clearance-home" className="mb-3 inline-block text-sm text-slate-500 hover:text-slate-700">← Clearance</Link>
-      <PageHeader
-        title="Clearance Signers"
-        description="Who signs each part of the offboarding clearance forms, per site (and per department for the Department Head). ★ marks the primary signer."
-      />
+      {/* Round back button (words in the tooltip) beside the title. */}
+      <div className="flex items-start gap-3">
+        <Link
+          href="/hr/clearance-home"
+          title="Back to Clearance"
+          aria-label="Back to Clearance"
+          className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 hover:text-slate-900"
+        >
+          ←
+        </Link>
+        <div className="min-w-0 flex-1">
+          <PageHeader
+          title="Clearance Signers"
+          description="Who signs each part of the offboarding clearance forms, per site (and per department for the Department Head). ★ marks the primary signer."
+          />
+        </div>
+      </div>
 
       {gaps.length === 0 && warningRows.length === 0 ? (
         <p className="mb-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm text-green-800">

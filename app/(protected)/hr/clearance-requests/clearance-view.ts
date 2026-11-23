@@ -60,6 +60,18 @@ export function daysLeftText(lastWorkingDay: string, today: string) {
   return `${-diff} days ago`;
 }
 
+// The coloured last-working-day badge (list, request page, part page, employee page): green with
+// more than 7 days left, amber 0–7, red once passed; grey when the request is closed.
+export function lastDayBadgeClass(lastWorkingDay: string, today: string, status: string) {
+  if (status === "Completed" || status === "Cancelled") return "bg-slate-100 text-slate-700 ring-slate-200";
+  const diff = Math.round(
+    (Date.parse(`${lastWorkingDay}T00:00:00Z`) - Date.parse(`${today}T00:00:00Z`)) / 86_400_000,
+  );
+  if (diff < 0) return "bg-red-50 text-red-700 ring-red-200";
+  if (diff <= 7) return "bg-amber-50 text-amber-800 ring-amber-200";
+  return "bg-green-50 text-green-700 ring-green-200";
+}
+
 // "HR (page one)" -> "HR", "Department Head (page one)" -> "Department Head".
 export function cleanSlotLabel(label: string) {
   return label.replace(/ \(page one\)$/, "");

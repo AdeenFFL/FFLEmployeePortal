@@ -29,6 +29,7 @@ import { LineManagerPicker } from "./line-manager-picker";
 import { HrWizard } from "./hr-wizard";
 import { AssetReturns, type OpenAsset } from "./asset-returns";
 import { SignaturesPopover } from "./signatures-popover";
+import { SignedToast } from "./signed-toast";
 import { LineText, SlotForm, type FormLine } from "./slot-form";
 import { LineTag, RemarksButton } from "./remarks-button";
 
@@ -460,6 +461,7 @@ export default async function ClearanceSlotPage({
           fill in or sign.
         </p>
       )}
+      {mySignoff && <SignedToast caseId={c.id} slotKey={slotKey} />}
       {mySignoff && (
         <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
           Signed by {mySignoff.signer_name}

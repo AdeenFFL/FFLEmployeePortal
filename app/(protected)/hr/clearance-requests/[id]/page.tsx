@@ -2,8 +2,8 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
-import { TaskProgressSummary } from "@/components/task-progress";
 import { CaseActions, RefreshOrgButton, SlotSkipControl } from "./case-actions";
+import { HorizontalSteps } from "./horizontal-steps";
 import {
   STATUS_TONE,
   caseReadiness,
@@ -419,9 +419,9 @@ export default async function ClearanceRequestDetailPage({
       <div>
         <div className={card}>
           <h2 className={cardTitle}>Progress</h2>
-          {/* The shared vertical stepper (as on onboarding): skip / undo sit on the right. */}
-          <TaskProgressSummary
-            tasks={steps.map((step, i) => ({
+          {/* One row of steps (little height); skip / undo sit under each part. */}
+          <HorizontalSteps
+            steps={steps.map((step, i) => ({
               id: step.key,
               label: step.label,
               state: stepStates[i],
@@ -444,57 +444,85 @@ export default async function ClearanceRequestDetailPage({
           const formLines = lines.filter((l) => l.form_key === form.key);
           if (formLines.length === 0) return null;
           const labels = ANSWER_LABELS[form.key];
+          const answered = formLines.filter(
+            (l) => responseByLine.get(l.id)?.outcome,
+          ).length;
+          const complete = answered === formLines.length;
           return (
-            <div key={form.key} className={card}>
-              <h2 className={cardTitle}>{form.title}</h2>
-              {/* One row per line (as on the part page): text and hint, then the answer as a tag
+            // A finished form folds into one line ("✓ 5/5"); click to open it. Forms with open
+            // lines stay open.
+            <details
+              key={form.key}
+              className={`${card} group`}
+              open={!complete}
+            >
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 [&::-webkit-details-marker]:hidden">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {form.title}
+                </h2>
+                <span className="flex items-center gap-2">
+                  <LineTag tone={complete ? "done" : "plain"}>
+                    {complete ? "✓ " : ""}
+                    {answered}/{formLines.length}
+                  </LineTag>
+                  <span
+                    className="text-slate-400 transition-transform group-open:rotate-180"
+                    aria-hidden="true"
+                  >
+                    ▾
+                  </span>
+                </span>
+              </summary>
+              <div className="mt-3 border-t border-slate-100 pt-1">
+                {/* One row per line (as on the part page): text and hint, then the answer as a tag
                   (or where it is waiting) and the remark behind 💬. */}
-              <ul className="divide-y divide-slate-100">
-                {formLines.map((line) => {
-                  const response = responseByLine.get(line.id);
-                  const outcome = (response?.outcome ?? null) as
-                    "Yes" | "No" | "N/A" | null;
-                  return (
-                    <li
-                      key={line.id}
-                      className="-mx-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg px-2 py-2.5 hover:bg-slate-50"
-                    >
-                      <LineText description={line.description} />
-                      <div className="flex flex-wrap items-center gap-2">
-                        {outcome ? (
-                          <LineTag
-                            tone={
-                              outcome === "No"
-                                ? "no"
-                                : outcome === "N/A"
-                                  ? "plain"
-                                  : "done"
-                            }
-                          >
-                            {outcome === "Yes"
-                              ? `✓ ${labels.Yes}`
-                              : labels[outcome]}
-                          </LineTag>
-                        ) : line.auto_from_form ? (
-                          <LineTag
-                            tone="waiting"
-                            title="Fills in by itself when that form is signed."
-                          >
-                            Waiting: sign-off
-                          </LineTag>
-                        ) : (
-                          <LineTag tone="plain">Not answered</LineTag>
-                        )}
-                        <RemarksButton
-                          value={response?.remarks ?? ""}
-                          label={line.description}
-                        />
-                      </div>
-                    </li>
-                  );
-                })}
-              </ul>
-            </div>
+                <ul className="divide-y divide-slate-100">
+                  {formLines.map((line) => {
+                    const response = responseByLine.get(line.id);
+                    const outcome = (response?.outcome ?? null) as
+                      "Yes" | "No" | "N/A" | null;
+                    return (
+                      <li
+                        key={line.id}
+                        className="-mx-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg px-2 py-2.5 hover:bg-slate-50"
+                      >
+                        <LineText description={line.description} />
+                        <div className="flex flex-wrap items-center gap-2">
+                          {outcome ? (
+                            <LineTag
+                              tone={
+                                outcome === "No"
+                                  ? "no"
+                                  : outcome === "N/A"
+                                    ? "plain"
+                                    : "done"
+                              }
+                            >
+                              {outcome === "Yes"
+                                ? `✓ ${labels.Yes}`
+                                : labels[outcome]}
+                            </LineTag>
+                          ) : line.auto_from_form ? (
+                            <LineTag
+                              tone="waiting"
+                              title="Fills in by itself when that form is signed."
+                            >
+                              Waiting: sign-off
+                            </LineTag>
+                          ) : (
+                            <LineTag tone="plain">Not answered</LineTag>
+                          )}
+                          <RemarksButton
+                            value={response?.remarks ?? ""}
+                            label={line.description}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            </details>
           );
         })}
       </div>
