@@ -63,7 +63,7 @@ export default async function ClearancePrintPage({ params }: { params: Promise<{
       hr.rpc("clearance_list_units"),
       hr
         .from("clearance_hr_details")
-        .select("resignation_letter_date, unserved_notice_days, annual_leave_balance, other_outstanding")
+        .select("resignation_letter_date, unserved_notice_days, annual_leave_balance, other_outstanding, handing_over_to, email_forward_to")
         .eq("case_id", id)
         .maybeSingle(),
     ]);
@@ -96,17 +96,15 @@ export default async function ClearancePrintPage({ params }: { params: Promise<{
   const formLines = (formKey: string) =>
     lines.filter((l) => l.form_key === formKey && !(formKey === "page_one" && PAGE1_KEYS.has(l.line_key)));
 
-  // Page 1 status of one form: "Cleared · Name (Designation), date" for its signers, or "Skipped".
-  // A form can have two signing parts (Admin + Store); when one person signs both, they are
-  // printed once (uniqueSigners), not twice.
+  // Page 1 checklist box of one form: only a tick once every part of it is cleared (signed, or
+  // skipped), "N/A" when all its parts were skipped, else empty. The signatures themselves are on
+  // pages 2 and 3.
   const formStatus = (formKey: string) => {
     const slots = slotsOfForm(formKey);
-    const signed = uniqueSigners(slots.map((s) => signoffBySlot.get(s)));
-    const skips = [...new Set(slots.flatMap((s) => (signoffBySlot.has(s) ? [] : (skipBySlot.get(s) ?? []))))];
-    return [
-      ...(signed.length > 0 ? [`Cleared · ${signed.map(signerText).join(" · ")}`] : []),
-      ...skips.map((reason) => `Skipped: ${reason}`),
-    ].join(" · ");
+    if (slots.length === 0) return "";
+    const allSkipped = slots.every((s) => !signoffBySlot.has(s) && skipBySlot.has(s));
+    if (allSkipped) return "N/A";
+    return slots.every((s) => signoffBySlot.has(s) || skipBySlot.has(s)) ? "✓" : "";
   };
   const slotsOfForm = (formKey: string) =>
     [...new Set(lines.filter((l) => l.form_key === formKey).map((l) => l.slot_key))];
@@ -167,19 +165,19 @@ export default async function ClearancePrintPage({ params }: { params: Promise<{
             <tbody>
               <tr>
                 <td className={`${cell} w-1/2`}>Administration/Sales Operation/Area Office</td>
-                <td className={cell}>{formStatus("admin")}</td>
+                <td className={`${cell} font-semibold`}>{formStatus("admin")}</td>
               </tr>
               <tr>
                 <td className={cell}>Finance</td>
-                <td className={cell}>{formStatus("accounts")}</td>
+                <td className={`${cell} font-semibold`}>{formStatus("accounts")}</td>
               </tr>
               <tr>
                 <td className={cell}>Information Technology</td>
-                <td className={cell}>{formStatus("it")}</td>
+                <td className={`${cell} font-semibold`}>{formStatus("it")}</td>
               </tr>
               <tr className="bg-amber-50 print:bg-amber-50">
                 <td className={cell}>Handing over done to</td>
-                <td className={cell}>Mr. / Ms.: {remarksOf(PAGE1_LINES.handingOver) ?? ""}</td>
+                <td className={cell}>Mr. / Ms.: {details?.handing_over_to ?? remarksOf(PAGE1_LINES.handingOver) ?? ""}</td>
               </tr>
               <tr className="bg-amber-50">
                 <td className={cell}>Complete Data received by Line Manager</td>
@@ -190,7 +188,7 @@ export default async function ClearancePrintPage({ params }: { params: Promise<{
               </tr>
               <tr className="bg-amber-50">
                 <td className={cell}>Email forwarding to:</td>
-                <td className={cell}>{remarksOf(PAGE1_LINES.emailForward) ?? ""}</td>
+                <td className={cell}>{details?.email_forward_to ?? remarksOf(PAGE1_LINES.emailForward) ?? ""}</td>
               </tr>
             </tbody>
           </table>

@@ -1370,6 +1370,8 @@ export type Database = {
           overtime_triple: number | null;
           annual_leave_balance: number | null;
           other_outstanding: string | null;
+          handing_over_to: string | null;
+          email_forward_to: string | null;
           updated_by: string | null;
           updated_at: string;
         };
@@ -1642,6 +1644,8 @@ export type Database = {
           p_overtime_triple: number | null;
           p_annual_leave_balance: number | null;
           p_other_outstanding: string | null;
+          p_handing_over_to: string | null;
+          p_email_forward_to: string | null;
         };
         Returns: undefined;
       };

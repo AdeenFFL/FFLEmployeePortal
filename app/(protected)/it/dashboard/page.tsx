@@ -23,7 +23,9 @@ import { formatCost } from "../inventory/asset-status";
 import { cardClass, secondaryButtonClass } from "../_components/ticket-ui";
 import {
   CLEARANCE_TASKS_HREF,
-  loadItSignerCases,
+  HANDOVERS_HREF,
+  loadMyHandovers,
+  loadMySigningTasks,
   loadMyClearanceTaskGroups,
 } from "../../hr/clearance/it-clearance-work";
 
@@ -127,18 +129,30 @@ export default async function ItDashboardPage({
     : { data: null };
   const taskRequestById = new Map((taskRequests ?? []).map((r) => [r.id, r]));
 
-  // HR clearance (its own tables): IT parts waiting for my signature, then the lines / asset
-  // returns the IT lead gave me. Shown only when there is something.
-  const [clearanceSign, clearanceTasks] = personId
+  // HR clearance (its own tables): parts waiting for my signature, the lines / asset returns the
+  // IT lead gave me, and handovers to confirm. Shown only when there is something.
+  const [clearanceSign, clearanceTasks, clearanceHandovers] = personId
     ? await Promise.all([
-        loadItSignerCases(supabase, personId, { activeOnly: true, limit: 8 }),
+        loadMySigningTasks(supabase, personId, "open"),
         loadMyClearanceTaskGroups(supabase),
+        loadMyHandovers(supabase),
       ])
-    : [[], []];
+    : [[], [], []];
   const myClearance = [
-    ...clearanceSign
-      .filter((c) => c.itState === "Waiting for IT")
-      .map((c) => ({ key: `s-${c.id}`, href: c.href, number: c.case_number, text: `${c.employee_name}: sign the IT part` })),
+    ...clearanceSign.map((t) => ({
+      key: `s-${t.key}`,
+      href: t.href,
+      number: t.caseNumber,
+      text: `${t.employeeName}: sign the ${t.partLabel} part`,
+    })),
+    ...clearanceHandovers
+      .filter((h) => h.open)
+      .map((h) => ({
+        key: `h-${h.caseId}`,
+        href: HANDOVERS_HREF,
+        number: h.caseNumber,
+        text: `${h.employeeName}: confirm the handover`,
+      })),
     ...clearanceTasks
       .filter((g) => g.open && g.left > 0)
       .map((g) => ({
@@ -305,7 +319,7 @@ export default async function ItDashboardPage({
           {myClearance.length > 0 && (
             <Card
               title="My clearance work"
-              subtitle="IT parts to sign and clearance tasks"
+              subtitle="Parts to sign, clearance tasks and handovers"
               action={
                 <Link href="/it/my-work?type=clearance" className="text-sm font-medium text-blue-700 hover:underline">
                   My Tasks

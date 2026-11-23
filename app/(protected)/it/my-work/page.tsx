@@ -8,12 +8,14 @@ import { cardClass, FormMessage, PriorityBadge } from "../_components/ticket-ui"
 import type { ItTicketPriority } from "@/types/database";
 import {
   CLEARANCE_TASKS_HREF,
-  loadItSignerCases,
+  HANDOVERS_HREF,
   loadMyClearanceTaskGroups,
+  loadMyHandovers,
+  loadMySigningTasks,
 } from "../../hr/clearance/it-clearance-work";
 
 type Tone = "positive" | "neutral" | "warning" | "negative" | "info";
-type WorkKind = "ticket" | "ticket_task" | "onboarding" | "clearance_task" | "clearance_sign";
+type WorkKind = "ticket" | "ticket_task" | "onboarding" | "clearance_task" | "clearance_sign" | "handover";
 type Row = {
   key: string;
   kind: WorkKind;
@@ -34,6 +36,7 @@ const KIND_LABEL: Record<WorkKind, string> = {
   onboarding: "Onboarding task",
   clearance_task: "Clearance task",
   clearance_sign: "Clearance to sign",
+  handover: "Handover to confirm",
 };
 
 const SHOWS = ["open", "done"] as const;
@@ -44,8 +47,10 @@ const TYPES = [
   { key: "clearance", label: "Clearance" },
 ] as const;
 
-// My Tasks: everything assigned to me in IT, in one list — tickets, tasks on tickets, and
-// onboarding / offboarding / replacement checklist tasks. Each row opens the screen for that one
+// My Tasks: everything assigned to me, in one list — tickets, tasks on tickets, onboarding /
+// offboarding / replacement checklist tasks, and HR clearance work (parts to sign, handed-out
+// lines and assets, line-manager handovers). Open to every role (hr.clearance.sign); each person
+// sees only their own rows. Each row opens the screen for that one
 // piece of work (an onboarding task opens its own task page, not the whole request).
 export default async function MyWorkPage({
   searchParams,
@@ -60,17 +65,19 @@ export default async function MyWorkPage({
 
   const wantTickets = type === "all" || type === "tickets";
   const wantOnboarding = type === "all" || type === "onboarding";
-  // HR clearance (its own tables): lines / assets the IT lead gave me, and IT parts I sign.
+  // HR clearance (its own tables): lines / assets the IT lead gave me, every part I sign (Admin,
+  // Store, Accounts, Department Head, HR, IT) and the handovers I confirm as line manager.
   const wantClearance = type === "all" || type === "clearance";
   const doneLimit = 50;
 
-  const [clearanceGroups, signerCases] =
+  const [clearanceGroups, signingTasks, handovers] =
     personId && wantClearance
       ? await Promise.all([
           loadMyClearanceTaskGroups(supabase),
-          loadItSignerCases(supabase, personId, { activeOnly: show === "open" }),
+          loadMySigningTasks(supabase, personId, show),
+          loadMyHandovers(supabase),
         ])
-      : [[], []];
+      : [[], [], []];
 
   const [{ data: tickets }, { data: ticketTasks }, { data: checklist }] = await Promise.all([
     personId && wantTickets
@@ -191,25 +198,34 @@ export default async function MyWorkPage({
         due: null,
         sortAt: g.latestAssignedAt,
       })),
-    ...signerCases
-      .filter((c) =>
-        show === "open"
-          ? c.itState === "Waiting for IT"
-          : c.itState === "IT signed" || c.status === "Completed",
-      )
+    ...signingTasks.map((t) => ({
+      key: `cs-${t.key}`,
+      kind: "clearance_sign" as const,
+      href: t.href,
+      reference: t.caseNumber,
+      title: t.employeeName + (t.employeeCode ? ` (${t.employeeCode})` : ""),
+      context: `${t.partLabel} part`,
+      status: t.done ? "Signed" : "To sign",
+      tone: (t.done ? "positive" : "warning") as Tone,
+      priority: null,
+      due: null,
+      sortAt: t.sortAt,
+    })),
+    ...handovers
+      .filter((h) => (show === "open" ? h.open : Boolean(h.confirmedAt)))
       .slice(0, show === "open" ? undefined : doneLimit)
-      .map((c) => ({
-        key: `cs-${c.id}`,
-        kind: "clearance_sign" as const,
-        href: c.href,
-        reference: c.case_number,
-        title: c.employee_name + (c.employee_code ? ` (${c.employee_code})` : ""),
-        context: "IT part of the clearance",
-        status: c.itState ?? c.status,
-        tone: (c.itState === "Waiting for IT" ? "warning" : "positive") as Tone,
+      .map((h) => ({
+        key: `ho-${h.caseId}`,
+        kind: "handover" as const,
+        href: HANDOVERS_HREF,
+        reference: h.caseNumber,
+        title: h.employeeName + (h.employeeCode ? ` (${h.employeeCode})` : ""),
+        context: "Confirm you received the complete data (line manager)",
+        status: h.confirmedAt ? "Confirmed" : "To confirm",
+        tone: (h.confirmedAt ? "positive" : "warning") as Tone,
         priority: null,
         due: null,
-        sortAt: c.created_at,
+        sortAt: h.confirmedAt ?? h.caseNumber,
       })),
   ];
 
@@ -241,7 +257,7 @@ export default async function MyWorkPage({
     <div className="py-6">
       <PageHeader
         title="My Tasks"
-        description="Everything assigned to you in IT: tickets, ticket tasks, onboarding / offboarding tasks and clearance work."
+        description="Everything waiting for you: tickets, ticket tasks, onboarding / offboarding tasks, and clearance parts to sign, tasks and handovers."
       />
       <FormMessage error={sp.error} notice={sp.notice} />
 

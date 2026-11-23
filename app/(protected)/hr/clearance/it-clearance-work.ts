@@ -1,7 +1,8 @@
 import "server-only";
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
-import { loadSignerSetup } from "./signer-work";
+import { loadSignerSetup, mySlotsForCase, myScopes } from "./signer-work";
+import { cleanSlotLabel } from "../clearance-requests/clearance-view";
 
 // "My IT clearance work", shared by the IT screens (My Tasks, Requests, Dashboard) so they all
 // follow the same rules. Nothing new in the database: the clearance tables stay where they are
@@ -144,3 +145,163 @@ export async function loadMyClearanceTaskGroups(supabase: Client): Promise<Clear
 }
 
 export const CLEARANCE_TASKS_HREF = "/hr/clearance/tasks";
+
+// ---------------------------------------------------------------------------------------------
+// Every clearance task of mine, for My Tasks and its sidebar count: the parts I sign (any part:
+// Admin, Store, Accounts, Department Head, HR, IT), and the handovers I must confirm as the
+// line manager. Same rules as the signer inbox (signer-work.ts) and My Requests.
+
+export type SigningTask = {
+  key: string;
+  caseId: string;
+  caseNumber: string;
+  employeeName: string;
+  employeeCode: string | null;
+  partLabel: string;
+  href: string;
+  // Open: when the case was created. Done: when I signed.
+  sortAt: string;
+  done: boolean;
+};
+
+// Open: the parts I sign on cases now In Clearance that are not signed or skipped yet.
+// Done: the parts I signed (most recent 50).
+export async function loadMySigningTasks(
+  supabase: Client,
+  personId: string,
+  show: "open" | "done",
+): Promise<SigningTask[]> {
+  const hr = supabase.schema("hr");
+  if (show === "done") {
+    const { data } = await hr
+      .from("clearance_signoffs")
+      .select("case_id, slot_key, signed_at, clearance_cases(case_number, employee_name, employee_code), clearance_slots(label)")
+      .eq("signed_by_person_id", personId)
+      .order("signed_at", { ascending: false })
+      .limit(50);
+    return (data ?? []).map((s) => {
+      const c = Array.isArray(s.clearance_cases) ? s.clearance_cases[0] : s.clearance_cases;
+      const slot = Array.isArray(s.clearance_slots) ? s.clearance_slots[0] : s.clearance_slots;
+      return {
+        key: `${s.case_id}:${s.slot_key}`,
+        caseId: s.case_id,
+        caseNumber: c?.case_number ?? "Clearance",
+        employeeName: c?.employee_name ?? "",
+        employeeCode: c?.employee_code ?? null,
+        partLabel: cleanSlotLabel(slot?.label ?? s.slot_key),
+        href: `/hr/clearance/${s.case_id}/${s.slot_key}`,
+        sortAt: s.signed_at,
+        done: true,
+      };
+    });
+  }
+
+  const setup = await loadSignerSetup(supabase, personId);
+  if (setup.error) return [];
+  const { siteIds, departmentIds } = myScopes(setup.signers, setup.slots);
+  const scopeFilter = [
+    siteIds.length ? `site_id.in.(${siteIds.join(",")})` : null,
+    departmentIds.length ? `department_id.in.(${departmentIds.join(",")})` : null,
+  ]
+    .filter(Boolean)
+    .join(",");
+  if (!scopeFilter) return [];
+
+  const { data: cases } = await hr
+    .from("clearance_cases")
+    .select("id, case_number, employee_name, employee_code, site_id, department_id, created_at")
+    .eq("status", "In Clearance")
+    .neq("person_id", personId)
+    .or(scopeFilter)
+    .order("created_at", { ascending: false });
+  if (!cases?.length) return [];
+
+  const ids = cases.map((c) => c.id);
+  const [{ data: signoffs }, { data: skips }] = await Promise.all([
+    hr.from("clearance_signoffs").select("case_id, slot_key").in("case_id", ids),
+    hr.from("clearance_skips").select("case_id, slot_key").in("case_id", ids),
+  ]);
+  const closed = new Set([...(signoffs ?? []), ...(skips ?? [])].map((s) => `${s.case_id}:${s.slot_key}`));
+
+  return cases.flatMap((c) =>
+    mySlotsForCase(c, setup.signers, setup.slots)
+      .filter((s) => !closed.has(`${c.id}:${s.slot_key}`))
+      .map((s) => ({
+        key: `${c.id}:${s.slot_key}`,
+        caseId: c.id,
+        caseNumber: c.case_number,
+        employeeName: c.employee_name,
+        employeeCode: c.employee_code,
+        partLabel: cleanSlotLabel(s.label),
+        href: `/hr/clearance/${c.id}/${s.slot_key}`,
+        sortAt: c.created_at,
+        done: false,
+      })),
+  );
+}
+
+export type HandoverTask = {
+  caseId: string;
+  caseNumber: string;
+  employeeName: string;
+  employeeCode: string | null;
+  confirmedAt: string | null;
+  caseStatus: string;
+  // Still to confirm: the case is In Clearance and not confirmed yet.
+  open: boolean;
+};
+
+// The leaving employees HR chose me as the line manager for (my_handover_requests).
+export async function loadMyHandovers(supabase: Client): Promise<HandoverTask[]> {
+  const { data, error } = await supabase.schema("hr").rpc("my_handover_requests");
+  if (error) return [];
+  return (data ?? []).map((h) => ({
+    caseId: h.case_id,
+    caseNumber: h.case_number,
+    employeeName: h.employee_name,
+    employeeCode: h.employee_code,
+    confirmedAt: h.confirmed_at,
+    caseStatus: h.case_status,
+    open: h.case_status === "In Clearance" && !h.confirmed_at,
+  }));
+}
+
+export const HANDOVERS_HREF = "/requests";
+
+// The number on "My Tasks" in the sidebar: everything still to do — IT tickets, ticket tasks and
+// onboarding tasks assigned to me, the clearance parts I sign, my clearance tasks with something
+// left, and handovers to confirm. Head-only counts where possible; any part that fails counts 0.
+export async function countMyOpenWork(supabase: Client): Promise<number> {
+  const { data: personId } = await supabase.rpc("current_person_id");
+  if (!personId) return 0;
+  const it = supabase.schema("it");
+  const [tickets, ticketTasks, checklist, signing, groups, handovers] = await Promise.all([
+    it
+      .from("tickets")
+      .select("id", { count: "exact", head: true })
+      .eq("assigned_to_person_id", personId)
+      .not("status", "in", "(Resolved,Closed)"),
+    it
+      .from("ticket_tasks")
+      .select("id", { count: "exact", head: true })
+      .eq("assigned_to_person_id", personId)
+      .in("status", ["Pending", "In Progress"]),
+    it
+      .from("checklist_items")
+      .select("id", { count: "exact", head: true })
+      .eq("assigned_to_person_id", personId)
+      .in("status", ["Pending", "In Progress"]),
+    loadMySigningTasks(supabase, personId, "open"),
+    loadMyClearanceTaskGroups(supabase),
+    loadMyHandovers(supabase),
+  ]);
+  const headCount = (r: { count: number | null; error: unknown }) => (r.error ? 0 : (r.count ?? 0));
+  return (
+    headCount(tickets) +
+    headCount(ticketTasks) +
+    headCount(checklist) +
+    signing.length +
+    groups.filter((g) => g.open && g.left > 0).length +
+    handovers.filter((h) => h.open).length
+  );
+}

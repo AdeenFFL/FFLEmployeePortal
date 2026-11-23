@@ -49,7 +49,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   // IT module — Service Management track (08-it-service-management-plan.md §4).
   "/it/my-tickets": "module:it",
   // My Tasks: tickets, ticket tasks and onboarding checklist tasks assigned to me (RLS limits rows).
-  "/it/my-work": ["it.tickets.read", "it.tickets.update", "it.onboarding.read", "it.onboarding.update", "it.onboarding.assign"],
+  // Also HR clearance work (parts to sign, handovers): hr.clearance.sign, which every role holds.
+  "/it/my-work": ["it.tickets.read", "it.tickets.update", "it.onboarding.read", "it.onboarding.update", "it.onboarding.assign", "hr.clearance.sign"],
   "/it/tickets": "it.tickets.read",
   "/it/my-onboarding": "module:it",
   // More specific prefixes first — permissionKeyForPath returns the first match. The two /new

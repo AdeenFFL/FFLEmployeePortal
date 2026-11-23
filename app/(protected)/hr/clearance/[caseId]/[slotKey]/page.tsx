@@ -126,7 +126,7 @@ export default async function ClearanceSlotPage({
       ? hr
           .from("clearance_hr_details")
           .select(
-            "resignation_letter_date, resignation_effective_from, unserved_notice_days, overtime_single, overtime_double, overtime_triple, annual_leave_balance, other_outstanding, updated_at",
+            "resignation_letter_date, resignation_effective_from, unserved_notice_days, overtime_single, overtime_double, overtime_triple, annual_leave_balance, other_outstanding, handing_over_to, email_forward_to, updated_at",
           )
           .eq("case_id", caseId)
           .maybeSingle()

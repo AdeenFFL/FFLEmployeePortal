@@ -18,7 +18,9 @@ export type HrDetailKey =
   | "overtime_double"
   | "overtime_triple"
   | "annual_leave_balance"
-  | "other_outstanding";
+  | "other_outstanding"
+  | "handing_over_to"
+  | "email_forward_to";
 
 // What the form holds: every value as text ("" = empty).
 export type HrDetailsValues = Record<HrDetailKey, string>;
@@ -90,6 +92,14 @@ export const HR_DETAIL_GROUPS: { title: string; fields: HrDetailField[] }[] = [
       },
     ],
   },
+  {
+    // Who holds the leaving employee's charge and mail now (printed on page one of the form).
+    title: "Charge handover",
+    fields: [
+      { key: "handing_over_to", label: "Handing over done to (Mr. / Ms.)", kind: "text", maxLength: 200 },
+      { key: "email_forward_to", label: "Email forwarding to", kind: "text", maxLength: 200 },
+    ],
+  },
 ];
 
 export const HR_DETAIL_FIELDS = HR_DETAIL_GROUPS.flatMap((g) => g.fields);
@@ -114,6 +124,8 @@ type SavedDetails = {
   overtime_triple: number | null;
   annual_leave_balance: number | null;
   other_outstanding: string | null;
+  handing_over_to: string | null;
+  email_forward_to: string | null;
 };
 
 // The values to show: the contact fields come from the case, the rest from hr.clearance_hr_details
@@ -135,6 +147,8 @@ export function toHrDetailsValues(c: CaseDetails, saved: SavedDetails | null): H
     overtime_triple: text(saved?.overtime_triple),
     annual_leave_balance: text(saved?.annual_leave_balance),
     other_outstanding: text(saved?.other_outstanding),
+    handing_over_to: text(saved?.handing_over_to),
+    email_forward_to: text(saved?.email_forward_to),
   };
 }
 

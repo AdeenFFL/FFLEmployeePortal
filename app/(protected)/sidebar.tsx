@@ -28,7 +28,15 @@ type IconComponent = (props: { className?: string }) => React.ReactElement;
 // unified Requests queue, which needs it.tickets.read OR it.onboarding.read).
 type Permission = string | string[];
 type NavChild = { href: string; label: string; permission?: Permission };
-type NavLeaf = { type: "link"; href: string; label: string; icon: IconComponent; permission?: Permission };
+type NavLeaf = {
+  type: "link";
+  href: string;
+  label: string;
+  icon: IconComponent;
+  permission?: Permission;
+  // "myTasks": shows the number of open tasks (taskCount) on the link.
+  badge?: "myTasks";
+};
 type NavGroup = {
   type: "group";
   label: string;
@@ -47,17 +55,23 @@ const PERMISSION_CHECK_MS = 10_000; // at most one live permission check per 10 
 export function Sidebar({
   permissions,
   homePath,
+  taskCount = 0,
 }: {
   permissions: string[];
   homePath: string;
+  // Open tasks of this person (My Tasks badge); refreshed by the same live check as permissions.
+  taskCount?: number;
 }) {
   // The layout (and so these props) is not re-rendered on client-side navigation, so after an
   // admin changes this person's role or its permissions the sidebar would stay as it was until
   // a full reload. Re-check now and then: after navigating, and when the tab comes back into view.
-  const [live, setLive] = useState<{ permissions: string[]; homePath: string } | null>(null);
+  const [live, setLive] = useState<{ permissions: string[]; homePath: string; taskCount?: number } | null>(
+    null,
+  );
   const lastCheckRef = useRef(0);
   const effectivePermissions = live?.permissions ?? permissions;
   const effectiveHomePath = live?.homePath ?? homePath;
+  const effectiveTaskCount = live?.taskCount ?? taskCount;
   const granted = new Set(effectivePermissions);
   const has = (permission?: Permission) =>
     !permission ||
@@ -113,14 +127,24 @@ export function Sidebar({
     { type: "link", href: effectiveHomePath, label: "Home", icon: HomeIcon },
     { type: "link", href: "/profile", label: "My Profile", icon: UserIcon },
     { type: "link", href: "/requests", label: "My Requests", icon: TicketIcon },
-    // The same My Tasks screen as under IT Management: tickets, onboarding and clearance work
-    // (clearance lines and asset returns go only to IT staff).
+    // The same My Tasks screen as under IT Management: tickets, onboarding and clearance work.
+    // Shown to IT staff, clearance signers and anyone with open work (menu flags from
+    // clearance-nav.ts), with the number of open tasks on it.
     {
       type: "link",
       href: "/it/my-work",
       label: "My Tasks",
       icon: TicketIcon,
-      permission: "it.tickets.update",
+      permission: [
+        "it.tickets.read",
+        "it.tickets.update",
+        "it.onboarding.read",
+        "it.onboarding.update",
+        "it.onboarding.assign",
+        "clearance:is_signer",
+        "tasks:has_open",
+      ],
+      badge: "myTasks",
     },
     {
       type: "link",
@@ -310,6 +334,7 @@ export function Sidebar({
     const ItemIcon = entry.icon;
 
     if (entry.type === "link") {
+      const badgeCount = entry.badge === "myTasks" ? effectiveTaskCount : 0;
       return (
         <Link
           key={entry.href}
@@ -323,7 +348,13 @@ export function Sidebar({
               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`}
         >
-          <ItemIcon className="h-4 w-4 shrink-0" />
+          <span className="relative shrink-0">
+            <ItemIcon className="h-4 w-4" />
+            {/* Collapsed rail: a dot on the icon instead of the number. */}
+            {badgeCount > 0 && collapsed && (
+              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500" aria-hidden />
+            )}
+          </span>
           <span
             className={`overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
               collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100"
@@ -331,6 +362,14 @@ export function Sidebar({
           >
             {entry.label}
           </span>
+          {badgeCount > 0 && !collapsed && (
+            <span
+              className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+              aria-label={`${badgeCount} open`}
+            >
+              {badgeCount > 9 ? "9+" : badgeCount}
+            </span>
+          )}
         </Link>
       );
     }

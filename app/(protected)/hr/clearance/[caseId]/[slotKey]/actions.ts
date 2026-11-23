@@ -179,6 +179,8 @@ export async function saveClearanceDetails(
     p_overtime_triple: numbers.overtime_triple ?? null,
     p_annual_leave_balance: numbers.annual_leave_balance ?? null,
     p_other_outstanding: text.other_outstanding ?? null,
+    p_handing_over_to: text.handing_over_to ?? null,
+    p_email_forward_to: text.email_forward_to ?? null,
   });
   if (error) return { error: error.message };
 
