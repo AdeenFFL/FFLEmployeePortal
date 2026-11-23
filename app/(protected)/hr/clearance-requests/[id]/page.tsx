@@ -225,12 +225,21 @@ export default async function ClearanceRequestDetailPage({
             <span>Raised by {c.raised_via === "self" ? "Employee" : "HR"}</span>
           </div>
         </div>
-        <CaseActions
-          caseId={c.id}
-          status={c.status}
-          canForward={Boolean(canForward)}
-          ready={readiness.ready}
-        />
+        <div className="flex flex-wrap items-start gap-3">
+          <Link
+            href={`/print/clearance/${c.id}`}
+            target="_blank"
+            className="rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+          >
+            Print form
+          </Link>
+          <CaseActions
+            caseId={c.id}
+            status={c.status}
+            canForward={Boolean(canForward)}
+            ready={readiness.ready}
+          />
+        </div>
       </div>
 
       {loadError && (

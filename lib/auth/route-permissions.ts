@@ -39,6 +39,8 @@ export const ROUTE_PERMISSIONS: Record<string, RoutePermission> = {
   "/hr/admin/roles": "hr.manage_role_permissions",
   "/hr/admin/clearance-signers": "hr.clearance.read_all",
   "/hr/clearance-requests": "hr.clearance.read_all",
+  // Printable clearance form (outside the menu layout).
+  "/print/clearance": "hr.clearance.read_all",
   // Clearance landing page (cards); every role that can sign or read all holds hr.clearance.sign.
   "/hr/clearance-home": "hr.clearance.sign",
   // Old URL, now only a redirect to /hr/clearance-requests.
