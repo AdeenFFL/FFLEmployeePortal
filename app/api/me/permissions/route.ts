@@ -11,7 +11,9 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const [{ permissions, homePath }, navExtras] = await Promise.all([getCurrentUserNav(), getNavExtras()]);
   return NextResponse.json(
-    { permissions: [...permissions, ...navExtras.keys], homePath, taskCount: navExtras.taskCount },
+    { permissions: [...permissions, ...navExtras.keys], homePath, taskCount: navExtras.taskCount,
+      clearanceCount: navExtras.clearanceCount,
+    },
     { headers: { "Cache-Control": "no-store" } },
   );
 }

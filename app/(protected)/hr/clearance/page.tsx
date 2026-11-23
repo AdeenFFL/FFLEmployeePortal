@@ -18,6 +18,10 @@ const th = "px-4 py-2";
 
 // The signer inbox: the parts (slots) this person signs on cases now In Clearance, and the parts
 // they already signed. See signer-work.ts for how "my slots" are worked out without a new function.
+// "Open" links as small soft pills.
+const openPill =
+  "inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-200";
+
 export default async function ClearanceInboxPage() {
   const supabase = await createClient();
   const hr = supabase.schema("hr");
@@ -142,11 +146,18 @@ export default async function ClearanceInboxPage() {
 
   return (
     <div className="py-6">
-      <Link href="/hr/clearance-home" className="mb-3 inline-block text-sm text-slate-500 hover:text-slate-700">← Clearance</Link>
-      <PageHeader
-        title="Clearance to sign"
-        description="Your parts of the offboarding clearance forms: fill them in and sign."
-      />
+      {/* Round back button (words in the tooltip) beside the title. */}
+      <div className="flex items-start gap-3">
+        <Link
+          href="/hr/clearance-home"
+          title="Back to Clearance"
+          aria-label="Back to Clearance"
+          className="mt-0.5 inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 hover:text-slate-900"
+        >
+          ←
+        </Link>
+        <PageHeader title="Clearance to sign" />
+      </div>
 
       {openTaskCount > 0 && (
         <Link
@@ -159,7 +170,7 @@ export default async function ClearanceInboxPage() {
             </span>{" "}
             assigned to you by the IT Team Lead.
           </span>
-          <span className="font-medium">Open my tasks →</span>
+          <span className={openPill}>Open my tasks</span>
         </Link>
       )}
 
@@ -213,11 +224,8 @@ export default async function ClearanceInboxPage() {
                     )}
                   </td>
                   <td className="px-4 py-3 text-right">
-                    <Link
-                      href={`/hr/clearance/${w.c.id}/${w.slot.slot_key}`}
-                      className="font-medium text-blue-700 hover:underline"
-                    >
-                      Open →
+                    <Link href={`/hr/clearance/${w.c.id}/${w.slot.slot_key}`} className={openPill}>
+                      Open
                     </Link>
                   </td>
                 </tr>

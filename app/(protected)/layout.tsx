@@ -34,7 +34,9 @@ export default async function ProtectedLayout({
           independently scrolling column (see sidebar.tsx) — the outer h-screen + overflow-hidden
           here is what stops the *page* from scrolling, so the sidebar and TopBar stay put and
           only <main> scrolls. */}
-      <Sidebar permissions={navKeys} homePath={homePath} taskCount={navExtras.taskCount} />
+      <Sidebar permissions={navKeys} homePath={homePath} taskCount={navExtras.taskCount}
+        clearanceCount={navExtras.clearanceCount}
+      />
       {/* min-w-0: without it this column grows to fit its widest content (a wide table), pushing
           the page wider than the window: sideways scrolling and a white strip past the grey. */}
       <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">

@@ -27,15 +27,17 @@ type IconComponent = (props: { className?: string }) => React.ReactElement;
 // used for nav entries that front more than one underlying permission-gated resource (e.g. the
 // unified Requests queue, which needs it.tickets.read OR it.onboarding.read).
 type Permission = string | string[];
-type NavChild = { href: string; label: string; permission?: Permission };
+// "myTasks": the number of open tasks (taskCount) on the link; "clearance": the clearance
+// requests waiting to be forwarded (clearanceCount).
+type NavBadge = "myTasks" | "clearance";
+type NavChild = { href: string; label: string; permission?: Permission; badge?: NavBadge };
 type NavLeaf = {
   type: "link";
   href: string;
   label: string;
   icon: IconComponent;
   permission?: Permission;
-  // "myTasks": shows the number of open tasks (taskCount) on the link.
-  badge?: "myTasks";
+  badge?: NavBadge;
 };
 type NavGroup = {
   type: "group";
@@ -56,22 +58,31 @@ export function Sidebar({
   permissions,
   homePath,
   taskCount = 0,
+  clearanceCount = 0,
 }: {
   permissions: string[];
   homePath: string;
   // Open tasks of this person (My Tasks badge); refreshed by the same live check as permissions.
   taskCount?: number;
+  // Clearance requests waiting to be forwarded (Clearance badge); same live check.
+  clearanceCount?: number;
 }) {
   // The layout (and so these props) is not re-rendered on client-side navigation, so after an
   // admin changes this person's role or its permissions the sidebar would stay as it was until
   // a full reload. Re-check now and then: after navigating, and when the tab comes back into view.
-  const [live, setLive] = useState<{ permissions: string[]; homePath: string; taskCount?: number } | null>(
+  const [live, setLive] = useState<{
+    permissions: string[];
+    homePath: string;
+    taskCount?: number;
+    clearanceCount?: number;
+  } | null>(
     null,
   );
   const lastCheckRef = useRef(0);
   const effectivePermissions = live?.permissions ?? permissions;
   const effectiveHomePath = live?.homePath ?? homePath;
   const effectiveTaskCount = live?.taskCount ?? taskCount;
+  const effectiveClearanceCount = live?.clearanceCount ?? clearanceCount;
   const granted = new Set(effectivePermissions);
   const has = (permission?: Permission) =>
     !permission ||
@@ -188,6 +199,7 @@ export function Sidebar({
           href: "/hr/clearance-home",
           label: "Clearance",
           permission: ["hr.clearance.read_all", "clearance:is_signer"],
+          badge: "clearance",
         },
         {
           href: "/hr/feedback/anonymous",
@@ -329,12 +341,23 @@ export function Sidebar({
     });
   }
 
+  const countFor = (badge?: NavBadge) =>
+    badge === "myTasks" ? effectiveTaskCount : badge === "clearance" ? effectiveClearanceCount : 0;
+  const countPill = (n: number) => (
+    <span
+      className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
+      aria-label={`${n} open`}
+    >
+      {n > 9 ? "9+" : n}
+    </span>
+  );
+
   function renderEntry(entry: NavEntry) {
     const active = isEntryActive(entry);
     const ItemIcon = entry.icon;
 
     if (entry.type === "link") {
-      const badgeCount = entry.badge === "myTasks" ? effectiveTaskCount : 0;
+      const badgeCount = countFor(entry.badge);
       return (
         <Link
           key={entry.href}
@@ -362,14 +385,7 @@ export function Sidebar({
           >
             {entry.label}
           </span>
-          {badgeCount > 0 && !collapsed && (
-            <span
-              className="rounded-full bg-red-500 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-white"
-              aria-label={`${badgeCount} open`}
-            >
-              {badgeCount > 9 ? "9+" : badgeCount}
-            </span>
-          )}
+          {badgeCount > 0 && !collapsed && countPill(badgeCount)}
         </Link>
       );
     }
@@ -377,6 +393,8 @@ export function Sidebar({
     // Collapsing the whole rail also closes every group visually — there's no room to show
     // children in icon-only width, and hovering back in restores whatever was open before.
     const isOpen = !collapsed && expanded.has(entry.label);
+    // A child's number also shows on its group while the group is closed (a dot when collapsed).
+    const groupCount = entry.children.reduce((sum, c) => sum + countFor(c.badge), 0);
     return (
       <div key={entry.label}>
         <button
@@ -391,7 +409,12 @@ export function Sidebar({
               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`}
         >
-          <ItemIcon className="h-4 w-4 shrink-0" />
+          <span className="relative shrink-0">
+            <ItemIcon className="h-4 w-4" />
+            {groupCount > 0 && collapsed && (
+              <span className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-500" aria-hidden />
+            )}
+          </span>
           <span
             className={`overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
               collapsed ? "max-w-0 opacity-0" : "max-w-40 flex-1 opacity-100"
@@ -399,6 +422,7 @@ export function Sidebar({
           >
             {entry.label}
           </span>
+          {groupCount > 0 && !collapsed && !isOpen && countPill(groupCount)}
           {!collapsed && (
             <ChevronDownIcon
               className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -415,13 +439,14 @@ export function Sidebar({
                 <Link
                   key={child.href}
                   href={child.href}
-                  className={`block rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  className={`flex items-center justify-between gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
                     childActive
                       ? "bg-blue-50 font-medium text-blue-700"
                       : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                 >
                   {child.label}
+                  {countFor(child.badge) > 0 && countPill(countFor(child.badge))}
                 </Link>
               );
             })}

@@ -3,6 +3,7 @@
 import { useState, useTransition } from "react";
 import { saveClearanceAnswer, signClearancePart } from "./actions";
 import { LineAssign, type LineAssignee } from "./line-assign";
+import { LineTag, RemarksButton } from "./remarks-button";
 
 type Outcome = "Yes" | "No" | "N/A";
 type Answer = { outcome: Outcome | null; remarks: string };
@@ -26,8 +27,31 @@ const NEGATIVE_NEEDS_REMARK = "Please write a short remark for this answer.";
 const CONFIRM_TEXT =
   "I confirm this part is complete. Your name and the time are recorded as your electronic signature.";
 
-const inputClass =
-  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
+// One line = one row (wraps on a narrow screen), lit up on hover. The signed view in page.tsx
+// uses the same look.
+const rowHover = "-mx-2 rounded-lg px-2 py-2.5 hover:bg-slate-50";
+const rowClass = `flex flex-wrap items-center gap-x-4 gap-y-2 ${rowHover}`;
+
+// The segmented toggle: short marks, the form's own word on hover. The chosen one is filled.
+const SEGMENT_TEXT: Record<Outcome, string> = {
+  Yes: "✓",
+  No: "✗",
+  "N/A": "N/A",
+};
+
+// A line's text; a closing "(…)" (e.g. "(if any)", "(in case required)") goes under it as a
+// small grey hint.
+export function LineText({ description }: { description: string }) {
+  const m = description.match(/^(.*\S)\s*\(([^()]+)\)\s*$/);
+  const main = m ? m[1] : description;
+  const hint = m ? m[2].charAt(0).toUpperCase() + m[2].slice(1) : null;
+  return (
+    <div className="min-w-0 flex-1 basis-64">
+      <p className="text-sm font-medium text-slate-900">{main}</p>
+      {hint && <p className="text-xs text-slate-400">{hint}</p>}
+    </div>
+  );
+}
 
 function sameAnswer(a: Answer, b: Answer) {
   return a.outcome === b.outcome && a.remarks.trim() === b.remarks.trim();
@@ -59,7 +83,10 @@ export function SlotForm({
   const editable = lines.filter((l) => !l.auto && !l.lockedNote);
   const initial = () =>
     new Map<string, Answer>(
-      editable.map((l) => [l.id, { outcome: l.outcome, remarks: l.remarks ?? "" }]),
+      editable.map((l) => [
+        l.id,
+        { outcome: l.outcome, remarks: l.remarks ?? "" },
+      ]),
     );
 
   // `saved` is what the database holds; `draft` is what is on screen.
@@ -68,6 +95,8 @@ export function SlotForm({
   const [lineErrors, setLineErrors] = useState<Map<string, string>>(new Map());
   const [justSaved, setJustSaved] = useState<Set<string>>(new Set());
   const [saveError, setSaveError] = useState<string | null>(null);
+  // The line whose Remarks popup is open (at most one).
+  const [remarksOpenFor, setRemarksOpenFor] = useState<string | null>(null);
   const [isSaving, startSaving] = useTransition();
 
   const [confirmed, setConfirmed] = useState(false);
@@ -78,10 +107,14 @@ export function SlotForm({
   const changedIds = editable
     .filter((l) => !sameAnswer(draft.get(l.id)!, saved.get(l.id)!))
     .map((l) => l.id);
-  const unansweredCount = editable.filter((l) => !saved.get(l.id)!.outcome).length;
+  const unansweredCount = editable.filter(
+    (l) => !saved.get(l.id)!.outcome,
+  ).length;
 
   function update(lineId: string, patch: Partial<Answer>) {
-    setDraft((prev) => new Map(prev).set(lineId, { ...prev.get(lineId)!, ...patch }));
+    setDraft((prev) =>
+      new Map(prev).set(lineId, { ...prev.get(lineId)!, ...patch }),
+    );
     setJustSaved((prev) => {
       const next = new Set(prev);
       next.delete(lineId);
@@ -98,9 +131,15 @@ export function SlotForm({
           const answer = draft.get(lineId)!;
           let error: string | null = null;
           if (!answer.outcome) error = "Please choose an answer.";
-          else if (answer.outcome === "No" && !answer.remarks.trim()) error = NEGATIVE_NEEDS_REMARK;
+          else if (answer.outcome === "No" && !answer.remarks.trim())
+            error = NEGATIVE_NEEDS_REMARK;
           else {
-            const result = await saveClearanceAnswer(caseId, lineId, answer.outcome, answer.remarks);
+            const result = await saveClearanceAnswer(
+              caseId,
+              lineId,
+              answer.outcome,
+              answer.remarks,
+            );
             error = result.error;
           }
           if (error) {
@@ -139,86 +178,135 @@ export function SlotForm({
     );
   }
   if (lines.some((l) => l.lockedNote && !l.outcome)) {
-    signBlockers.push("Waiting for the line manager to confirm “Complete data received”.");
+    signBlockers.push(
+      "Waiting for the line manager to confirm “Complete data received”.",
+    );
   }
   if (signBlocker) signBlockers.push(signBlocker);
   if (changedIds.length > 0) signBlockers.push("Save your answers first.");
   const busy = isSaving || isSigning;
 
+  // "No" answers on screen that still have no remark (the footer counts them).
+  const noWithoutRemark = editable.filter((l) => {
+    const a = draft.get(l.id)!;
+    return a.outcome === "No" && !a.remarks.trim();
+  }).length;
+
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex w-full flex-col gap-4">
       {lines.length === 0 ? (
         <p className="text-sm text-slate-600">
-          This part has no checklist. Sign to confirm the employee&apos;s department clearance.
+          This part has no checklist. Sign to confirm the employee&apos;s
+          department clearance.
         </p>
       ) : (
+        // One row per line: the text (and its hint) on the left; the answer (or a tag saying
+        // where the process is waiting), Remarks and, on the IT part, Assign on the right.
         <ol className="flex flex-col divide-y divide-slate-100">
           {lines.map((line) => {
-            if (line.auto) {
+            if (line.auto || line.lockedNote) {
+              const waitingTitle = line.auto
+                ? `Fills in by itself when the ${line.autoFormTitle} form is signed.`
+                : (line.lockedNote ?? undefined);
               return (
-                <li key={line.id} className="py-4">
-                  <p className="text-sm font-medium text-slate-900">{line.description}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {line.outcome
-                      ? `${labels[line.outcome]} (filled in when the ${line.autoFormTitle} form was signed)`
-                      : `Fills in by itself when the ${line.autoFormTitle} form is signed.`}
-                  </p>
-                </li>
-              );
-            }
-            if (line.lockedNote) {
-              return (
-                <li key={line.id} className="py-4">
-                  <p className="text-sm font-medium text-slate-900">{line.description}</p>
-                  <p className="mt-1 text-xs text-slate-500">
-                    {line.outcome
-                      ? `${labels[line.outcome]}${line.remarks ? ` · ${line.remarks}` : ""}`
-                      : line.lockedNote}
-                  </p>
+                <li key={line.id} className={rowClass}>
+                  <LineText description={line.description} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {line.outcome ? (
+                      <LineTag
+                        tone={line.outcome === "No" ? "no" : "done"}
+                        title={waitingTitle}
+                      >
+                        {line.outcome === "No"
+                          ? labels.No
+                          : `✓ ${labels[line.outcome]}`}
+                      </LineTag>
+                    ) : (
+                      <LineTag tone="waiting" title={waitingTitle}>
+                        {line.auto
+                          ? `Waiting: ${line.autoFormTitle} sign-off`
+                          : "Waiting: line manager"}
+                      </LineTag>
+                    )}
+                    <RemarksButton
+                      value={line.remarks ?? ""}
+                      label={line.description}
+                    />
+                  </div>
                 </li>
               );
             }
             const answer = draft.get(line.id)!;
             const error = lineErrors.get(line.id);
             return (
-              <li key={line.id} className="flex flex-col gap-2 py-4">
-                <p className="text-sm font-medium text-slate-900">{line.description}</p>
-                <div className="flex flex-wrap gap-4" role="radiogroup" aria-label={line.description}>
-                  {OUTCOMES.map((o) => (
-                    <label key={o} className="flex items-center gap-2 text-sm text-slate-700">
-                      <input
-                        type="radio"
-                        name={`answer-${line.id}`}
-                        checked={answer.outcome === o}
-                        onChange={() => update(line.id, { outcome: o })}
+              <li key={line.id} className={`flex flex-col gap-1 ${rowHover}`}>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+                  <LineText description={line.description} />
+                  <div className="flex flex-wrap items-center gap-2">
+                    {/* Segmented toggle: ✓ / ✗ / N/A; clicking the chosen one clears it. */}
+                    <div
+                      className="inline-flex overflow-hidden rounded-lg border border-slate-300"
+                      role="radiogroup"
+                      aria-label={line.description}
+                    >
+                      {OUTCOMES.map((o, i) => {
+                        const selected = answer.outcome === o;
+                        return (
+                          <button
+                            key={o}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            aria-label={labels[o]}
+                            title={labels[o]}
+                            disabled={busy}
+                            onClick={() => {
+                              update(line.id, {
+                                outcome: selected ? null : o,
+                              });
+                              // "No" needs a remark: open the box straight away.
+                              if (
+                                !selected &&
+                                o === "No" &&
+                                !answer.remarks.trim()
+                              )
+                                setRemarksOpenFor(line.id);
+                            }}
+                            className={`min-w-10 px-3 py-1 text-xs font-semibold transition-colors disabled:cursor-not-allowed ${
+                              i > 0 ? "border-l border-slate-300" : ""
+                            } ${selected ? "bg-blue-100 text-blue-800" : "bg-white text-slate-400 hover:bg-slate-50"}`}
+                          >
+                            {SEGMENT_TEXT[o]}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <RemarksButton
+                      value={answer.remarks}
+                      onChange={(v) => update(line.id, { remarks: v })}
+                      label={line.description}
+                      required={answer.outcome === "No"}
+                      disabled={busy}
+                      open={remarksOpenFor === line.id}
+                      onOpenChange={(o) =>
+                        setRemarksOpenFor(o ? line.id : null)
+                      }
+                    />
+                    {line.assignee !== undefined && (
+                      <LineAssign
+                        caseId={caseId}
+                        target={{ kind: "line", lineId: line.id }}
+                        assignee={line.assignee}
                         disabled={busy}
+                        label={line.description}
+                        compact
                       />
-                      {labels[o]}
-                    </label>
-                  ))}
+                    )}
+                  </div>
                 </div>
-                <input
-                  type="text"
-                  value={answer.remarks}
-                  onChange={(e) => update(line.id, { remarks: e.target.value })}
-                  maxLength={500}
-                  placeholder={answer.outcome === "No" ? "Remarks (required)" : "Remarks (optional)"}
-                  aria-label={`Remarks: ${line.description}`}
-                  className={inputClass}
-                  disabled={busy}
-                />
                 {error && <p className="text-xs text-red-700">{error}</p>}
                 {!error && justSaved.has(line.id) && (
                   <p className="text-xs text-green-700">Saved</p>
-                )}
-                {line.assignee !== undefined && (
-                  <LineAssign
-                    caseId={caseId}
-                    target={{ kind: "line", lineId: line.id }}
-                    assignee={line.assignee}
-                    disabled={busy}
-                    label={line.description}
-                  />
                 )}
               </li>
             );
@@ -226,37 +314,41 @@ export function SlotForm({
         </ol>
       )}
 
-      {editable.length > 0 && (
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={busy || changedIds.length === 0}
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
-          >
-            {isSaving ? "Saving…" : "Save answers"}
-          </button>
-          {changedIds.length > 0 && !isSaving && (
-            <span className="text-xs text-slate-500">
-              {changedIds.length} unsaved change{changedIds.length === 1 ? "" : "s"}
-            </span>
-          )}
-          {saveError && <p className="text-sm text-red-700">{saveError}</p>}
-        </div>
-      )}
+      {/* Save: only while something on screen is not saved yet (outlined, text only). */}
+      {editable.length > 0 &&
+        (noWithoutRemark > 0 ||
+          changedIds.length > 0 ||
+          isSaving ||
+          saveError) && (
+          <div className="flex flex-wrap items-center gap-3">
+            {noWithoutRemark > 0 && (
+              <p className="w-full text-xs font-medium text-red-700">
+                {noWithoutRemark} “{labels.No}” answer
+                {noWithoutRemark === 1 ? " needs" : "s need"} a remark.
+              </p>
+            )}
+            {(changedIds.length > 0 || isSaving) && (
+              <button
+                type="button"
+                onClick={handleSave}
+                disabled={busy}
+                className="rounded-md border border-blue-300 bg-white px-4 py-1.5 text-sm font-medium text-blue-700 shadow-sm hover:bg-blue-50 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {isSaving ? "Saving…" : "Save answers"}
+              </button>
+            )}
+            {changedIds.length > 0 && !isSaving && (
+              <span className="text-xs text-slate-500">
+                {changedIds.length} unsaved change
+                {changedIds.length === 1 ? "" : "s"}
+              </span>
+            )}
+            {saveError && <p className="text-sm text-red-700">{saveError}</p>}
+          </div>
+        )}
 
-      <div className="flex flex-col gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
-        <h3 className="text-sm font-semibold text-slate-900">Sign this part</h3>
-        <input
-          type="text"
-          value={signRemarks}
-          onChange={(e) => setSignRemarks(e.target.value)}
-          maxLength={500}
-          placeholder="Remarks (optional)"
-          aria-label="Signature remarks"
-          className={inputClass}
-          disabled={busy}
-        />
+      {/* Sign: the tick box, any blockers, then Sign and its remark (💬). */}
+      <div className="flex flex-col gap-2 border-t border-slate-100 pt-4">
         <label className="flex items-start gap-2 text-sm text-slate-700">
           <input
             type="checkbox"
@@ -275,15 +367,33 @@ export function SlotForm({
             ))}
           </ul>
         )}
-        <div>
+        <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleSign}
             disabled={busy || !confirmed || signBlockers.length > 0}
-            className="rounded-md bg-green-600 px-4 py-2 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-60"
+            className="inline-flex items-center gap-1.5 rounded-md border border-slate-300 bg-white px-4 py-1.5 text-sm font-medium text-slate-700 shadow-sm enabled:hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isSigning ? "Signing…" : "Sign"}
+            <svg
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="h-4 w-4"
+              aria-hidden="true"
+            >
+              <path
+                fillRule="evenodd"
+                clipRule="evenodd"
+                d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4L8.5 12l6.8-6.8a1 1 0 0 1 1.4 0Z"
+              />
+            </svg>
+            {isSigning ? "Signing…" : "Sign this part"}
           </button>
+          <RemarksButton
+            value={signRemarks}
+            onChange={setSignRemarks}
+            label="Signature remarks"
+            disabled={busy}
+          />
         </div>
         {signError && <p className="text-sm text-red-700">{signError}</p>}
       </div>

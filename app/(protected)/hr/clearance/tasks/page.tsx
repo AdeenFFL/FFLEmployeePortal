@@ -90,7 +90,6 @@ export default async function MyClearanceTasksPage() {
       </Link>
       <PageHeader
         title="My clearance tasks"
-        description="Parts of a leaving employee's IT clearance that the IT Team Lead gave to you: answer the lines and collect the assets. The lead signs the form at the end."
       />
 
       {error && (

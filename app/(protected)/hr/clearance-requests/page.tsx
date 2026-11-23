@@ -75,7 +75,6 @@ export default async function ClearanceRequestsPage({ searchParams }: { searchPa
       <Link href="/hr/clearance-home" className="mb-3 inline-block text-sm text-slate-500 hover:text-slate-700">← Clearance</Link>
       <PageHeader
         title="Clearance Requests"
-        description="Employee clearance requests: forward them to the signers and follow their progress."
         action={
           canForward ? (
             <StartClearancePanel

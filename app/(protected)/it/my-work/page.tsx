@@ -257,7 +257,6 @@ export default async function MyWorkPage({
     <div className="py-6">
       <PageHeader
         title="My Tasks"
-        description="Everything waiting for you: tickets, ticket tasks, onboarding / offboarding tasks, and clearance parts to sign, tasks and handovers."
       />
       <FormMessage error={sp.error} notice={sp.notice} />
 

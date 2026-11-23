@@ -2,7 +2,6 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
-import { TaskProgressSummary } from "@/components/task-progress";
 import {
   STATUS_TONE,
   cleanSlotLabel,
@@ -20,12 +19,18 @@ import {
   loadSignerSetup,
   mySlotsForCase,
 } from "../../signer-work";
-import { HR_DETAIL_GROUPS, formatHrDetail, toHrDetailsValues } from "../../hr-details-fields";
+import {
+  HR_DETAIL_GROUPS,
+  formatHrDetail,
+  toHrDetailsValues,
+} from "../../hr-details-fields";
 import { HrDetailsForm } from "./hr-details-form";
 import { LineManagerPicker } from "./line-manager-picker";
 import { HrWizard } from "./hr-wizard";
 import { AssetReturns, type OpenAsset } from "./asset-returns";
-import { SlotForm, type FormLine } from "./slot-form";
+import { SignaturesPopover } from "./signatures-popover";
+import { LineText, SlotForm, type FormLine } from "./slot-form";
+import { LineTag, RemarksButton } from "./remarks-button";
 
 const DETAILS_NOT_SAVED =
   "HR details have not been saved yet. You can still sign, but page one will print with empty fields.";
@@ -35,8 +40,10 @@ const LIST_PATH = "/hr/clearance";
 const DATA_RECEIVED_LINE = "p1.data_received";
 
 const errorBox = "rounded-md bg-red-50 px-3 py-2 text-sm text-red-700";
-const card = "rounded-xl border border-slate-200 bg-white p-6 shadow-sm";
-const cardTitle = "mb-4 text-sm font-semibold uppercase tracking-wide text-slate-500";
+const card = "rounded-xl border border-slate-200 bg-white p-5 shadow-sm";
+// Card headers: small caps label with a thin line under it.
+const cardTitle =
+  "mb-3 border-b border-slate-100 pb-2 text-xs font-semibold uppercase tracking-wide text-slate-500";
 
 // One case, one part (slot) of the clearance, for the person who signs that part. Only reachable
 // for a slot this person actually holds for this case; anything else goes back to the inbox.
@@ -66,8 +73,14 @@ export default async function ClearanceSlotPage({
     .maybeSingle();
 
   const backLink = (
-    <Link href={LIST_PATH} className="text-sm text-blue-700 hover:underline">
-      ← Back to Clearance to sign
+    // Icon only; the words are in the tooltip.
+    <Link
+      href={LIST_PATH}
+      title="Back to Clearance to sign"
+      aria-label="Back to Clearance to sign"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-600 shadow-sm hover:bg-slate-50 hover:text-slate-900"
+    >
+      ←
     </Link>
   );
 
@@ -75,14 +88,18 @@ export default async function ClearanceSlotPage({
     return (
       <div className="flex flex-col gap-4 py-6">
         {backLink}
-        <p className={errorBox}>Could not load this request. Please try again later.</p>
+        <p className={errorBox}>
+          Could not load this request. Please try again later.
+        </p>
       </div>
     );
   }
   if (
     !c ||
     c.person_id === personId ||
-    !mySlotsForCase(c, setup.signers, setup.slots).some((s) => s.slot_key === slotKey)
+    !mySlotsForCase(c, setup.signers, setup.slots).some(
+      (s) => s.slot_key === slotKey,
+    )
   ) {
     redirect(LIST_PATH);
   }
@@ -135,7 +152,10 @@ export default async function ClearanceSlotPage({
     isHrSlot && c.department_id
       ? hr
           .rpc("clearance_list_units")
-          .then(({ data }) => (data ?? []).find((u) => u.id === c.department_id)?.name ?? null)
+          .then(
+            ({ data }) =>
+              (data ?? []).find((u) => u.id === c.department_id)?.name ?? null,
+          )
       : Promise.resolve(null),
     hr.from("clearance_skips").select("slot_key, reason").eq("case_id", caseId),
     // Suggestions from the onboarding request (talha_hr_0010). Until that function is live this
@@ -158,39 +178,48 @@ export default async function ClearanceSlotPage({
           .eq("case_id", caseId)
       : Promise.resolve({ data: [], error: null }),
   ]);
-  const onboarding = onboardingResult.error ? null : (onboardingResult.data?.[0] ?? null);
+  const onboarding = onboardingResult.error
+    ? null
+    : (onboardingResult.data?.[0] ?? null);
   // Before talha_hr_0012 is live the table is missing: assets then work as before (no Assign).
   const assetTaskByAssignment = assetTasksResult.error
     ? null
-    : new Map((assetTasksResult.data ?? []).map((t) => [t.asset_assignment_id, t]));
+    : new Map(
+        (assetTasksResult.data ?? []).map((t) => [t.asset_assignment_id, t]),
+      );
   // Before talha_hr_0011 is live the table is missing: the part then works as before (no Assign).
   // Only the IT part can hand lines out: other parts (HR, Admin, …) get no Assign button.
-  const assignmentByLine = !canAssignLines || assignmentsResult.error
-    ? null
-    : new Map((assignmentsResult.data ?? []).map((a) => [a.line_id, a]));
+  const assignmentByLine =
+    !canAssignLines || assignmentsResult.error
+      ? null
+      : new Map((assignmentsResult.data ?? []).map((a) => [a.line_id, a]));
 
   // Newest assignment first.
   const assets: OpenAsset[] = [...(assetsResult.data ?? [])]
     .sort((a, b) => b.assigned_date.localeCompare(a.assigned_date))
     .map((a) => ({
-    assignment_id: a.assignment_id,
-    asset_tag: a.asset_tag,
-    asset_name: a.asset_name,
-    serial_number: a.serial_number,
-    assignedOn: formatDay(a.assigned_date),
-    assigned_condition: a.assigned_condition,
-    asset_status: a.asset_status,
-    ...(assetTaskByAssignment
-      ? {
-          assignee: (() => {
-            const t = assetTaskByAssignment.get(a.assignment_id);
-            return t
-              ? { personId: t.assignee_person_id, name: t.assignee_name, doneByThem: false }
-              : null;
-          })(),
-        }
-      : {}),
-  }));
+      assignment_id: a.assignment_id,
+      asset_tag: a.asset_tag,
+      asset_name: a.asset_name,
+      serial_number: a.serial_number,
+      assignedOn: formatDay(a.assigned_date),
+      assigned_condition: a.assigned_condition,
+      asset_status: a.asset_status,
+      ...(assetTaskByAssignment
+        ? {
+            assignee: (() => {
+              const t = assetTaskByAssignment.get(a.assignment_id);
+              return t
+                ? {
+                    personId: t.assignee_person_id,
+                    name: t.assignee_name,
+                    doneByThem: false,
+                  }
+                : null;
+            })(),
+          }
+        : {}),
+    }));
 
   const loadError =
     linesResult.error ??
@@ -198,11 +227,15 @@ export default async function ClearanceSlotPage({
     signoffsResult.error ??
     detailsResult.error ??
     skipsResult.error;
-  const responseByLine = new Map((responsesResult.data ?? []).map((r) => [r.line_id, r]));
+  const responseByLine = new Map(
+    (responsesResult.data ?? []).map((r) => [r.line_id, r]),
+  );
   const signoffs = signoffsResult.data ?? [];
   const signoffBySlot = new Map(signoffs.map((s) => [s.slot_key, s]));
   const mySignoff = signoffBySlot.get(slotKey);
-  const skipBySlot = new Map((skipsResult.data ?? []).map((s) => [s.slot_key, s]));
+  const skipBySlot = new Map(
+    (skipsResult.data ?? []).map((s) => [s.slot_key, s]),
+  );
   const mySkip = skipBySlot.get(slotKey);
   const isOpen = c.status === "In Clearance";
   const labels = ANSWER_LABELS[slot.form_key];
@@ -229,7 +262,9 @@ export default async function ClearanceSlotPage({
                 ? {
                     personId: a.assignee_person_id,
                     name: a.assignee_name,
-                    doneByThem: Boolean(r?.outcome && r.responded_by === a.assignee_person_id),
+                    doneByThem: Boolean(
+                      r?.outcome && r.responded_by === a.assignee_person_id,
+                    ),
                   }
                 : null;
             })(),
@@ -241,14 +276,21 @@ export default async function ClearanceSlotPage({
   // show. The signer's own saves do not change this, so their unsaved edits are kept.
   const othersLatestAnswer = (responsesResult.data ?? [])
     .filter((r) => r.responded_by && r.responded_by !== personId)
-    .reduce((latest, r) => (r.responded_at && r.responded_at > latest ? r.responded_at : latest), "");
+    .reduce(
+      (latest, r) =>
+        r.responded_at && r.responded_at > latest ? r.responded_at : latest,
+      "",
+    );
 
   // HR signs last: the other active parts still unsigned (skipped parts are not waited for).
   const waitingFor =
     slotKey === "hr"
       ? setup.slots
           .filter(
-            (s) => s.slot_key !== "hr" && !signoffBySlot.has(s.slot_key) && !skipBySlot.has(s.slot_key),
+            (s) =>
+              s.slot_key !== "hr" &&
+              !signoffBySlot.has(s.slot_key) &&
+              !skipBySlot.has(s.slot_key),
           )
           .map((s) => cleanSlotLabel(s.label))
       : [];
@@ -261,10 +303,14 @@ export default async function ClearanceSlotPage({
   // No joining date on the case (the profile had none): suggest the onboarding one. It is a
   // prefill only; it is stored when HR saves the details.
   const joiningPrefill =
-    !c.date_of_joining && onboarding?.joining_date ? onboarding.joining_date : null;
+    !c.date_of_joining && onboarding?.joining_date
+      ? onboarding.joining_date
+      : null;
   const managerSuggestion = onboarding?.manager_name
     ? {
-        personId: onboarding.manager_is_active ? onboarding.manager_person_id : null,
+        personId: onboarding.manager_is_active
+          ? onboarding.manager_person_id
+          : null,
         name: onboarding.manager_name,
         detail:
           [onboarding.manager_employee_code, onboarding.manager_designation]
@@ -280,17 +326,29 @@ export default async function ClearanceSlotPage({
   ];
 
   const today = karachiToday();
-  const employee: [string, string][] = [
-    ["Request", c.case_number],
-    ["Name", c.employee_name],
-    ["Employee code", c.employee_code ?? "—"],
-    ["Designation", c.designation ?? "—"],
-    [
-      "Last working date",
-      `${formatDay(c.last_working_date)} (${daysLeftText(c.last_working_date, today)})`,
-    ],
-    ["Forwarded", c.forwarded_at ? formatTimestamp(c.forwarded_at) : "—"],
-  ];
+  // The employee strip: last working day as a coloured badge (green > 7 days left, amber 0–7,
+  // red once passed; grey when the request is closed).
+  const daysLeft = Math.round(
+    (Date.parse(`${c.last_working_date}T00:00:00Z`) -
+      Date.parse(`${today}T00:00:00Z`)) /
+      86_400_000,
+  );
+  const lastDayTone = !isOpen
+    ? "bg-slate-100 text-slate-700 ring-slate-200"
+    : daysLeft < 0
+      ? "bg-red-50 text-red-700 ring-red-200"
+      : daysLeft <= 7
+        ? "bg-amber-50 text-amber-800 ring-amber-200"
+        : "bg-green-50 text-green-700 ring-green-200";
+  const employeeInitials = c.employee_name
+    .trim()
+    .split(/s+/)
+    .filter(Boolean)
+    .map((w: string, i: number, all: string[]) =>
+      i === 0 || i === all.length - 1 ? w[0] : "",
+    )
+    .join("")
+    .toUpperCase();
 
   // The three sections of the HR part, shown either inside the wizard (an open HR part) or as
   // stacked cards (every other part, or a signed / closed HR part).
@@ -326,7 +384,9 @@ export default async function ClearanceSlotPage({
       caseId={c.id}
       managerName={c.line_manager_person_id ? c.reporting_manager_name : null}
       confirmedOn={
-        c.data_received_confirmed_at ? formatTimestamp(c.data_received_confirmed_at) : null
+        c.data_received_confirmed_at
+          ? formatTimestamp(c.data_received_confirmed_at)
+          : null
       }
       canChange={canEdit && !c.data_received_confirmed_at && !managerLocked}
       lockedNote={
@@ -340,7 +400,9 @@ export default async function ClearanceSlotPage({
 
   const hrDetailsContent = isHrSlot ? (
     detailsResult.error ? (
-      <p className={errorBox}>Could not load the HR details. Please try again later.</p>
+      <p className={errorBox}>
+        Could not load the HR details. Please try again later.
+      </p>
     ) : (
       <div className="flex flex-col gap-6">
         <dl className="grid gap-x-6 gap-y-3 rounded-lg bg-slate-50 p-4 sm:grid-cols-4">
@@ -355,10 +417,14 @@ export default async function ClearanceSlotPage({
           <HrDetailsForm
             caseId={c.id}
             initial={detailValues}
-            prefill={joiningPrefill ? { date_of_joining: joiningPrefill } : undefined}
+            prefill={
+              joiningPrefill ? { date_of_joining: joiningPrefill } : undefined
+            }
             prefillNote="Filled from the onboarding request. Check it, then save."
             lastSaved={
-              savedDetails ? `Last saved ${formatTimestamp(savedDetails.updated_at)}` : null
+              savedDetails
+                ? `Last saved ${formatTimestamp(savedDetails.updated_at)}`
+                : null
             }
           />
         ) : (
@@ -390,14 +456,17 @@ export default async function ClearanceSlotPage({
     <div className="flex flex-col gap-4">
       {mySkip && !mySignoff && (
         <p className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
-          This part was skipped for this request: {mySkip.reason}. Nothing to fill in or sign.
+          This part was skipped for this request: {mySkip.reason}. Nothing to
+          fill in or sign.
         </p>
       )}
       {mySignoff && (
         <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
           Signed by {mySignoff.signer_name}
-          {mySignoff.signer_designation ? ` (${mySignoff.signer_designation})` : ""} on{" "}
-          {formatTimestamp(mySignoff.signed_at)}. This part is locked.
+          {mySignoff.signer_designation
+            ? ` (${mySignoff.signer_designation})`
+            : ""}{" "}
+          on {formatTimestamp(mySignoff.signed_at)}. This part is locked.
           {mySignoff.remarks ? ` Remarks: ${mySignoff.remarks}` : ""}
         </p>
       )}
@@ -406,12 +475,26 @@ export default async function ClearanceSlotPage({
       ) : (
         <ol className="flex flex-col divide-y divide-slate-100">
           {lines.map((l) => (
-            <li key={l.id} className="py-3">
-              <p className="text-sm font-medium text-slate-900">{l.description}</p>
-              <p className="text-sm text-slate-700">
-                {l.outcome ? labels[l.outcome] : "Not answered"}
-                {l.remarks ? ` · ${l.remarks}` : ""}
-              </p>
+            // Same one-row look as the form (slot-form.tsx): answer tag and Remarks on the right.
+            <li
+              key={l.id}
+              className="-mx-2 flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg px-2 py-2.5 hover:bg-slate-50"
+            >
+              <LineText description={l.description} />
+              <div className="flex flex-wrap items-center gap-2">
+                <LineTag
+                  tone={
+                    !l.outcome ? "plain" : l.outcome === "No" ? "no" : "done"
+                  }
+                >
+                  {!l.outcome
+                    ? "Not answered"
+                    : l.outcome === "No"
+                      ? labels.No
+                      : `✓ ${labels[l.outcome]}`}
+                </LineTag>
+                <RemarksButton value={l.remarks ?? ""} label={l.description} />
+              </div>
             </li>
           ))}
         </ol>
@@ -436,69 +519,9 @@ export default async function ClearanceSlotPage({
     />
   );
 
-  return (
-    <div className="flex flex-col gap-6 py-6">
-      {backLink}
-
-      <div className="flex flex-wrap items-center gap-3">
-        <h1 className="text-xl font-semibold text-slate-900">
-          {c.case_number} · {cleanSlotLabel(slot.label)}
-        </h1>
-        <StatusPill label={c.status} tone={STATUS_TONE[c.status]} />
-      </div>
-
-      {c.status === "Cancelled" && (
-        <p className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
-          This request was cancelled. Reason: {c.cancelled_reason ?? "—"}
-        </p>
-      )}
-      {c.status === "Completed" && (
-        <p className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
-          This request is closed: the clearance is complete.
-        </p>
-      )}
-
-      {/* Employee, Signatures (and Assets on the IT part) side by side on wide screens. */}
-      <div className={`grid gap-6 ${showAssets ? "lg:grid-cols-3" : "lg:grid-cols-2"}`}>
-      <section className={card}>
-        <h2 className={cardTitle}>Employee</h2>
-        <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2 lg:grid-cols-1">
-          {employee.map(([label, value]) => (
-            <div key={label}>
-              <dt className="text-xs text-slate-500">{label}</dt>
-              <dd className="text-sm text-slate-900">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-
-      <section className={card}>
-        <h2 className={cardTitle}>Signatures</h2>
-        {/* The shared vertical stepper (as on onboarding). */}
-        <TaskProgressSummary tasks={signatureSteps} />
-      </section>
-
-      {showAssets && (
-        <section className={card}>
-          <h2 className={cardTitle}>Assets still assigned (from IT Inventory)</h2>
-          {assetsResult.error ? (
-            <p className={errorBox}>Could not load the assets. Please try again later.</p>
-          ) : (
-            <AssetReturns
-              caseId={c.id}
-              assets={assets}
-              canReturn={isOpen && !mySignoff && !mySkip}
-            />
-          )}
-          {assets.length > 0 && (
-            <p className="mt-3 text-xs text-slate-400">
-              Return each asset, or mark it Lost, before signing. This updates IT Inventory at once.
-            </p>
-          )}
-        </section>
-      )}
-      </div>
-
+  // The work itself: the HR wizard, or the part's cards (line manager, HR details, checklist).
+  const workContent = (
+    <>
       {useWizard ? (
         // An open HR part: Line manager → HR details → Checklist & sign, one step at a time.
         <section className={card}>
@@ -549,6 +572,84 @@ export default async function ClearanceSlotPage({
           </section>
         </>
       )}
+    </>
+  );
+
+  return (
+    <div className="flex flex-col gap-4 py-6">
+      <div className="flex flex-wrap items-center gap-3">
+        {backLink}
+        <h1 className="text-base font-semibold text-slate-900">
+          {c.case_number} · {cleanSlotLabel(slot.label)}
+        </h1>
+        <StatusPill label={c.status} tone={STATUS_TONE[c.status]} />
+      </div>
+
+      {c.status === "Cancelled" && (
+        <p className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
+          This request was cancelled. Reason: {c.cancelled_reason ?? "—"}
+        </p>
+      )}
+      {c.status === "Completed" && (
+        <p className="rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700">
+          This request is closed: the clearance is complete.
+        </p>
+      )}
+
+      {/* The employee as one slim strip; the work below gets the full width. */}
+      <section className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-xl border border-slate-200 bg-white px-5 py-3 shadow-sm">
+        <div className="flex min-w-0 flex-1 items-center gap-3">
+          <span
+            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-blue-100 text-sm font-semibold text-blue-800"
+            aria-hidden="true"
+          >
+            {employeeInitials || "?"}
+          </span>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-semibold text-slate-900">
+              {c.employee_name}
+            </p>
+            <p className="truncate text-xs text-slate-500">
+              {[c.employee_code, c.designation].filter(Boolean).join(" · ") ||
+                "—"}
+            </p>
+          </div>
+        </div>
+        <span
+          className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${lastDayTone}`}
+          title="Last working date"
+        >
+          Last day {formatDay(c.last_working_date)} ·{" "}
+          {daysLeftText(c.last_working_date, today)}
+        </span>
+        <SignaturesPopover
+          steps={signatureSteps}
+          note={
+            c.forwarded_at
+              ? `Forwarded ${formatTimestamp(c.forwarded_at)}`
+              : null
+          }
+        />
+      </section>
+
+      {showAssets && (
+        <section className={card}>
+          <h2 className={cardTitle}>Assets still assigned</h2>
+          {assetsResult.error ? (
+            <p className={errorBox}>
+              Could not load the assets. Please try again later.
+            </p>
+          ) : (
+            <AssetReturns
+              caseId={c.id}
+              assets={assets}
+              canReturn={isOpen && !mySignoff && !mySkip}
+            />
+          )}
+        </section>
+      )}
+
+      {workContent}
     </div>
   );
 }

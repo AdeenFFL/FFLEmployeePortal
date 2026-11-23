@@ -25,13 +25,39 @@ export const isClearanceSigner = cache(async () => {
 // of IT staff, who always see it).
 export const MY_TASKS_NAV_KEY = "tasks:has_open";
 
-// What the sidebar needs besides the role's permissions: the menu flags above and the number on
-// "My Tasks". Used by the layout (first render) and /api/me/permissions (live re-check).
-export async function getNavExtras(): Promise<{ keys: string[]; taskCount: number }> {
+// The number on "Clearance": new requests waiting for HR to forward (status Submitted). Only for
+// people who can forward them (hr.clearance.read_all); anyone else gets 0, so an employee's own
+// submitted request never shows up as a count.
+async function countRequestsToForward(supabase: Awaited<ReturnType<typeof createClient>>) {
+  const { data: canReadAll } = await supabase.rpc("has_permission", {
+    p_permission_key: "hr.clearance.read_all",
+  });
+  if (!canReadAll) return 0;
+  const { count, error } = await supabase
+    .schema("hr")
+    .from("clearance_cases")
+    .select("id", { count: "exact", head: true })
+    .eq("status", "Submitted");
+  return error ? 0 : (count ?? 0);
+}
+
+// What the sidebar needs besides the role's permissions: the menu flags above and the numbers on
+// "My Tasks" and "Clearance". Used by the layout (first render) and /api/me/permissions (live
+// re-check).
+export async function getNavExtras(): Promise<{
+  keys: string[];
+  taskCount: number;
+  clearanceCount: number;
+}> {
   const supabase = await createClient();
-  const [signer, taskCount] = await Promise.all([isClearanceSigner(), countMyOpenWork(supabase)]);
+  const [signer, taskCount, clearanceCount] = await Promise.all([
+    isClearanceSigner(),
+    countMyOpenWork(supabase),
+    countRequestsToForward(supabase),
+  ]);
   return {
     keys: [...(signer ? [CLEARANCE_SIGNER_NAV_KEY] : []), ...(taskCount > 0 ? [MY_TASKS_NAV_KEY] : [])],
     taskCount,
+    clearanceCount,
   };
 }

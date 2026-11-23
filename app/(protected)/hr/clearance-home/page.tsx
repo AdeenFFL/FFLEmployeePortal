@@ -1,13 +1,14 @@
 import Link from "next/link";
 import { getCurrentUserNav } from "../../current-user";
 import { isClearanceSigner } from "../clearance/clearance-nav";
+import { loadMySigningTasks } from "../clearance/it-clearance-work";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 
 type ClearanceCard = {
   href: string;
   title: string;
-  description: string;
+  description: string | null;
   // A short live count, or null.
   badge: string | null;
 };
@@ -25,6 +26,16 @@ export default async function ClearanceHomePage() {
   const hr = supabase.schema("hr");
   const countByStatus = (status: "Submitted" | "In Clearance") =>
     hr.from("clearance_cases").select("id", { count: "exact", head: true }).eq("status", status);
+
+  // Parts waiting for my signature (Clearance to sign card).
+  const toSignCount =
+    canSign && isSigner
+      ? await supabase
+          .rpc("current_person_id")
+          .then(({ data: personId }) =>
+            personId ? loadMySigningTasks(supabase, personId, "open").then((t) => t.length) : 0,
+          )
+      : 0;
 
   const [submitted, inClearance, lineTasks, assetTasks] = await Promise.all([
     canReadAll ? countByStatus("Submitted") : Promise.resolve({ count: null }),
@@ -47,7 +58,7 @@ export default async function ClearanceHomePage() {
     cards.push({
       href: "/hr/clearance-requests",
       title: "Clearance Requests",
-      description: "Start a clearance for an employee, skip parts, forward to the signers and follow progress.",
+      description: null,
       badge:
         submitted.count !== null && inClearance.count !== null
           ? `${submitted.count} waiting to forward · ${inClearance.count} in clearance`
@@ -59,15 +70,15 @@ export default async function ClearanceHomePage() {
     cards.push({
       href: "/hr/clearance",
       title: "Clearance to sign",
-      description: "The parts of the clearance forms you sign: fill them in and sign.",
-      badge: null,
+      description: null,
+      badge: toSignCount > 0 ? `${toSignCount} waiting for you` : "Nothing to sign",
     });
   }
   if (canReadAll) {
     cards.push({
       href: "/hr/admin/clearance-signers",
       title: "Clearance Signers",
-      description: "Who signs each part of the form, per site and department.",
+      description: null,
       badge: null,
     });
   }
@@ -75,7 +86,7 @@ export default async function ClearanceHomePage() {
     cards.push({
       href: "/hr/clearance/tasks",
       title: "My clearance tasks",
-      description: "Lines and asset returns the IT Team Lead gave to you.",
+      description: null,
       badge: openTasks > 0 ? `${openTasks} open task${openTasks === 1 ? "" : "s"}` : "No open tasks",
     });
   }
@@ -84,7 +95,6 @@ export default async function ClearanceHomePage() {
     <div className="py-6">
       <PageHeader
         title="Clearance"
-        description="Everything for the offboarding clearance of leaving employees."
       />
 
       {cards.length === 0 ? (
@@ -102,7 +112,7 @@ export default async function ClearanceHomePage() {
               <p className="text-base font-semibold text-slate-900 group-hover:text-blue-700">
                 {card.title}
               </p>
-              <p className="text-sm text-slate-500">{card.description}</p>
+              {card.description && <p className="text-sm text-slate-500">{card.description}</p>}
               {card.badge && (
                 <p className="mt-1 w-fit rounded-full bg-blue-50 px-2.5 py-1 text-xs font-medium text-blue-700">
                   {card.badge}
