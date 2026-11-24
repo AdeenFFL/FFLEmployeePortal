@@ -31,6 +31,7 @@ import { AssetReturns, type OpenAsset } from "./asset-returns";
 import { SignaturesPopover } from "./signatures-popover";
 import { SignedToast } from "./signed-toast";
 import { LineText, SlotForm, type FormLine } from "./slot-form";
+import { SignatureName } from "../../signature-name";
 import { LineTag, RemarksButton } from "./remarks-button";
 
 const DETAILS_NOT_SAVED =
@@ -464,7 +465,11 @@ export default async function ClearanceSlotPage({
       {mySignoff && <SignedToast caseId={c.id} slotKey={slotKey} />}
       {mySignoff && (
         <p className="rounded-md bg-green-50 px-3 py-2 text-sm text-green-800">
-          Signed by {mySignoff.signer_name}
+          Signed by{" "}
+          <SignatureName
+            name={mySignoff.signer_name}
+            className="text-2xl leading-none"
+          />
           {mySignoff.signer_designation
             ? ` (${mySignoff.signer_designation})`
             : ""}{" "}

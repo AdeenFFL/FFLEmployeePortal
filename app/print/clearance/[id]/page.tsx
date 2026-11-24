@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { formatDay, formatTimestamp } from "../../../(protected)/hr/clearance-requests/clearance-view";
+import { SignatureName } from "../../../(protected)/hr/clearance/signature-name";
 import { PrintButton } from "./print-button";
 
 // The clearance as the company's paper form "Final Settlement (Separation Check List)", three A4
@@ -201,11 +202,13 @@ export default async function ClearancePrintPage({ params }: { params: Promise<{
           <SignatureLine
             role="Outgoing Employee"
             name={c.employee_name}
+            signed={Boolean(c.employee_signed_at)}
             note={c.employee_signed_at ? `Signed electronically ${formatTimestamp(c.employee_signed_at)}` : null}
           />
           <SignatureLine
             role="Line Manager"
             name={c.reporting_manager_name}
+            signed={Boolean(c.data_received_confirmed_at)}
             note={
               c.data_received_confirmed_at
                 ? `Data received confirmed ${formatTimestamp(c.data_received_confirmed_at)}`
@@ -290,8 +293,19 @@ function uniqueSigners(signoffs: (Signoff | undefined)[]) {
   });
 }
 
-function signerText(so: Signoff) {
-  return `${so.signer_name}${so.signer_designation ? ` (${so.signer_designation})` : ""}, ${formatTimestamp(so.signed_at)}`;
+// Under a signature: designation and date (the name itself is drawn as the signature).
+function signerSub(so: Signoff) {
+  return [so.signer_designation, formatTimestamp(so.signed_at)].filter(Boolean).join(", ");
+}
+
+// A signed name with its designation and date under it.
+function SignedBlock({ so }: { so: Signoff }) {
+  return (
+    <span className="inline-block">
+      <SignatureName name={so.signer_name} className="block text-2xl leading-none" />
+      <span className="block text-[10px] leading-tight text-slate-600">{signerSub(so)}</span>
+    </span>
+  );
 }
 
 // One A4 sheet with the form's boxed header and "Page x of 3".
@@ -344,25 +358,41 @@ function Blank({ mark }: { mark: boolean }) {
   return <span className="inline-block w-16 border-b border-black text-center">{mark ? "✓" : " "}</span>;
 }
 
-// A signature line: the signer's name and date when signed in the system, else an empty line.
+// A signature line: the signature, designation and date when signed in the system, else the name
+// (or nothing) on an empty line. signed: the employee / line manager did their step in the system.
 function SignatureLine({
   role,
   signoff,
   skip,
   name,
   note,
+  signed,
 }: {
   role: string;
   signoff?: Signoff;
   skip?: string;
   name?: string | null;
   note?: string | null;
+  signed?: boolean;
 }) {
-  const text = signoff
-    ? signerText(signoff)
-    : skip
-      ? `Skipped: ${skip}`
-      : [name, note].filter(Boolean).join(" · ");
+  if (signoff || (signed && name)) {
+    return (
+      <div>
+        <div className="min-h-[2.5em]">
+          {signoff ? (
+            <SignedBlock so={signoff} />
+          ) : (
+            <>
+              <SignatureName name={name ?? ""} className="block text-2xl leading-none" />
+              {note && <span className="block text-[10px] leading-tight text-slate-600">{note}</span>}
+            </>
+          )}
+        </div>
+        <div className="border-t border-black pt-1">{role}</div>
+      </div>
+    );
+  }
+  const text = skip ? `Skipped: ${skip}` : [name, note].filter(Boolean).join(" · ");
   return (
     <div>
       <p className="min-h-[2.5em] text-[11px] leading-tight text-slate-700">{text}</p>
@@ -433,7 +463,9 @@ function FormTable({
                   </td>
                 ))}
                 {/* Who cleared this line: the signer of its part (Store lines show the Store signer). */}
-                <td className={`${cell} text-[11px]`}>{so ? so.signer_name : ""}</td>
+                <td className={`${cell} text-[11px]`}>
+                  {so ? <SignatureName name={so.signer_name} className="text-lg leading-none" /> : ""}
+                </td>
               </tr>
             );
           })}
@@ -447,7 +479,11 @@ function FormTable({
         <div className="w-56 text-right">
           <p className="min-h-[2.5em] text-[11px] leading-tight text-slate-700">
             {departmentSignoffs.length > 0
-              ? departmentSignoffs.map(signerText).join(" · ")
+              ? departmentSignoffs.map((so) => (
+                  <span key={so.signer_name} className="ml-3 inline-block first:ml-0">
+                    <SignedBlock so={so} />
+                  </span>
+                ))
               : departmentSkips.length > 0
                 ? `Skipped: ${departmentSkips.join(" · ")}`
                 : ""}
