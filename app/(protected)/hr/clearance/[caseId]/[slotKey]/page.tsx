@@ -344,7 +344,7 @@ export default async function ClearanceSlotPage({
         : "bg-green-50 text-green-700 ring-green-200";
   const employeeInitials = c.employee_name
     .trim()
-    .split(/s+/)
+    .split(/\s+/)
     .filter(Boolean)
     .map((w: string, i: number, all: string[]) =>
       i === 0 || i === all.length - 1 ? w[0] : "",

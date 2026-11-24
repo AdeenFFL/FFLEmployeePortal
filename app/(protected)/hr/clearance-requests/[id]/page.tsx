@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { StatusPill } from "@/components/status-pill";
+import { UserIcon } from "@/components/icons";
 import { CaseActions, RefreshOrgButton, SlotSkipControl } from "./case-actions";
 import { HorizontalSteps } from "./horizontal-steps";
 import {
@@ -240,7 +241,7 @@ export default async function ClearanceRequestDetailPage({
 
   // The employee strip (same look as the part page): name, code · designation and the last
   // working day as a coloured badge (green > 7 days left, amber 0–7, red once passed; grey when
-  // the request is closed); the other details in one wrapping row under it.
+  // the request is closed); the other details in a card that opens on hover (or tap / focus) of the profile icon.
   const snapshot: [string, string | null][] = [
     ["Site", siteName],
     ["Department", deptName],
@@ -265,7 +266,7 @@ export default async function ClearanceRequestDetailPage({
         : "bg-green-50 text-green-700 ring-green-200";
   const employeeInitials = c.employee_name
     .trim()
-    .split(/s+/)
+    .split(/\s+/)
     .filter(Boolean)
     .map((w: string, i: number, all: string[]) =>
       i === 0 || i === all.length - 1 ? w[0] : "",
@@ -387,9 +388,33 @@ export default async function ClearanceRequestDetailPage({
               {employeeInitials || "?"}
             </span>
             <div className="min-w-0">
-              <p className="truncate text-sm font-semibold text-slate-900">
-                {c.employee_name}
-              </p>
+              <div className="flex items-center gap-1.5">
+                <p className="truncate text-sm font-semibold text-slate-900">
+                  {c.employee_name}
+                </p>
+                {/* Employee details on hover (tap / keyboard focus on a phone). */}
+                <div className="group relative">
+                  <button
+                    type="button"
+                    aria-label="Employee details"
+                    className="flex h-6 w-6 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:bg-blue-50 hover:text-blue-700 focus:bg-blue-50 focus:text-blue-700 focus:outline-none"
+                  >
+                    <UserIcon className="h-3.5 w-3.5" />
+                  </button>
+                  <div className="invisible absolute left-0 top-full z-30 pt-1 opacity-0 group-focus-within:visible group-focus-within:opacity-100 group-hover:visible group-hover:opacity-100">
+                    <dl className="grid w-72 grid-cols-[auto_1fr] gap-x-3 gap-y-1.5 rounded-xl border border-slate-200 bg-white p-3 text-xs shadow-lg">
+                      {snapshot.map(([label, value]) => (
+                        <div key={label} className="contents">
+                          <dt className="text-slate-500">{label}</dt>
+                          <dd className="min-w-0 break-words font-medium text-slate-800">
+                            {value ?? "—"}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </div>
+                </div>
+              </div>
               <p className="truncate text-xs text-slate-500">
                 {[c.employee_code, c.designation].filter(Boolean).join(" · ") ||
                   "—"}
@@ -404,19 +429,6 @@ export default async function ClearanceRequestDetailPage({
             {daysLeftText(c.last_working_date, today)}
           </span>
         </div>
-        <dl className="flex flex-wrap gap-x-6 gap-y-1.5 border-t border-slate-100 pt-2 text-xs">
-          {snapshot.map(([label, value]) => (
-            <div key={label} className="flex min-w-0 items-baseline gap-1.5">
-              <dt className="text-slate-500">{label}</dt>
-              <dd
-                className="max-w-xs truncate font-medium text-slate-800"
-                title={value ?? undefined}
-              >
-                {value ?? "—"}
-              </dd>
-            </div>
-          ))}
-        </dl>
       </section>
 
       <div>

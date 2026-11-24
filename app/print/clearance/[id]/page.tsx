@@ -319,6 +319,12 @@ function Sheet({ page, children }: { page: number; children: React.ReactNode }) 
         <p className="text-lg font-bold">Final Settlement</p>
         <p className="text-sm font-semibold">(Separation Check List)</p>
         {/* eslint-disable-next-line @next/next/no-img-element -- printed as is, no optimisation needed */}
+        <img
+          src="/logos/fresh-n-freeze-logo.png"
+          alt="Fauji Fresh n Freeze"
+          className="absolute left-4 top-1/2 h-12 -translate-y-1/2"
+        />
+        {/* eslint-disable-next-line @next/next/no-img-element -- printed as is, no optimisation needed */}
         <img src="/logos/ffl-logo-blue.jpg" alt="Fauji Foods" className="absolute right-4 top-1/2 h-12 -translate-y-1/2" />
       </div>
       <div className="flex-1">{children}</div>

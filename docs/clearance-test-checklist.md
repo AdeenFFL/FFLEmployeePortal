@@ -52,7 +52,7 @@ Signers are set in **Clearance > Clearance Signers**.
 | C5 | Choose ✗ | Remarks pop-up opens by itself; 💬 turns red until a reason is typed; footer counts it |
 | C6 | Change answers | **Save answers** bar appears and sticks to the bottom; disappears after saving |
 | C7 | Try to Sign with unsaved answers | Sign disabled, "Save your answers first." |
-| C8 | Save, tick the confirmation, **Sign this part** | Green **"✓ Signed…"** pop-up bottom right; part locked with "Signed by …" |
+| C8 | Save, tick the confirmation, **Confirm and sign** | Green **"✓ Signed…"** pop-up bottom right; part locked with "Signed by …" |
 | C9 | ⓘ / Signatures button on the employee strip | Signature stepper pop-up; closes on click outside |
 
 ## D. HR part (HRBP)

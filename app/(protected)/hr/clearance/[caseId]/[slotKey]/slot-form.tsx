@@ -431,7 +431,7 @@ export function SlotForm({
                 d="M16.7 5.3a1 1 0 0 1 0 1.4l-7.5 7.5a1 1 0 0 1-1.4 0L3.3 9.7a1 1 0 1 1 1.4-1.4L8.5 12l6.8-6.8a1 1 0 0 1 1.4 0Z"
               />
             </svg>
-            {isSigning ? "Signing…" : "Sign this part"}
+            {isSigning ? "Signing…" : "Confirm and sign"}
           </button>
           <RemarksButton
             value={signRemarks}
