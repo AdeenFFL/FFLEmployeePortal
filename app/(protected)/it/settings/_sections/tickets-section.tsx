@@ -23,7 +23,7 @@ import {
 import { cardClass, inputClass, labelClass, primaryButtonClass } from "../../_components/ticket-ui";
 
 const smallInput =
-  "rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-blue-500";
+  "rounded-lg border border-slate-200 px-2.5 py-1.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500";
 
 type CategoryOwnerRow = OwnerChip & { categoryId: string };
 
@@ -84,6 +84,7 @@ function CategoryRow({
 }
 
 export function TicketsSection({
+  section,
   slas,
   requestTypes,
   categories,
@@ -94,6 +95,7 @@ export function TicketsSection({
   siteStaff,
   categoryOwners,
 }: {
+  section: "sla" | "types" | "categories";
   slas: ItSlaPolicy[];
   requestTypes: ItRequestType[];
   categories: ItTicketCategory[];
@@ -113,130 +115,174 @@ export function TicketsSection({
   }
   const ownersOf = (categoryId: string) => ownersByCategory.get(categoryId) ?? [];
 
-  return (
-    <div className="space-y-6">
-      <section className={`${cardClass} p-6`}>
-        <h2 className="text-base font-semibold text-slate-900">SLA targets</h2>
-        <p className="mb-4 text-sm text-slate-500">
-          Hours from submission, counted around the clock. Saves as you edit — applies to tickets
-          raised (or re-prioritised) after that; existing tickets keep their due dates.
+  if (section === "sla") {
+    return (
+      <section className={`${cardClass} overflow-hidden`}>
+        <table className="w-full text-left text-sm">
+          <thead className="border-b border-slate-100 text-xs text-slate-400">
+            <tr>
+              <th className="px-5 py-3 font-medium">Priority</th>
+              <th className="px-4 py-3 font-medium">First response</th>
+              <th className="px-4 py-3 font-medium">Resolution</th>
+              <th className="px-4 py-3" />
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-slate-100">
+            {TICKET_PRIORITIES.map((priority) => {
+              const sla = slaByPriority.get(priority);
+              return (
+                <tr key={priority}>
+                  <td className="px-5 py-3">
+                    <StatusPill label={priority} tone={PRIORITY_TONE[priority]} />
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="flex items-center gap-2">
+                      <AutoSaveField
+                        type="number"
+                        label={`${priority} first response hours`}
+                        defaultValue={String(sla?.response_hours ?? "")}
+                        className={`${smallInput} w-24`}
+                        action={updateSlaField.bind(null, priority, "response")}
+                      />
+                      <span className="text-xs text-slate-400">hours</span>
+                    </span>
+                  </td>
+                  <td className="px-4 py-3">
+                    <span className="flex items-center gap-2">
+                      <AutoSaveField
+                        type="number"
+                        label={`${priority} resolution hours`}
+                        defaultValue={String(sla?.resolution_hours ?? "")}
+                        className={`${smallInput} w-24`}
+                        action={updateSlaField.bind(null, priority, "resolution")}
+                      />
+                      <span className="text-xs text-slate-400">hours</span>
+                    </span>
+                  </td>
+                  <td className="px-4 py-3 text-xs text-amber-600">{!sla && "Not set: no due date"}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+        <p className="border-t border-slate-100 px-5 py-3 text-xs text-slate-400">
+          Counted around the clock from submission. Saves as you type; applies to tickets raised or
+          re-prioritised after that.
         </p>
-        <div className="space-y-3">
-          {TICKET_PRIORITIES.map((priority) => {
-            const sla = slaByPriority.get(priority);
-            return (
-              <div
-                key={priority}
-                className="flex flex-wrap items-end gap-3 rounded-lg border border-slate-100 p-3"
-              >
-                <div className="w-24 pb-2">
-                  <StatusPill label={priority} tone={PRIORITY_TONE[priority]} />
-                </div>
-                <label>
-                  <span className="mb-1 block text-xs text-slate-500">First response (hours)</span>
-                  <AutoSaveField
-                    type="number"
-                    label="First response hours"
-                    defaultValue={String(sla?.response_hours ?? "")}
-                    className={`${smallInput} w-32`}
-                    action={updateSlaField.bind(null, priority, "response")}
-                  />
-                </label>
-                <label>
-                  <span className="mb-1 block text-xs text-slate-500">Resolution (hours)</span>
-                  <AutoSaveField
-                    type="number"
-                    label="Resolution hours"
-                    defaultValue={String(sla?.resolution_hours ?? "")}
-                    className={`${smallInput} w-32`}
-                    action={updateSlaField.bind(null, priority, "resolution")}
-                  />
-                </label>
-                {!sla && (
-                  <span className="pb-2 text-xs text-amber-600">
-                    Not set — tickets of this priority get no due date.
-                  </span>
-                )}
-              </div>
-            );
-          })}
-        </div>
       </section>
+    );
+  }
 
-      <section className={`${cardClass} p-6`}>
-        <h2 className="text-base font-semibold text-slate-900">Request types</h2>
-        <p className="mb-4 text-sm text-slate-500">
-          Ticket types appear on the Raise IT Ticket form. Onboarding / Offboarding / Replacement
-          types are used for HR&apos;s requests (the first active one of each kind).
+  if (section === "types") {
+    const kinds = ["Ticket", "Onboarding", "Offboarding", "Replacement"] as const;
+    return (
+      <section className={`${cardClass} p-5`}>
+        <p className="mb-3 text-xs text-slate-500">
+          Ticket types appear on the Raise IT Ticket form. For Onboarding / Offboarding / Replacement,
+          the first active one of each is used.
         </p>
-        <ul className="divide-y divide-slate-100">
-          {requestTypes.map((t) => (
-            <li key={t.id} className="flex flex-wrap items-center gap-3 py-2.5">
-              <span className="w-24 shrink-0 text-xs font-medium uppercase tracking-wide text-slate-400">
-                {t.applies_to}
-              </span>
-              <AutoSaveField
-                defaultValue={t.name}
-                label="Name"
-                className={`${smallInput} w-40 font-medium`}
-                action={updateRequestTypeName.bind(null, t.id)}
-              />
-              <AutoSaveField
-                defaultValue={t.description ?? ""}
-                label="Description"
-                placeholder="Description"
-                className={`${smallInput} min-w-0 flex-1`}
-                action={updateRequestTypeDescription.bind(null, t.id)}
-              />
-              <OptimisticToggle
-                pressed={t.is_active}
-                label="Active"
-                statusLabels={{ on: "Active", off: "Inactive" }}
-                action={setRequestTypeActive.bind(null, t.id, !t.is_active)}
-              />
-            </li>
-          ))}
-        </ul>
+        <div className="space-y-4">
+          {kinds
+            .filter((k) => requestTypes.some((t) => t.applies_to === k))
+            .map((k) => (
+              <div key={k}>
+                <h3 className="mb-1 text-xs font-semibold uppercase tracking-wider text-slate-400">{k}</h3>
+                <ul className="divide-y divide-slate-100 rounded-lg border border-slate-100 px-3">
+                  {requestTypes
+                    .filter((t) => t.applies_to === k)
+                    .map((t) => (
+                      <li key={t.id} className="flex flex-wrap items-center gap-3 py-2">
+                        <AutoSaveField
+                          defaultValue={t.name}
+                          label="Name"
+                          className={`${smallInput} w-48 font-medium`}
+                          action={updateRequestTypeName.bind(null, t.id)}
+                        />
+                        <AutoSaveField
+                          defaultValue={t.description ?? ""}
+                          label="Description"
+                          placeholder="Description (optional)"
+                          className={`${smallInput} min-w-0 flex-1`}
+                          action={updateRequestTypeDescription.bind(null, t.id)}
+                        />
+                        <OptimisticToggle
+                          pressed={t.is_active}
+                          label={`${t.name} active`}
+                          action={setRequestTypeActive.bind(null, t.id, !t.is_active)}
+                        />
+                      </li>
+                    ))}
+                </ul>
+              </div>
+            ))}
+        </div>
         {canEdit && (
           <AddRowForm
             action={createRequestType}
-            submitLabel="Add request type"
-            submitClassName={`${primaryButtonClass} md:col-span-4`}
-            className="mt-4 grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-4"
+            submitLabel="Add"
+            submitClassName={primaryButtonClass}
+            className="mt-5 flex flex-wrap items-end gap-3 border-t border-slate-100 pt-4"
           >
             <label>
-              <span className={labelClass}>Applies to</span>
+              <span className={labelClass}>For</span>
               <select name="appliesTo" defaultValue="Ticket" className={inputClass}>
-                <option value="Ticket">Ticket</option>
-                <option value="Onboarding">Onboarding</option>
-                <option value="Offboarding">Offboarding</option>
-                <option value="Replacement">Replacement</option>
+                {kinds.map((k) => (
+                  <option key={k} value={k}>
+                    {k}
+                  </option>
+                ))}
               </select>
             </label>
-            <label>
-              <span className={labelClass}>Name</span>
-              <input name="name" required className={inputClass} />
+            <label className="w-48">
+              <span className={labelClass}>New request type</span>
+              <input name="name" required placeholder="Name" className={inputClass} />
             </label>
-            <label className="md:col-span-2">
+            <label className="min-w-48 flex-1">
               <span className={labelClass}>Description</span>
-              <input name="description" className={inputClass} />
+              <input name="description" placeholder="Optional" className={inputClass} />
             </label>
           </AddRowForm>
         )}
       </section>
+    );
+  }
 
-      <section className={`${cardClass} p-6`}>
-        <div className="mb-1 flex flex-wrap items-baseline justify-between gap-2">
-          <h2 className="text-base font-semibold text-slate-900">Categories &amp; subcategories</h2>
-          {siteId && <span className="text-xs text-slate-400">Owners shown for {siteName}</span>}
-        </div>
-        <p className="mb-4 text-sm text-slate-500">
-          Lower sort order shows first. A new ticket auto-assigns to the ★ owner of its
-          subcategory (else its category) at the handling site.
-        </p>
-        <div className="space-y-4">
-          {topLevel.map((category) => (
-            <div key={category.id} className="rounded-lg border border-slate-200 px-4">
+  return (
+    <div className="space-y-3">
+      <p className="text-xs text-slate-500">
+        A new ticket goes to the ★ owner of its subcategory (else its category) at the ticket&apos;s site
+        {siteName ? ` (owners shown for ${siteName})` : ""}. Lower sort order shows first.
+      </p>
+      {topLevel.map((category) => {
+        const subs = childrenOf(category.id);
+        const ownerCount = [category, ...subs].reduce((n, c) => n + ownersOf(c.id).length, 0);
+        return (
+          <details key={category.id} className={`${cardClass} group overflow-hidden`}>
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3.5 hover:bg-slate-50">
+              <span className="flex items-center gap-2">
+                <svg
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  aria-hidden="true"
+                  className="h-4 w-4 text-slate-400 transition-transform group-open:rotate-90"
+                >
+                  <path d="m9 6 6 6-6 6" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <span className={`text-sm font-semibold ${category.is_active ? "text-slate-900" : "text-slate-400"}`}>
+                  {category.name}
+                </span>
+                {!category.is_active && (
+                  <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-500">Inactive</span>
+                )}
+              </span>
+              <span className="text-xs text-slate-400">
+                {subs.length} subcategor{subs.length === 1 ? "y" : "ies"} · {ownerCount} owner
+                {ownerCount === 1 ? "" : "s"}
+              </span>
+            </summary>
+            <div className="border-t border-slate-100 px-5">
               <ul className="divide-y divide-slate-100">
                 <CategoryRow
                   category={category}
@@ -245,7 +291,7 @@ export function TicketsSection({
                   siteStaff={siteStaff}
                   ownersOf={ownersOf}
                 />
-                {childrenOf(category.id).map((sub) => (
+                {subs.map((sub) => (
                   <CategoryRow
                     key={sub.id}
                     category={sub}
@@ -262,7 +308,7 @@ export function TicketsSection({
                   action={createCategory}
                   submitLabel="Add"
                   submitClassName="text-sm font-medium text-blue-700 hover:underline"
-                  className="flex flex-wrap items-center gap-2 border-t border-slate-100 py-2 pl-6"
+                  className="flex flex-wrap items-center gap-2 border-t border-slate-100 py-2.5 pl-6"
                 >
                   <input type="hidden" name="parentId" value={category.id} />
                   <input
@@ -275,26 +321,26 @@ export function TicketsSection({
                 </AddRowForm>
               )}
             </div>
-          ))}
-        </div>
-        {canEdit && (
-          <AddRowForm
-            action={createCategory}
-            submitLabel="Add category"
-            submitClassName={primaryButtonClass}
-            className="mt-4 grid gap-3 border-t border-slate-100 pt-4 md:grid-cols-4"
-          >
-            <label className="md:col-span-2">
-              <span className={labelClass}>New category</span>
-              <input name="name" required className={inputClass} />
-            </label>
-            <label>
-              <span className={labelClass}>Sort order</span>
-              <input name="sortOrder" type="number" defaultValue={100} className={inputClass} />
-            </label>
-          </AddRowForm>
-        )}
-      </section>
+          </details>
+        );
+      })}
+      {canEdit && (
+        <AddRowForm
+          action={createCategory}
+          submitLabel="Add category"
+          submitClassName={primaryButtonClass}
+          className={`${cardClass} flex flex-wrap items-end gap-3 p-4`}
+        >
+          <label className="min-w-48 flex-1">
+            <span className={labelClass}>New category</span>
+            <input name="name" required placeholder="e.g. Printers" className={inputClass} />
+          </label>
+          <label className="w-28">
+            <span className={labelClass}>Sort order</span>
+            <input name="sortOrder" type="number" defaultValue={100} className={inputClass} />
+          </label>
+        </AddRowForm>
+      )}
     </div>
   );
 }

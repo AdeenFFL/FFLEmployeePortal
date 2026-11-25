@@ -67,18 +67,15 @@ export function OnboardingSection({
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <p className="text-sm text-slate-500">
-          Who a new onboarding/offboarding checklist task auto-assigns to, by task type — and who
-          the whole request auto-assigns to as IT Executive. ★ = primary owner.
-        </p>
-        {siteId && <span className="text-xs text-slate-400">Shown for {siteName}</span>}
-      </div>
-      <section className={`${cardClass} px-6 py-2`}>
-        <ul className="divide-y divide-slate-100">
+      <p className="text-xs text-slate-500">
+        ★ = primary owner: new tasks go to them{siteName ? ` at ${siteName}` : ""}. A task with no owner goes to
+        the request&apos;s IT Executive.
+      </p>
+      <section className="rounded-xl border border-blue-100 bg-blue-50/40 px-5 py-1">
+        <ul>
           <TaskRow
             taskType={OVERALL_REQUEST_KEY}
-            label="Overall Request (IT Executive)"
+            label="IT Executive (runs the whole request)"
             siteId={siteId}
             canEdit={canEdit}
             siteStaff={siteStaff}
@@ -86,7 +83,8 @@ export function OnboardingSection({
           />
         </ul>
       </section>
-      <section className={`${cardClass} px-6 py-2`}>
+      <section className={`${cardClass} px-5 py-1`}>
+        <h3 className="pb-1 pt-3 text-xs font-semibold uppercase tracking-wider text-slate-400">Tasks</h3>
         <ul className="divide-y divide-slate-100">
           {TASK_TYPES.map((t) => (
             <TaskRow

@@ -2,16 +2,27 @@ import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
 import { checked, fetchOrgUnits, fetchTicketScope, hasItPermission } from "@/lib/it/ticket-data";
-import { cardClass, inputClass, secondaryButtonClass } from "../_components/ticket-ui";
+import { cardClass } from "../_components/ticket-ui";
 import { TicketsSection } from "./_sections/tickets-section";
 import { OnboardingSection } from "./_sections/onboarding-section";
 import { SitesSection } from "./_sections/sites-section";
+import { SiteSwitcher } from "./_sections/site-switcher";
 
 type Tab = "tickets" | "onboarding" | "sites";
-const TABS: { key: Tab; label: string }[] = [
-  { key: "tickets", label: "Tickets" },
-  { key: "onboarding", label: "Onboarding Tasks" },
-  { key: "sites", label: "Sites & IT Staff" },
+const TABS: { key: Tab; label: string; hint: string }[] = [
+  { key: "tickets", label: "Tickets", hint: "SLA targets, request types and categories with their owners per site." },
+  {
+    key: "onboarding",
+    label: "Onboarding tasks",
+    hint: "Who each onboarding / offboarding task goes to at this site, and who runs the whole request.",
+  },
+  { key: "sites", label: "Sites & IT staff", hint: "Which sites each IT person covers, as manager or member." },
+];
+type TicketSection = "sla" | "types" | "categories";
+const TICKET_SECTIONS: { key: TicketSection; label: string }[] = [
+  { key: "sla", label: "SLA targets" },
+  { key: "types", label: "Request types" },
+  { key: "categories", label: "Categories & owners" },
 ];
 
 // Unified IT Settings — replaces the old /it/settings/tickets, /it/settings/sites and
@@ -20,10 +31,11 @@ const TABS: { key: Tab; label: string }[] = [
 export default async function ItSettingsPage({
   searchParams,
 }: {
-  searchParams: Promise<{ tab?: string; site?: string; q?: string }>;
+  searchParams: Promise<{ tab?: string; site?: string; q?: string; section?: string }>;
 }) {
   const params = await searchParams;
   const tab: Tab = params.tab === "onboarding" ? "onboarding" : params.tab === "sites" ? "sites" : "tickets";
+  const section: TicketSection = TICKET_SECTIONS.find((t) => t.key === params.section)?.key ?? "sla";
   const supabase = await createClient();
 
   const [
@@ -86,54 +98,65 @@ export default async function ItSettingsPage({
     return team.length > 0 && !team.some((m) => m.role === "manager");
   });
 
-  const tabClass = (active: boolean) =>
-    `rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
-      active ? "bg-blue-600 text-white" : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-    }`;
+  const siteParam = siteId ? `&site=${siteId}` : "";
+  const tabHref = (t: Tab) => `/it/settings?tab=${t}${siteParam}`;
+  const sectionHref = (sec: TicketSection) => `/it/settings?tab=tickets&section=${sec}${siteParam}`;
+  // The site only matters where owners are shown.
+  const showSite = (tab === "onboarding" || (tab === "tickets" && section === "categories")) && visibleSites.length > 0;
 
   return (
     <div className="py-6">
-      <PageHeader
-        title="IT Settings"
-        description="SLA targets, request types, categories, owners, and sites & IT staff — all in one place."
-        action={
-          <Link href="/it/dashboard" className={secondaryButtonClass}>
-            Dashboard
-          </Link>
-        }
-      />
+      <PageHeader title="IT Settings" description={TABS.find((t) => t.key === tab)?.hint} />
 
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-2">
+      <div className="mb-5 flex flex-wrap items-end justify-between gap-3 border-b border-slate-200">
+        <nav aria-label="Settings" className="flex gap-6">
           {TABS.map((t) => (
-            <Link key={t.key} href={`/it/settings?tab=${t.key}${siteId ? `&site=${siteId}` : ""}`} className={tabClass(tab === t.key)}>
+            <Link
+              key={t.key}
+              href={tabHref(t.key)}
+              aria-current={tab === t.key ? "page" : undefined}
+              className={`-mb-px border-b-2 px-1 pb-3 text-sm font-medium transition-colors ${
+                tab === t.key
+                  ? "border-blue-600 text-slate-900"
+                  : "border-transparent text-slate-500 hover:text-slate-800"
+              }`}
+            >
               {t.label}
             </Link>
           ))}
-        </div>
-        {tab !== "sites" && visibleSites.length > 0 && (
-          <form method="get" className="flex items-center gap-2">
-            <input type="hidden" name="tab" value={tab} />
-            <label htmlFor="site" className="text-sm font-medium text-slate-700">
-              Site
-            </label>
-            <select id="site" name="site" defaultValue={siteId} className={`${inputClass} w-auto`}>
-              {visibleSites.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
-            <button type="submit" className={secondaryButtonClass}>
-              Show
-            </button>
-          </form>
+        </nav>
+        {showSite && (
+          <div className="pb-2">
+            <SiteSwitcher
+              sites={visibleSites.map((s) => ({ id: s.id, name: s.name }))}
+              siteId={siteId}
+              baseQuery={tab === "tickets" ? `tab=tickets&section=${section}` : `tab=${tab}`}
+            />
+          </div>
         )}
       </div>
+
+      {tab === "tickets" && canReadTickets && (
+        <nav aria-label="Ticket settings" className="mb-4 inline-flex rounded-lg bg-slate-100 p-1">
+          {TICKET_SECTIONS.map((t) => (
+            <Link
+              key={t.key}
+              href={sectionHref(t.key)}
+              aria-current={section === t.key ? "page" : undefined}
+              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
+                section === t.key ? "bg-white text-slate-900 shadow-sm" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              {t.label}
+            </Link>
+          ))}
+        </nav>
+      )}
 
       {tab === "tickets" &&
         (canReadTickets ? (
           <TicketsSection
+            section={section}
             slas={slas ?? []}
             requestTypes={requestTypes ?? []}
             categories={categories ?? []}
