@@ -2,15 +2,8 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import {
-  BellIcon,
-  CheckIcon,
-  KeyIcon,
-  LaptopIcon,
-  ShoppingBagIcon,
-  TicketIcon,
-  UsersIcon,
-} from "@/components/icons";
+import { BellIcon, CheckIcon } from "@/components/icons";
+import { notificationKind } from "@/lib/it/notification-kinds";
 import {
   getRecentNotifications,
   markAllRead,
@@ -30,27 +23,6 @@ function timeAgo(iso: string) {
   const days = Math.floor(hr / 24);
   if (days < 7) return `${days}d ago`;
   return new Date(iso).toLocaleDateString("en-GB", { day: "numeric", month: "short" });
-}
-
-// What a notification is about, for its icon and colour.
-type Kind = { label: string; icon: typeof BellIcon; chip: string };
-const KINDS = {
-  ticket: { label: "Ticket", icon: TicketIcon, chip: "bg-blue-100 text-blue-700" },
-  people: { label: "On/offboarding", icon: UsersIcon, chip: "bg-emerald-100 text-emerald-700" },
-  procurement: { label: "Procurement", icon: ShoppingBagIcon, chip: "bg-amber-100 text-amber-700" },
-  asset: { label: "Asset", icon: LaptopIcon, chip: "bg-violet-100 text-violet-700" },
-  account: { label: "Your access", icon: KeyIcon, chip: "bg-rose-100 text-rose-700" },
-  other: { label: "Update", icon: BellIcon, chip: "bg-slate-100 text-slate-600" },
-} satisfies Record<string, Kind>;
-
-function kindOf(n: RecentNotification): Kind {
-  const e = n.event;
-  if (e.startsWith("asset_")) return KINDS.asset;
-  if (e === "role_changed" || e === "access_changed") return KINDS.account;
-  if (n.demand_id || n.invoice_id || /demand|invoice|payment|procure/.test(e)) return KINDS.procurement;
-  if (n.ticket_id || e.startsWith("ticket_")) return KINDS.ticket;
-  if (n.request_id || /lifecycle|onboarding|offboarding|task_|clearance/.test(e)) return KINDS.people;
-  return KINDS.other;
 }
 
 function isToday(iso: string) {
@@ -144,7 +116,7 @@ export function NotificationBell({
   const hidden = Math.max(0, unreadCount - notifications.length);
 
   function renderItem(n: RecentNotification) {
-    const kind = kindOf(n);
+    const kind = notificationKind(n);
     const KindIcon = kind.icon;
     return (
       <li key={n.id} className="group relative">
