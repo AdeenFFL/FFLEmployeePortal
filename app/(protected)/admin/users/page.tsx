@@ -1,34 +1,21 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
-import { setUserStatus, revokeInvitation, resendInviteEmail } from "./actions";
-import { DeleteUserButton } from "./delete-user-button";
 import { UserFormPanel } from "./user-form";
+import { UsersDirectory, type InviteRow, type UserRow } from "./users-directory";
 import { PageHeader } from "@/components/page-header";
-import { StatusPill } from "@/components/status-pill";
-import { OptimisticToggle } from "@/components/optimistic-toggle";
-import { IconLink, IconButton } from "@/components/icon-button";
-import { PencilIcon, TrashIcon, MailIcon } from "@/components/icons";
-import { getInitials } from "@/lib/format/initials";
+import { PlusIcon } from "@/components/icons";
 import type { UserStatus, AuthMethod, EmploymentType } from "@/types/database";
-
-const STATUSES: UserStatus[] = ["Active", "Inactive", "Suspended"];
-
-function formatDate(value: string | null) {
-  if (!value) return "Never";
-  return new Date(value).toLocaleString();
-}
 
 export default async function AdminUsersPage({
   searchParams,
 }: {
   searchParams: Promise<{
-    role?: string;
-    status?: string;
     compose?: string;
     edit?: string;
+    tab?: string;
   }>;
 }) {
-  const { role, status, compose, edit } = await searchParams;
+  const { compose, edit, tab } = await searchParams;
   const supabase = await createClient();
 
   const { data: roles } = await supabase.from("roles").select("*").order("name");
@@ -53,22 +40,8 @@ export default async function AdminUsersPage({
   const { data: allAccounts } = await supabase.from("user_accounts").select("email");
   const existingEmails = new Set((allAccounts ?? []).map((a) => a.email));
 
-  // Person ids matching the role filter, if any — role now lives in user_roles, not a single
-  // column on the person.
-  let roleFilterPersonIds: string[] | null = null;
-  if (role) {
-    const { data: assignments } = await supabase
-      .from("user_roles")
-      .select("person_id")
-      .eq("role_id", role);
-    roleFilterPersonIds = (assignments ?? []).map((a) => a.person_id);
-  }
-
-  let personsQuery = supabase.from("persons").select("*");
-  const statusFilter = STATUSES.find((s) => s === status);
-  if (statusFilter) personsQuery = personsQuery.eq("status", statusFilter);
-  if (roleFilterPersonIds) personsQuery = personsQuery.in("id", roleFilterPersonIds);
-  const { data: persons } = await personsQuery.order("full_name");
+  // Everyone; search and the role / status filters run in the browser (users-directory.tsx).
+  const { data: persons } = await supabase.from("persons").select("*").order("full_name");
 
   const personIds = (persons ?? []).map((p) => p.id);
 
@@ -220,213 +193,54 @@ export default async function AdminUsersPage({
     }
   }
 
+  const departmentNameById = new Map((departments ?? []).map((d) => [d.id, d.name]));
+  const userRows: UserRow[] = (persons ?? []).map((p) => {
+    const account = accountByPersonId.get(p.id);
+    const roleId = roleIdByPersonId.get(p.id) ?? null;
+    return {
+      id: p.id,
+      name: p.full_name,
+      email: account?.email ?? null,
+      roleId,
+      roleName: roleId ? (roleNameById.get(roleId) ?? null) : null,
+      designation: p.designation,
+      department: p.department_id ? (departmentNameById.get(p.department_id) ?? null) : null,
+      employeeCode: p.employee_code,
+      status: p.status,
+      lastLogin: account?.last_login_at ?? null,
+    };
+  });
+  const inviteRows: InviteRow[] = pendingInvitations.map((i) => ({
+    email: i.email,
+    name: i.display_name,
+    roleName: roleNameById.get(i.role_id) ?? null,
+    invitedAt: i.invited_at,
+    onboardingId: i.onboarding_request_id,
+    onboardingNumber: i.onboarding_request_id ? (requestNumberById.get(i.onboarding_request_id) ?? null) : null,
+  }));
+
   return (
     <div className="py-6">
       <PageHeader
         title="User Management"
-        description="Manage portal access, roles, and status for all employees."
+        description="Who can sign in to the portal, their role, and whether they're active."
         action={
           <Link
             href="/admin/users?compose=new"
-            className="rounded-md bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700"
+            className="inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700"
           >
-            + Add New User
+            <PlusIcon className="h-4 w-4" />
+            Add user
           </Link>
         }
       />
 
-      <form
-        method="get"
-        className="mb-6 flex flex-wrap items-end gap-3 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
-      >
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="font-medium text-slate-600">Role</span>
-          <select
-            name="role"
-            defaultValue={role ?? ""}
-            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="">All</option>
-            {(roles ?? []).map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="flex flex-col gap-1 text-xs">
-          <span className="font-medium text-slate-600">Status</span>
-          <select
-            name="status"
-            defaultValue={status ?? ""}
-            className="rounded-lg border border-slate-300 px-2 py-1.5 text-sm focus:border-blue-500 focus:ring-blue-500"
-          >
-            <option value="">All</option>
-            {STATUSES.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
-          </select>
-        </label>
-        <button
-          type="submit"
-          className="rounded-lg border border-slate-300 px-4 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
-        >
-          Apply Filters
-        </button>
-        <Link href="/admin/users" className="text-sm text-slate-500 hover:text-slate-700">
-          Clear
-        </Link>
-      </form>
-
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Designation</th>
-              <th className="px-4 py-3">Last Login</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {(persons ?? []).map((p) => {
-              const account = accountByPersonId.get(p.id);
-              const roleId = roleIdByPersonId.get(p.id);
-              const isInactive = p.status !== "Active";
-              return (
-                <tr key={p.id}>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-blue-100 text-xs font-semibold text-blue-700">
-                        {getInitials(p.full_name ?? account?.email ?? "")}
-                      </div>
-                      <span className={isInactive ? "text-slate-400" : "text-slate-800"}>
-                        {p.full_name ?? "—"}
-                      </span>
-                    </div>
-                  </td>
-                  <td className="px-4 py-3 text-slate-500">{account?.email ?? "—"}</td>
-                  <td className="px-4 py-3">
-                    {roleId ? (
-                      roleNameById.get(roleId)
-                    ) : (
-                      <StatusPill label="Pending Role" tone="warning" />
-                    )}
-                  </td>
-                  <td className="px-4 py-3">{p.designation ?? "—"}</td>
-                  <td className="px-4 py-3 text-slate-500">
-                    {formatDate(account?.last_login_at ?? null)}
-                  </td>
-                  <td className="px-4 py-3">
-                    <OptimisticToggle
-                      pressed={p.status === "Active"}
-                      label={p.status === "Active" ? "Deactivate user" : "Reactivate user"}
-                      action={setUserStatus.bind(
-                        null,
-                        p.id,
-                        p.status === "Active" ? "Inactive" : "Active",
-                      )}
-                    />
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-3">
-                      <IconLink
-                        href={`/admin/users?edit=${encodeURIComponent(account?.email ?? "")}`}
-                        icon={<PencilIcon className="h-4 w-4" />}
-                        label="Edit user"
-                        tone="primary"
-                      />
-                      <DeleteUserButton
-                        personId={p.id}
-                        confirmMessage={`Permanently delete ${p.full_name ?? account?.email ?? "this user"}? This deletes their account and ALL associated data (tickets, messages, assets, onboarding records — including ones owned by other people but assigned to or touched by them). This cannot be undone.`}
-                      />
-                    </div>
-                  </td>
-                </tr>
-              );
-            })}
-            {(persons ?? []).length === 0 && (
-              <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-slate-400">
-                  No users match these filters.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      <h2 className="mb-3 mt-10 text-lg font-semibold text-slate-900">
-        Pending Invitations
-      </h2>
-      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white shadow-sm">
-        <table className="w-full text-left text-sm">
-          <thead className="bg-slate-50 text-xs uppercase text-slate-500">
-            <tr>
-              <th className="px-4 py-3">Name</th>
-              <th className="px-4 py-3">Email</th>
-              <th className="px-4 py-3">Role</th>
-              <th className="px-4 py-3">Invited</th>
-              <th className="px-4 py-3"></th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100">
-            {pendingInvitations.map((invite) => (
-              <tr key={invite.email}>
-                <td className="px-4 py-3">
-                  {invite.display_name ?? "—"}
-                  {invite.onboarding_request_id && (
-                    <Link
-                      href={`/it/onboarding/${invite.onboarding_request_id}`}
-                      className="ml-2 rounded bg-emerald-50 px-1.5 py-0.5 text-xs font-medium text-emerald-700 hover:underline"
-                    >
-                      Onboarding {requestNumberById.get(invite.onboarding_request_id) ?? ""}
-                    </Link>
-                  )}
-                </td>
-                <td className="px-4 py-3 text-slate-500">{invite.email}</td>
-                <td className="px-4 py-3">{roleNameById.get(invite.role_id)}</td>
-                <td className="px-4 py-3 text-slate-500">{formatDate(invite.invited_at)}</td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <form action={resendInviteEmail.bind(null, invite.email)}>
-                      <IconButton
-                        icon={<MailIcon className="h-4 w-4" />}
-                        label="Resend invite email"
-                        tone="primary"
-                      />
-                    </form>
-                    <IconLink
-                      href={`/admin/users?edit=${encodeURIComponent(invite.email)}`}
-                      icon={<PencilIcon className="h-4 w-4" />}
-                      label="Edit invitation"
-                    />
-                    <form action={revokeInvitation.bind(null, invite.email)}>
-                      <IconButton
-                        icon={<TrashIcon className="h-4 w-4" />}
-                        label="Revoke invitation"
-                        tone="danger"
-                      />
-                    </form>
-                  </div>
-                </td>
-              </tr>
-            ))}
-            {pendingInvitations.length === 0 && (
-              <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-slate-400">
-                  No pending invitations.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+      <UsersDirectory
+        users={userRows}
+        invites={inviteRows}
+        roles={(roles ?? []).map((r) => ({ id: r.id, name: r.name }))}
+        initialTab={tab === "invites" ? "invites" : "users"}
+      />
 
       {panel && (
         // key forces a fresh mount (and therefore a reset useDismissable `visible`) on every
