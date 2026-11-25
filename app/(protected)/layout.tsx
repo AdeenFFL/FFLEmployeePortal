@@ -4,7 +4,7 @@ import { FormFeedback } from "@/components/form-feedback";
 import { Sidebar } from "./sidebar";
 import { TopBar } from "./topbar";
 import { getCurrentUserNav } from "./current-user";
-import { getRecentNotifications } from "./notification-actions";
+import { getRecentNotifications, getUnreadLinks } from "./notification-actions";
 import { CLEARANCE_SIGNER_NAV_KEY, isClearanceSigner } from "./hr/clearance/clearance-nav";
 
 // Route group (URL-invisible) wrapping every page that requires a signed-in, role-assigned
@@ -15,8 +15,8 @@ export default async function ProtectedLayout({
 }: {
   children: React.ReactNode;
 }) {
-  const [{ displayName, permissions, homePath }, { unreadCount, notifications }, clearanceSigner] =
-    await Promise.all([getCurrentUserNav(), getRecentNotifications(), isClearanceSigner()]);
+  const [{ displayName, permissions, homePath }, { unreadCount, notifications }, clearanceSigner, unreadLinks] =
+    await Promise.all([getCurrentUserNav(), getRecentNotifications(), isClearanceSigner(), getUnreadLinks()]);
   // Menu-only flag: show HR Management > Clearance to real signers (see clearance-nav.ts).
   const navKeys = clearanceSigner ? [...permissions, CLEARANCE_SIGNER_NAV_KEY] : permissions;
 
@@ -33,7 +33,7 @@ export default async function ProtectedLayout({
           independently scrolling column (see sidebar.tsx) — the outer h-screen + overflow-hidden
           here is what stops the *page* from scrolling, so the sidebar and TopBar stay put and
           only <main> scrolls. */}
-      <Sidebar permissions={navKeys} homePath={homePath} />
+      <Sidebar permissions={navKeys} homePath={homePath} unreadLinks={unreadLinks} />
       {/* min-w-0: without it this column grows to fit its widest content (a wide table), pushing
           the page wider than the window: sideways scrolling and a white strip past the grey. */}
       <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">

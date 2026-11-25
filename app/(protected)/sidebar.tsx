@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { signOut } from "@/lib/auth/sign-out";
+import { getUnreadLinks } from "./notification-actions";
 import { APP_NAME, APP_TAGLINE } from "@/lib/constants";
 import {
   HomeIcon,
@@ -27,9 +28,18 @@ type IconComponent = (props: { className?: string }) => React.ReactElement;
 // used for nav entries that front more than one underlying permission-gated resource (e.g. the
 // unified Requests queue, which needs it.tickets.read OR it.onboarding.read).
 type Permission = string | string[];
-// `match`: other paths that belong to this entry (pages reached from it with no entry of their own).
-type NavChild = { href: string; label: string; permission?: Permission; match?: string[] };
-type NavLeaf = { type: "link"; href: string; label: string; icon: IconComponent; permission?: Permission };
+// `match`: other pages that belong to this entry (reached from it, with no entry of their own):
+// a path prefix, or a pattern for pages deeper inside another section.
+type Matcher = string | RegExp;
+type NavChild = { href: string; label: string; permission?: Permission; match?: Matcher[] };
+type NavLeaf = {
+  type: "link";
+  href: string;
+  label: string;
+  icon: IconComponent;
+  permission?: Permission;
+  match?: Matcher[];
+};
 type NavGroup = {
   type: "group";
   label: string;
@@ -44,14 +54,28 @@ type NavEntry = NavLeaf | NavGroup;
 const EXPAND_DELAY_MS = 100;
 const COLLAPSE_DELAY_MS = 200;
 const PERMISSION_CHECK_MS = 10_000; // at most one live permission check per 10 seconds
+const UNREAD_POLL_MS = 30_000; // same pace as the notification bell
+
+// Red count for unread notifications on a menu entry.
+function UnreadPill({ count }: { count: number }) {
+  return (
+    <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">
+      {count > 99 ? "99+" : count}
+    </span>
+  );
+}
 
 export function Sidebar({
   permissions,
   homePath,
+  unreadLinks: initialUnreadLinks = [],
 }: {
   permissions: string[];
   homePath: string;
+  // Links of the person's unread notifications (notification-actions.ts getUnreadLinks).
+  unreadLinks?: string[];
 }) {
+  const [unreadLinks, setUnreadLinks] = useState(initialUnreadLinks);
   // The layout (and so these props) is not re-rendered on client-side navigation, so after an
   // admin changes this person's role or its permissions the sidebar would stay as it was until
   // a full reload. Re-check now and then: after navigating, and when the tab comes back into view.
@@ -72,6 +96,26 @@ export function Sidebar({
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = () =>
+      getUnreadLinks()
+        .then((links) => {
+          if (!cancelled) setUnreadLinks(links);
+        })
+        .catch(() => {});
+    const timer = setInterval(refresh, UNREAD_POLL_MS);
+    window.addEventListener("notifications:changed", refresh);
+    // Opening a notification lands on its page: catch up a moment later (it's read by then).
+    const soon = setTimeout(refresh, 1_500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      clearTimeout(soon);
+      window.removeEventListener("notifications:changed", refresh);
+    };
+  }, [pathname]);
 
   useEffect(() => {
     let cancelled = false;
@@ -122,6 +166,7 @@ export function Sidebar({
       label: "My Tasks",
       icon: TicketIcon,
       permission: ["it.tickets.read", "it.tickets.update", "it.onboarding.read", "it.onboarding.update", "it.onboarding.assign"],
+      match: [/^\/it\/onboarding\/[^/]+\/tasks\//, /^\/it\/tickets\/[^/]+\/tasks\//, "/hr/clearance/tasks"],
     },
     {
       type: "link",
@@ -157,6 +202,9 @@ export function Sidebar({
           href: "/hr/onboarding",
           label: "Onboarding",
           permission: ["hr.onboarding.create", "it.onboarding.read"],
+          // Onboarding notifications link to the IT request page; for HR, this is where it lives.
+          // (IT staff who also see Requests get it there: same-module entries win a tie.)
+          match: ["/it/onboarding"],
         },
         // One entry for the whole clearance flow: the page shows Requests, To sign, Signers and
         // My tasks as cards, each only with its own permission. Not hr.clearance.sign: every role
@@ -267,23 +315,52 @@ export function Sidebar({
     return href.split("#")[0];
   }
 
-  // How closely a path covers the current page: its length when it is the page or a parent of
-  // it, else -1. The nav lights up only the closest entry, so /it/inventory/stock lights up
-  // Stock, not Asset Register as well.
-  function matchLength(path: string) {
-    return pathname === path || pathname.startsWith(`${path}/`) ? path.length : -1;
-  }
-  function childScore(child: NavChild) {
-    return Math.max(matchLength(hrefPath(child.href)), ...(child.match ?? []).map(matchLength));
-  }
+  // Which menu entry a page belongs to: the closest one, so /it/inventory/stock is Stock, not
+  // Asset Register as well. A prefix scores its length; a pattern (a page deeper inside another
+  // section, e.g. a task page that belongs to My Tasks) beats any prefix. On a tie, the entry in
+  // the same module as the page wins (/it/... → IT Management before HR Management).
   const allEntries: NavEntry[] = [...baseItems, ...moduleSections];
-  const scores = allEntries.flatMap((entry) =>
+  const targets = allEntries.flatMap((entry) =>
     entry.type === "link"
-      ? [{ href: entry.href, score: matchLength(hrefPath(entry.href)) }]
-      : entry.children.map((child) => ({ href: child.href, score: childScore(child) })),
+      ? [{ href: entry.href, match: entry.match }]
+      : entry.children.map((child) => ({ href: child.href, match: child.match })),
   );
-  const bestScore = Math.max(-1, ...scores.map((s) => s.score));
-  const activeHref = bestScore >= 0 ? scores.find((s) => s.score === bestScore)?.href : undefined;
+  function entryFor(rawPath: string) {
+    const path = rawPath.split(/[?#]/)[0];
+    const section = path.split("/")[1];
+    let best: string | undefined;
+    let bestScore = -1;
+    for (const t of targets) {
+      const own = hrefPath(t.href);
+      const scoreOf = (m: Matcher) =>
+        typeof m === "string"
+          ? path === m || path.startsWith(`${m}/`)
+            ? m.length
+            : -1
+          : m.test(path)
+            ? 1000
+            : -1;
+      let score = Math.max(scoreOf(own), ...(t.match ?? []).map(scoreOf));
+      if (score >= 0 && own.split("/")[1] === section) score += 0.5;
+      if (score > bestScore) {
+        bestScore = score;
+        best = t.href;
+      }
+    }
+    return best;
+  }
+  const activeHref = entryFor(pathname);
+
+  // Unread notifications per entry, by where each one's link goes.
+  const unreadByHref = new Map<string, number>();
+  for (const link of unreadLinks) {
+    const href = entryFor(link);
+    if (href) unreadByHref.set(href, (unreadByHref.get(href) ?? 0) + 1);
+  }
+  const unreadFor = (entry: NavEntry) =>
+    entry.type === "link"
+      ? (unreadByHref.get(entry.href) ?? 0)
+      : entry.children.reduce((sum, c) => sum + (unreadByHref.get(c.href) ?? 0), 0);
 
   function isEntryActive(entry: NavEntry) {
     if (entry.type === "link") return entry.href === activeHref;
@@ -317,14 +394,19 @@ export function Sidebar({
   function renderEntry(entry: NavEntry) {
     const active = isEntryActive(entry);
     const ItemIcon = entry.icon;
+    const unread = unreadFor(entry);
+    const unreadLabel = unread ? `, ${unread} unread notification${unread === 1 ? "" : "s"}` : "";
 
     if (entry.type === "link") {
       return (
         <Link
           key={entry.href}
           href={entry.href}
-          title={collapsed ? entry.label : undefined}
-          className={`flex w-fit items-center rounded-full px-3 py-2 text-sm font-medium transition-colors ${
+          title={collapsed ? `${entry.label}${unreadLabel}` : undefined}
+          aria-label={unread ? `${entry.label}${unreadLabel}` : undefined}
+          className={`flex items-center rounded-full px-3 py-2 text-sm font-medium transition-colors ${
+            collapsed ? "w-fit" : "w-full"
+          } ${
             collapsed ? "gap-0" : "gap-3"
           } ${
             active
@@ -332,7 +414,12 @@ export function Sidebar({
               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`}
         >
-          <ItemIcon className="h-4 w-4 shrink-0" />
+          <span className="relative shrink-0">
+            <ItemIcon className="h-4 w-4" />
+            {unread > 0 && collapsed && (
+              <span aria-hidden="true" className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-600 ring-2 ring-white" />
+            )}
+          </span>
           <span
             className={`overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
               collapsed ? "max-w-0 opacity-0" : "max-w-40 opacity-100"
@@ -340,6 +427,7 @@ export function Sidebar({
           >
             {entry.label}
           </span>
+          {unread > 0 && !collapsed && <UnreadPill count={unread} />}
         </Link>
       );
     }
@@ -352,7 +440,8 @@ export function Sidebar({
         <button
           type="button"
           onClick={() => toggleGroup(entry.label)}
-          title={collapsed ? entry.label : undefined}
+          title={collapsed ? `${entry.label}${unreadLabel}` : undefined}
+          aria-label={unread ? `${entry.label}${unreadLabel}` : undefined}
           className={`flex items-center rounded-full px-3 py-2 text-left text-sm font-medium transition-colors ${
             collapsed ? "w-fit gap-0" : "w-full gap-3"
           } ${
@@ -361,7 +450,12 @@ export function Sidebar({
               : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
           }`}
         >
-          <ItemIcon className="h-4 w-4 shrink-0" />
+          <span className="relative shrink-0">
+            <ItemIcon className="h-4 w-4" />
+            {unread > 0 && collapsed && (
+              <span aria-hidden="true" className="absolute -right-1 -top-1 h-2 w-2 rounded-full bg-red-600 ring-2 ring-white" />
+            )}
+          </span>
           <span
             className={`overflow-hidden whitespace-nowrap transition-[opacity,max-width] duration-150 ${
               collapsed ? "max-w-0 opacity-0" : "max-w-40 flex-1 opacity-100"
@@ -369,6 +463,7 @@ export function Sidebar({
           >
             {entry.label}
           </span>
+          {unread > 0 && !collapsed && <UnreadPill count={unread} />}
           {!collapsed && (
             <ChevronDownIcon
               className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
@@ -379,17 +474,24 @@ export function Sidebar({
           <div className="ml-6 mt-1 space-y-1 border-l border-slate-200 pl-3">
             {entry.children.map((child) => {
               const childActive = child.href === activeHref;
+              const childUnread = unreadByHref.get(child.href) ?? 0;
               return (
                 <Link
                   key={child.href}
                   href={child.href}
-                  className={`block rounded-full px-3 py-1.5 text-sm transition-colors ${
+                  aria-label={
+                    childUnread
+                      ? `${child.label}, ${childUnread} unread notification${childUnread === 1 ? "" : "s"}`
+                      : undefined
+                  }
+                  className={`flex items-center gap-2 rounded-full px-3 py-1.5 text-sm transition-colors ${
                     childActive
                       ? "bg-blue-50 font-medium text-blue-700"
                       : "text-slate-500 hover:bg-slate-50 hover:text-slate-900"
                   }`}
                 >
-                  {child.label}
+                  <span className="min-w-0 truncate">{child.label}</span>
+                  {childUnread > 0 && <UnreadPill count={childUnread} />}
                 </Link>
               );
             })}

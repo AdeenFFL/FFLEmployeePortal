@@ -93,6 +93,11 @@ export function NotificationBell({
     closeTimer.current = setTimeout(() => setOpen(false), 200);
   }
 
+  // The sidebar's red counts follow the same notifications (sidebar.tsx listens for this).
+  function announce() {
+    window.dispatchEvent(new Event("notifications:changed"));
+  }
+
   function removeLocally(id: string) {
     dismissed.current.add(id);
     setNotifications((list) => list.filter((n) => n.id !== id));
@@ -101,14 +106,20 @@ export function NotificationBell({
 
   function tickOff(id: string) {
     removeLocally(id);
-    startTransition(() => markNotificationRead(id));
+    startTransition(async () => {
+      await markNotificationRead(id);
+      announce();
+    });
   }
 
   function clearAll() {
     for (const n of notifications) dismissed.current.add(n.id);
     setNotifications([]);
     setUnreadCount(0);
-    startTransition(() => markAllRead());
+    startTransition(async () => {
+      await markAllRead();
+      announce();
+    });
   }
 
   const today = notifications.filter((n) => isToday(n.created_at));

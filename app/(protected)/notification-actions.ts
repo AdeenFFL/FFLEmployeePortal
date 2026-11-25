@@ -49,6 +49,25 @@ export async function getRecentNotifications(): Promise<{
   }
 }
 
+// Where each unread notification points (its in-app link). The sidebar puts a red count on the
+// menu entry that page belongs to, and on its group (HR Management, IT Management, …).
+export async function getUnreadLinks(): Promise<string[]> {
+  try {
+    const supabase = await createClient();
+    const { data } = await supabase
+      .schema("it")
+      .from("notifications")
+      .select("link")
+      .is("read_at", null)
+      .not("link", "is", null)
+      .order("created_at", { ascending: false })
+      .limit(500);
+    return (data ?? []).map((n) => n.link).filter((l): l is string => Boolean(l?.startsWith("/")));
+  } catch {
+    return [];
+  }
+}
+
 // Tick one off without opening it.
 export async function markNotificationRead(id: string) {
   const supabase = await createClient();
