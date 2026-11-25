@@ -125,7 +125,7 @@ export default async function ItRequestsPage({ searchParams }: { searchParams: P
     <div className="py-6">
       <PageHeader
         title="Requests"
-        description="Onboarding and offboarding are raised by HR; replacements are raised from the Asset Register."
+        description="Onboarding and offboarding are raised by HR; replacements are raised from Fixed Assets."
       />
       <FormMessage error={filters.error} notice={filters.notice} />
 

@@ -74,7 +74,7 @@ export default async function StockPage({
   if (levelsRes.error) {
     return (
       <div className="py-6">
-        <PageHeader title="Stock" description="Consumable stock per site." />
+        <PageHeader title="Consumables" description="Consumables in stock per site." />
         <p className="rounded-xl border border-amber-200 bg-amber-50 px-5 py-4 text-sm text-amber-800">
           Stock isn&apos;t set up in the database yet (migration javaria_it_0022). {levelsRes.error.message}
         </p>
@@ -134,7 +134,7 @@ export default async function StockPage({
   return (
     <div className="py-6">
       <PageHeader
-        title="Stock"
+        title="Consumables"
         description="Consumables on the shelf per site. Deliveries add stock automatically; issues and consumable demands take it out."
         action={
           canUpdate ? (

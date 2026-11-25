@@ -337,7 +337,7 @@ export default async function ItDashboardPage({
               Inventory
             </h2>
             <Link href="/it/inventory" className="text-sm font-medium text-blue-700 hover:underline">
-              Asset Register →
+              Fixed Assets →
             </Link>
           </div>
           <div className="grid grid-cols-2 gap-4 md:grid-cols-5">

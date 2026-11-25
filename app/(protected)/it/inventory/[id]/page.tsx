@@ -343,7 +343,7 @@ export default async function AssetDetailPage({
   return (
     <div className="py-6">
       <Link href="/it/inventory" className="mb-3 inline-block text-sm font-medium text-slate-500 hover:text-slate-800">
-        ← Asset Register
+        ← Fixed Assets
       </Link>
 
       {/* Identity + lifecycle */}

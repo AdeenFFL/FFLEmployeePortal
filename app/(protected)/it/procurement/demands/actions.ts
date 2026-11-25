@@ -553,5 +553,5 @@ export async function registerAssets(demandId: string, receivingId: string, form
   });
   if (error) fail(path, error.message);
   revalidatePath("/it/inventory");
-  done(path, `${count} asset${count === 1 ? "" : "s"} registered — they are now in the Asset Register as Unassigned.`);
+  done(path, `${count} asset${count === 1 ? "" : "s"} registered — they are now in Fixed Assets as Unassigned.`);
 }

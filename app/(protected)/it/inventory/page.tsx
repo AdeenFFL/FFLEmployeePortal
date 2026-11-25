@@ -176,7 +176,7 @@ export default async function AssetRegisterPage({
   return (
     <div className="py-6">
       <PageHeader
-        title="Asset Register"
+        title="Fixed Assets"
         description="Every IT asset, where it is in its life, and who has it."
         action={
           canCreate || canRequestReplacement ? (

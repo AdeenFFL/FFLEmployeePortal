@@ -123,8 +123,8 @@ export function taskGuide(
       return "Install and set up the software on the device, then Update task: list it, set Completed, Save.";
     case "asset_allocation":
       return kind === "Replacement"
-        ? "Assign an asset: pick the replacement device from the Asset Register. The task completes itself."
-        : "Wait until the portal account is linked (Employee account, step 3), then Assign an asset from the Asset Register. The task completes itself.";
+        ? "Assign an asset: pick the replacement device from Fixed Assets. The task completes itself."
+        : "Wait until the portal account is linked (Employee account, step 3), then Assign an asset from Fixed Assets. The task completes itself.";
     case "asset_handover":
       return "The employee acknowledges the asset on My Assets. Once they have, Mark handover confirmed.";
     case "portal_account":
@@ -140,7 +140,7 @@ export function taskGuide(
     case "asset_return":
       return kind === "Offboarding"
         ? "Record return for each device under Assets to return (it goes back to stock), then Update task: set Completed, Save."
-        : "Take back the old device and record its return on the Asset Register, then Update task: set Completed, Save.";
+        : "Take back the old device and record its return in Fixed Assets, then Update task: set Completed, Save.";
     case "license_deactivation":
       return "Remove the licences in the Microsoft 365 admin centre, then Update task: list them, set Completed, Save.";
     default:

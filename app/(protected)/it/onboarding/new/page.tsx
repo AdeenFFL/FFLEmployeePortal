@@ -64,7 +64,7 @@ export default async function NewLifecycleRequestPage({
             href={isReplacement ? "/it/inventory" : "/hr/onboarding"}
             className={secondaryButtonClass}
           >
-            {isReplacement ? "Back to Asset Register" : "Back to list"}
+            {isReplacement ? "Back to Fixed Assets" : "Back to list"}
           </Link>
         }
       />

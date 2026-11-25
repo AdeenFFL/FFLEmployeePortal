@@ -324,7 +324,7 @@ function ReceiptAssets({
             />
           </details>
         ) : (
-          <p className="mt-1 text-xs text-slate-500">IT inventory staff register these in the Asset Register.</p>
+          <p className="mt-1 text-xs text-slate-500">IT inventory staff register these in Fixed Assets.</p>
         ))}
     </div>
   );

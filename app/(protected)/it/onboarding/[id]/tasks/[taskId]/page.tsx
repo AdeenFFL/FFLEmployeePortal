@@ -271,7 +271,7 @@ export default async function ChecklistTaskPage({
                 </p>
               ) : !canAssignAssets ? (
                 <p className="text-sm text-amber-700">
-                  Assigning an asset needs the Asset Register&apos;s assign right. Ask the IT Executive (
+                  Assigning an asset needs the Fixed Assets assign right. Ask the IT Executive (
                   {nameOf(request.it_executive_person_id)}) to give it to you or do this step.
                 </p>
               ) : (

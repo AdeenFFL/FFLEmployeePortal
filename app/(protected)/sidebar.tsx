@@ -258,8 +258,8 @@ export function Sidebar({
           permission: "it.manage_role_permissions",
         },
         // Inventory track (Talha)
-        { href: "/it/inventory", label: "Asset Register", permission: "it.assets.read" },
-        { href: "/it/inventory/stock", label: "Stock", permission: "it.stock.read" },
+        { href: "/it/inventory", label: "Fixed Assets", permission: "it.assets.read" },
+        { href: "/it/inventory/stock", label: "Consumables", permission: "it.stock.read" },
         {
           href: "/it/inventory/settings",
           label: "Inventory Settings",

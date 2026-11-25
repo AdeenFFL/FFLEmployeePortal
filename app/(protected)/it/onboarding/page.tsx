@@ -106,7 +106,7 @@ export default async function OnboardingQueuePage({
     <div className="py-6">
       <PageHeader
         title="Onboarding & Offboarding"
-        description="New joiners and leavers — every IT step in one checklist. Raised by HR; replacement requests are a separate request raised from the Asset Register."
+        description="New joiners and leavers — every IT step in one checklist. Raised by HR; replacement requests are a separate request raised from Fixed Assets."
       />
       <FormMessage error={filters.error} notice={filters.notice} />
 

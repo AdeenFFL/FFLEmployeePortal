@@ -25,7 +25,7 @@ const SECTIONS: { label: string; prefixes: string[] }[] = [
   { label: "Onboarding / Offboarding", prefixes: ["it.onboarding."] },
   { label: "Assets", prefixes: ["it.assets."] },
   { label: "Repairs", prefixes: ["it.maintenance."] },
-  { label: "Stock", prefixes: ["it.stock."] },
+  { label: "Consumables", prefixes: ["it.stock."] },
   { label: "Valuation", prefixes: ["it.valuation."] },
   { label: "Inventory settings", prefixes: ["it.inventory_settings."] },
   {
