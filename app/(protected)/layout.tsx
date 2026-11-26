@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { cookies } from "next/headers";
 import { SubmitGuard } from "@/components/submit-guard";
 import { FormFeedback } from "@/components/form-feedback";
 import { Sidebar } from "./sidebar";
@@ -17,6 +18,9 @@ export default async function ProtectedLayout({
 }) {
   const [{ displayName, permissions, homePath }, { unreadCount, notifications }, clearanceSigner, unreadLinks] =
     await Promise.all([getCurrentUserNav(), getRecentNotifications(), isClearanceSigner(), getUnreadLinks()]);
+  // Pinned sidebar (stays open instead of opening on hover): a per-browser choice, read here so
+  // the page arrives already in that state.
+  const sidebarPinned = (await cookies()).get("sidebar_pinned")?.value === "1";
   // Menu-only flag: show HR Management > Clearance to real signers (see clearance-nav.ts).
   const navKeys = clearanceSigner ? [...permissions, CLEARANCE_SIGNER_NAV_KEY] : permissions;
 
@@ -33,7 +37,7 @@ export default async function ProtectedLayout({
           independently scrolling column (see sidebar.tsx) — the outer h-screen + overflow-hidden
           here is what stops the *page* from scrolling, so the sidebar and TopBar stay put and
           only <main> scrolls. */}
-      <Sidebar permissions={navKeys} homePath={homePath} unreadLinks={unreadLinks} />
+      <Sidebar permissions={navKeys} homePath={homePath} unreadLinks={unreadLinks} pinned={sidebarPinned} />
       {/* min-w-0: without it this column grows to fit its widest content (a wide table), pushing
           the page wider than the window: sideways scrolling and a white strip past the grey. */}
       <div className="flex h-screen min-w-0 flex-1 flex-col overflow-hidden">

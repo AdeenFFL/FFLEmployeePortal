@@ -92,6 +92,25 @@ export function MapPinIcon(props: IconProps) {
   );
 }
 
+// Push pin: keep the sidebar open (sidebar.tsx). `filled` when pinned.
+export function PinIcon({ className, filled }: IconProps & { filled?: boolean }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      fill={filled ? "currentColor" : "none"}
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className={className}
+      aria-hidden="true"
+    >
+      <path d="M9 3h6l-1 6 3 3v2H7v-2l3-3-1-6Z" />
+      <path d="M12 14v7" fill="none" />
+    </svg>
+  );
+}
+
 export function HelpCircleIcon(props: IconProps) {
   return (
     <Icon {...props}>

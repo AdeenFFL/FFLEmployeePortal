@@ -15,6 +15,7 @@ import {
   LogoutIcon,
   TicketIcon,
   HelpCircleIcon,
+  PinIcon,
 } from "@/components/icons";
 
 type IconComponent = (props: { className?: string }) => React.ReactElement;
@@ -69,12 +70,16 @@ export function Sidebar({
   permissions,
   homePath,
   unreadLinks: initialUnreadLinks = [],
+  pinned: initialPinned = false,
 }: {
   permissions: string[];
   homePath: string;
   // Links of the person's unread notifications (notification-actions.ts getUnreadLinks).
   unreadLinks?: string[];
+  // Kept open instead of opening on hover (the pin at the top; cookie "sidebar_pinned").
+  pinned?: boolean;
 }) {
+  const [pinned, setPinned] = useState(initialPinned);
   const [unreadLinks, setUnreadLinks] = useState(initialUnreadLinks);
   // The layout (and so these props) is not re-rendered on client-side navigation, so after an
   // admin changes this person's role or its permissions the sidebar would stay as it was until
@@ -152,7 +157,14 @@ export function Sidebar({
     timeoutRef.current = setTimeout(() => setExpandedByHover(false), COLLAPSE_DELAY_MS);
   }
 
-  const collapsed = !expandedByHover;
+  const collapsed = !pinned && !expandedByHover;
+
+  function togglePinned() {
+    const next = !pinned;
+    setPinned(next);
+    // A year; only this browser. Unpinning goes back to opening on hover.
+    document.cookie = `sidebar_pinned=${next ? "1" : "0"}; path=/; max-age=31536000; samesite=lax`;
+  }
 
   const allBaseItems: NavLeaf[] = [
     { type: "link", href: effectiveHomePath, label: "Home", icon: HomeIcon },
@@ -505,10 +517,24 @@ export function Sidebar({
     <aside
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
-      className={`flex h-screen shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-white transition-[width] duration-200 ease-in-out ${
+      className={`relative flex h-screen shrink-0 flex-col overflow-y-auto overflow-x-hidden border-r border-slate-200 bg-white transition-[width] duration-200 ease-in-out ${
         collapsed ? "w-16" : "w-64"
       }`}
     >
+      {!collapsed && (
+        <button
+          type="button"
+          onClick={togglePinned}
+          aria-pressed={pinned}
+          aria-label={pinned ? "Unpin sidebar (open on hover)" : "Pin sidebar open"}
+          title={pinned ? "Unpin: open on hover" : "Pin: keep the sidebar open"}
+          className={`absolute right-2 top-2 z-10 rounded-md p-1.5 transition-colors ${
+            pinned ? "text-blue-600 hover:bg-blue-50" : "text-slate-400 hover:bg-slate-100 hover:text-slate-600"
+          }`}
+        >
+          <PinIcon filled={pinned} className={`h-4 w-4 transition-transform ${pinned ? "" : "rotate-45"}`} />
+        </button>
+      )}
       <div className="flex w-fit items-center gap-2 px-3 py-6">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
