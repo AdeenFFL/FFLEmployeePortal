@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
+import { LiveSearch } from "@/components/live-search";
 import { StatusPill } from "@/components/status-pill";
 import { fetchAssetPersonNames, fetchOrgUnits, hasItPermission } from "@/lib/it/ticket-data";
 import { ProductIcon, productKind } from "../procurement/_components/product-icon";
@@ -42,6 +43,7 @@ export default async function AssetRegisterPage({
     company?: string;
     created?: string;
     deleted?: string;
+    holder?: string;
   }>;
 }) {
   const params = await searchParams;
@@ -60,8 +62,36 @@ export default async function AssetRegisterPage({
       "id, asset_tag, asset_name, serial_number, site_id, company_id, status, updated_at, asset_types(name)",
     )
     .is("deleted_at", null);
+  // Search: tag, serial, name, or who holds it (name or employee code on the open assignment).
+  const holderFilter = /^[0-9a-f-]{36}$/i.test(params.holder ?? "") ? params.holder! : null;
   if (search) {
-    query = query.or(`asset_tag.ilike.*${search}*,serial_number.ilike.*${search}*,asset_name.ilike.*${search}*`);
+    const { data: heldBy } = await supabase
+      .schema("it")
+      .from("asset_assignments")
+      .select("asset_id")
+      .is("return_date", null)
+      .or(`holder_name.ilike.*${search}*,holder_employee_code.ilike.*${search}*`)
+      .limit(200);
+    const heldIds = (heldBy ?? []).map((a) => a.asset_id);
+    query = query.or(
+      [
+        `asset_tag.ilike.*${search}*`,
+        `serial_number.ilike.*${search}*`,
+        `asset_name.ilike.*${search}*`,
+        ...(heldIds.length ? [`id.in.(${heldIds.join(",")})`] : []),
+      ].join(","),
+    );
+  }
+  // Everything one person holds (linked from User Management and from a holder's name).
+  if (holderFilter) {
+    const { data: held } = await supabase
+      .schema("it")
+      .from("asset_assignments")
+      .select("asset_id")
+      .eq("person_id", holderFilter)
+      .is("return_date", null);
+    const ids = (held ?? []).map((a) => a.asset_id);
+    query = query.in("id", ids.length ? ids : ["00000000-0000-0000-0000-000000000000"]);
   }
   if (params.type) query = query.eq("asset_type_id", params.type);
   if (status) query = query.eq("status", status);
@@ -112,6 +142,7 @@ export default async function AssetRegisterPage({
   const holderOf = new Map(
     (openAssignments ?? []).map((a) => [a.asset_id, (a.person_id && holderNames.get(a.person_id)) ?? "—"]),
   );
+  const holderIdOf = new Map((openAssignments ?? []).map((a) => [a.asset_id, a.person_id]));
 
   // Where each listed In Repair asset stands: its open repair and the demand behind it.
   const repairingIds = rows.filter((a) => a.status === "In Repair").map((a) => a.id);
@@ -161,7 +192,8 @@ export default async function AssetRegisterPage({
   const waiting = canCreate ? await waitingDeliveries(supabase, assetTypes ?? [], statusRows ?? []) : [];
   const waitingItems = waiting.reduce((n, w) => n + w.remaining, 0);
 
-  const hasFilters = Boolean(search || params.type || status || params.site || params.company);
+  const hasFilters = Boolean(search || params.type || status || params.site || params.company || holderFilter);
+  const holderFilterName = holderFilter ? (holderNames.get(holderFilter) ?? null) : null;
   const filterHref = (s?: AssetStatus) => {
     const sp = new URLSearchParams();
     if (params.q) sp.set("q", params.q);
@@ -261,29 +293,26 @@ export default async function AssetRegisterPage({
         })}
       </div>
 
+      {holderFilter && (
+        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg bg-blue-50 px-4 py-2.5 text-sm text-blue-900">
+          <span>
+            Showing what <span className="font-semibold">{holderFilterName ?? "this person"}</span> holds
+          </span>
+          <Link href="/it/inventory" className="font-medium text-blue-700 hover:underline">
+            Show all assets
+          </Link>
+        </div>
+      )}
+      <div className="mb-3">
+        <LiveSearch
+          placeholder="Search by tag, serial number, name, or who holds it…"
+          label="Search fixed assets"
+        />
+      </div>
       <form method="get" className="mb-4 flex flex-wrap items-center gap-3">
         {status && <input type="hidden" name="status" value={status} />}
-        <div className="relative min-w-[16rem] flex-1">
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.8}
-            strokeLinecap="round"
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-          >
-            <circle cx="11" cy="11" r="6.5" />
-            <path d="m16 16 4 4" />
-          </svg>
-          <input
-            name="q"
-            defaultValue={params.q ?? ""}
-            placeholder="Tag, serial number or name"
-            aria-label="Search assets"
-            className={`${selectClass} w-full pl-9`}
-          />
-        </div>
+        {params.q && <input type="hidden" name="q" value={params.q} />}
+        {holderFilter && <input type="hidden" name="holder" value={holderFilter} />}
         <select name="type" defaultValue={params.type ?? ""} className={selectClass} aria-label="Type">
           <option value="">All types</option>
           {(assetTypes ?? []).map((t) => (
@@ -369,7 +398,17 @@ export default async function AssetRegisterPage({
                   <StatusPill label={asset.status} tone={ASSET_STATUS_TONES[asset.status]} />
                 </td>
                 <td className="px-4 py-3 text-slate-700">
-                  {holderOf.get(asset.id) ?? <span className="text-slate-300">—</span>}
+                  {holderIdOf.get(asset.id) ? (
+                    <Link
+                      href={`/it/inventory?holder=${holderIdOf.get(asset.id)}`}
+                      title="Everything this person holds"
+                      className="relative z-10 hover:text-blue-700 hover:underline"
+                    >
+                      {holderOf.get(asset.id)}
+                    </Link>
+                  ) : (
+                    <span className="text-slate-300">—</span>
+                  )}
                   {repairStage.has(asset.id) && (
                     <span className="block text-xs text-amber-700">{repairStage.get(asset.id)}</span>
                   )}

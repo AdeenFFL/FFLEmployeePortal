@@ -58,6 +58,16 @@ export default async function AdminUsersPage({
     : { data: [] };
   const roleIdByPersonId = new Map((roleAssignments ?? []).map((r) => [r.person_id, r.role_id]));
 
+  // IT assets each person holds right now (Fixed Assets), so the list can link to them and warn
+  // before someone who still has equipment is switched off.
+  const { data: openAssignments } = personIds.length
+    ? await supabase.schema("it").from("asset_assignments").select("person_id").is("return_date", null)
+    : { data: [] };
+  const assetsHeldBy = new Map<string, number>();
+  for (const a of openAssignments ?? []) {
+    if (a.person_id) assetsHeldBy.set(a.person_id, (assetsHeldBy.get(a.person_id) ?? 0) + 1);
+  }
+
   const { data: invitations } = await supabase
     .from("invited_users")
     .select("*")
@@ -208,6 +218,7 @@ export default async function AdminUsersPage({
       employeeCode: p.employee_code,
       status: p.status,
       lastLogin: account?.last_login_at ?? null,
+      assetsHeld: assetsHeldBy.get(p.id) ?? 0,
     };
   });
   const inviteRows: InviteRow[] = pendingInvitations.map((i) => ({

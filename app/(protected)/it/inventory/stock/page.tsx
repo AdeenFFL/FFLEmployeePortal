@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
+import { LiveSearch } from "@/components/live-search";
 import { fetchAssetPersonNames, fetchOrgUnits, hasItPermission } from "@/lib/it/ticket-data";
 import { fixedAssetTypeIds, isFixedAsset, minimumLevel, stockMinimums } from "@/lib/it/stock";
 import type { ItStockMovementType } from "@/types/database";
@@ -107,7 +108,11 @@ export default async function StockPage({
           return { product: p, siteId, qty, min, state, last: level?.last_movement_at ?? null };
         }),
     )
-    .filter((r) => !q || r.product.product_name.toLowerCase().includes(q) || (r.product.category ?? "").toLowerCase().includes(q))
+    .filter(
+      (r) =>
+        !q ||
+        [r.product.product_name, r.product.category, r.product.unit].some((f) => (f ?? "").toLowerCase().includes(q)),
+    )
     .filter((r) => sp.low !== "1" || r.state !== "ok")
     .sort((a, b) => ({ out: 0, low: 1, ok: 2 })[a.state] - ({ out: 0, low: 1, ok: 2 })[b.state] || a.product.product_name.localeCompare(b.product.product_name));
 
@@ -153,29 +158,7 @@ export default async function StockPage({
       </div>
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <form method="get" className="relative min-w-[16rem] flex-1">
-          {sp.site && <input type="hidden" name="site" value={sp.site} />}
-          {sp.low && <input type="hidden" name="low" value={sp.low} />}
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.8}
-            strokeLinecap="round"
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-          >
-            <circle cx="11" cy="11" r="6.5" />
-            <path d="m16 16 4 4" />
-          </svg>
-          <input
-            name="q"
-            defaultValue={sp.q ?? ""}
-            placeholder="Search consumables — press Enter"
-            aria-label="Search consumables"
-            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
-        </form>
+        <LiveSearch placeholder="Search consumables by name, category or unit…" label="Search consumables" />
         {sites.length > 1 && (
           <div className="flex flex-wrap gap-2">
             {[{ id: "", name: "All sites" }, ...sites].map((s) => (

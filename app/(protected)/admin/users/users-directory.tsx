@@ -21,6 +21,8 @@ export type UserRow = {
   employeeCode: string | null;
   status: UserStatus;
   lastLogin: string | null;
+  // Open asset assignments (Fixed Assets).
+  assetsHeld: number;
 };
 
 export type InviteRow = {
@@ -221,6 +223,7 @@ export function UsersDirectory({
                   <th className="px-5 py-3 font-medium">User</th>
                   <th className="px-4 py-3 font-medium">Role</th>
                   <th className="px-4 py-3 font-medium">Designation</th>
+                  <th className="px-4 py-3 font-medium">Assets</th>
                   <th className="px-4 py-3 font-medium">Last sign-in</th>
                   <th className="px-4 py-3 font-medium">Active</th>
                   <th className="px-4 py-3">
@@ -262,11 +265,31 @@ export function UsersDirectory({
                         <p className="text-slate-700">{u.designation ?? "—"}</p>
                         {u.department && <p className="text-xs text-slate-400">{u.department}</p>}
                       </td>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        {u.assetsHeld > 0 ? (
+                          <Link
+                            href={`/it/inventory?holder=${u.id}`}
+                            title={`See the ${u.assetsHeld} asset${u.assetsHeld === 1 ? "" : "s"} ${display} holds`}
+                            className={`rounded-full px-2.5 py-1 text-xs font-medium hover:underline ${
+                              inactive ? "bg-amber-50 text-amber-800" : "bg-blue-50 text-blue-700"
+                            }`}
+                          >
+                            {u.assetsHeld} held{inactive ? ": not returned" : ""}
+                          </Link>
+                        ) : (
+                          <span className="text-slate-300">—</span>
+                        )}
+                      </td>
                       <td className="whitespace-nowrap px-4 py-3 text-slate-500">{shortDate(u.lastLogin)}</td>
                       <td className="px-4 py-3">
                         <div className="flex items-center gap-2">
                           <OptimisticToggle
                             pressed={u.status === "Active"}
+                            confirmOff={
+                              u.assetsHeld > 0
+                                ? `${display} still holds ${u.assetsHeld} IT asset${u.assetsHeld === 1 ? "" : "s"}. Deactivate anyway? Record the return in Fixed Assets (or through offboarding) so they don't stay on their name.`
+                                : undefined
+                            }
                             label={u.status === "Active" ? `Deactivate ${display}` : `Reactivate ${display}`}
                             action={setUserStatus.bind(null, u.id, u.status === "Active" ? "Inactive" : "Active")}
                           />

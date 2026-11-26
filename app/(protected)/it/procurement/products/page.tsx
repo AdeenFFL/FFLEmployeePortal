@@ -2,6 +2,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
+import { LiveSearch } from "@/components/live-search";
 import { checked, hasItPermission } from "@/lib/it/ticket-data";
 import { formatMoney } from "@/lib/it/procurement";
 import { cardClass, FormMessage, primaryButtonClass } from "../../_components/ticket-ui";
@@ -86,29 +87,7 @@ export default async function ProductsPage({
       <FormMessage error={params.error} notice={params.notice} />
 
       <div className="mb-4 flex flex-wrap items-center gap-3">
-        <form method="get" className="relative min-w-[16rem] flex-1">
-          {kind !== "all" && <input type="hidden" name="kind" value={kind} />}
-          {status !== "active" && <input type="hidden" name="status" value={status} />}
-          <svg
-            aria-hidden
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth={1.8}
-            strokeLinecap="round"
-            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400"
-          >
-            <circle cx="11" cy="11" r="6.5" />
-            <path d="m16 16 4 4" />
-          </svg>
-          <input
-            name="q"
-            defaultValue={params.q ?? ""}
-            placeholder="Search products — press Enter"
-            aria-label="Search products"
-            className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-sm focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-          />
-        </form>
+        <LiveSearch placeholder="Search products by name, category or description…" label="Search products" />
         <FilterChips
           label="Kind"
           items={[

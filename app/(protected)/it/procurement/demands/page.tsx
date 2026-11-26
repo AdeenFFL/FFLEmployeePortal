@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { createClient } from "@/lib/supabase/server";
 import { PageHeader } from "@/components/page-header";
+import { LiveSearch } from "@/components/live-search";
 import { StatusPill } from "@/components/status-pill";
 import { checked, fetchOrgUnits, hasItPermission } from "@/lib/it/ticket-data";
 import { formatDate } from "@/lib/it/tickets";
@@ -155,8 +156,24 @@ export default async function DemandsPage({
   if (category === "none") query = query.is("demand_category", null);
   else if (category) query = query.eq("demand_category", category);
   if (params.site) query = query.eq("site_id", params.site);
-  const q = (params.q ?? "").replace(/[,()*%]/g, " ").trim();
-  if (q) query = query.ilike("demand_number", `%${q}%`);
+  // Search: demand number, what was asked for (product), the vendor, or the justification.
+  const q = (params.q ?? "").replace(/[,()*%"\\]/g, " ").trim();
+  if (q) {
+    const [{ data: qProducts }, { data: qVendors }] = await Promise.all([
+      supabase.schema("it").from("products").select("id").ilike("product_name", `%${q}%`).limit(50),
+      supabase.schema("it").from("vendors").select("id").ilike("vendor_name", `%${q}%`).limit(50),
+    ]);
+    const productIds = (qProducts ?? []).map((p) => p.id);
+    const vendorIds = (qVendors ?? []).map((v) => v.id);
+    query = query.or(
+      [
+        `demand_number.ilike.%${q}%`,
+        `justification.ilike.%${q}%`,
+        ...(productIds.length ? [`product_id.in.(${productIds.join(",")})`] : []),
+        ...(vendorIds.length ? [`vendor_id.in.(${vendorIds.join(",")})`] : []),
+      ].join(","),
+    );
+  }
 
   // KPI strip counts the same visible set, ignoring the filters.
   const countFor = (statuses: ItDemandStatus[]) => {
@@ -219,15 +236,15 @@ export default async function DemandsPage({
         ))}
       </dl>
 
+      <div className="mb-3">
+        <LiveSearch
+          placeholder="Search by demand number, product, vendor or reason…"
+          label="Search demands"
+        />
+      </div>
       <form method="get" className="mb-4 flex flex-wrap items-center gap-2">
         <input type="hidden" name="view" value={view} />
-        <input
-          name="q"
-          defaultValue={params.q ?? ""}
-          placeholder="Search DMD-000123"
-          aria-label="Search demand number"
-          className={`${inputClass} w-48 bg-white`}
-        />
+        {q && <input type="hidden" name="q" value={params.q ?? ""} />}
         {view !== "action" && (
           <select name="status" defaultValue={status} aria-label="Status" className={`${inputClass} w-auto bg-white`}>
             <option value="active">Active</option>

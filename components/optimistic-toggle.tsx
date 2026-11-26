@@ -12,6 +12,7 @@ export function OptimisticToggle({
   label,
   action,
   statusLabels,
+  confirmOff,
 }: {
   pressed: boolean;
   label: string;
@@ -19,12 +20,15 @@ export function OptimisticToggle({
   // Optional adjacent status text (e.g. "Active"/"Inactive") — driven by the same optimistic
   // value so it flips in lockstep with the switch instead of lagging behind until revalidation.
   statusLabels?: { on: string; off: string };
+  // Asked before switching from on to off (e.g. deactivating a user who still holds assets).
+  confirmOff?: string;
 }) {
   const [optimisticPressed, setOptimisticPressed] = useOptimistic(pressed);
   const [, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
 
   function handleClick() {
+    if (pressed && confirmOff && !window.confirm(confirmOff)) return;
     setError(null);
     startTransition(async () => {
       setOptimisticPressed(!pressed);
