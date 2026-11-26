@@ -60,7 +60,7 @@ const UNREAD_POLL_MS = 30_000; // same pace as the notification bell
 // Red count for unread notifications on a menu entry.
 function UnreadPill({ count }: { count: number }) {
   return (
-    <span className="ml-auto flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-red-600 px-1.5 text-[10px] font-bold text-white">
+    <span className="ml-auto inline-flex h-[18px] min-w-[18px] shrink-0 items-center justify-center rounded-full bg-red-50 px-1.5 text-[10px] font-semibold tabular-nums leading-none text-red-600 ring-1 ring-inset ring-red-200">
       {count > 99 ? "99+" : count}
     </span>
   );
@@ -475,7 +475,7 @@ export function Sidebar({
           >
             {entry.label}
           </span>
-          {unread > 0 && !collapsed && <UnreadPill count={unread} />}
+          {unread > 0 && !collapsed && !isOpen && <UnreadPill count={unread} />}
           {!collapsed && (
             <ChevronDownIcon
               className={`h-4 w-4 shrink-0 transition-transform ${isOpen ? "rotate-180" : ""}`}
