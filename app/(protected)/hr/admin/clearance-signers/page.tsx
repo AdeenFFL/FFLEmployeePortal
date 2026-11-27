@@ -52,6 +52,20 @@ export default async function ClearanceSignersPage() {
   const units = unitsResult.data ?? [];
   const signers = signersResult.data ?? [];
 
+  // Signers who are leaving themselves (open clearance, talha_hr_0015): flagged so HR can set a
+  // backup. If this lookup fails the page still shows, just without the flag.
+  const { data: leavingRows } = signers.length
+    ? await hr.rpc("leaving_people", {
+        p_person_ids: [...new Set(signers.map((g: { person_id: string }) => g.person_id))],
+      })
+    : { data: [] };
+  const leavingCase = new Map(
+    (leavingRows ?? []).map((l) => [
+      l.person_id,
+      l.case_number,
+    ]),
+  );
+
   const siteSlots = slots.filter((s) => s.scope === "site");
   const deptSlots = slots.filter((s) => s.scope === "department");
   const sites: Unit[] = units.filter((u) => u.type === "Site");
@@ -71,6 +85,8 @@ export default async function ClearanceSignersPage() {
       warnings.push(`This ${g.site_id ? "site" : "department"} is inactive.`);
     }
     if (!g.can_open_inbox) warnings.push(NO_INBOX_WARNING);
+    const leaving = leavingCase.get(g.person_id);
+    if (leaving) warnings.push(`Leaving: has an open clearance (${leaving}). Set a backup signer.`);
 
     const cellKey = `${g.slot_key}:${unitId}`;
     const cell = signersByCell.get(cellKey) ?? [];

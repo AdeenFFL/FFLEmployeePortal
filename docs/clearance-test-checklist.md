@@ -106,3 +106,19 @@ Signers are set in **Clearance > Clearance Signers**.
 | H2 | Phone width (DevTools, 375 px) | Clearance to sign shows cards, no sideways scrolling; strips wrap |
 | H3 | Empty lists | Icon + one line (🎉 / ✍️ / 🔍) |
 | H4 | Errors | Always shown inline, never in the URL |
+
+## I. Leaving employees (needs talha_hr_0015)
+
+Use an employee with an open request (Submitted or In Clearance), called "the leaver".
+
+| # | Steps | Expected |
+|---|---|---|
+| I1 | IT Inventory > an Unassigned asset > Assign > search the leaver | Amber **Leaving · CLR-…** tag; picking them shows the warning |
+| I2 | Assign the asset to the leaver anyway | Refused: "This employee has an open clearance (CLR-…). Assets cannot be assigned." |
+| I3 | Employee: request clearance, pick a date more than 90 days ahead | Date box stops at 90 days; the database also refuses it |
+| I4 | HR part: line manager search, Handing over to / Email forwarding to | The leaver is not in the list |
+| I5 | IT part: 👤 Assign a line or asset return | The leaver is not in the IT staff list |
+| I6 | Clearance Signers, with the leaver as a signer | ⚠ on their name and in the warnings: "Leaving: … Set a backup signer."; not offered in Add signer |
+| I7 | The leaver: raise a procurement demand | Refused with the open clearance message |
+| I8 | Onboarding or Replacement request for the leaver | Refused; an Offboarding request still works |
+| I9 | Complete a clearance whose last day has passed, then search them in Assign / Signers / Start clearance | Not found |

@@ -400,6 +400,9 @@ export type PersonOption = {
   full_name: string;
   designation: string | null;
   employee_code: string | null;
+  // Case number of the person's open clearance (talha_hr_0015): shown as a "Leaving" tag, and the
+  // database refuses the assignment.
+  leaving_case: string | null;
 };
 
 export async function searchPeople(query: string): Promise<PersonOption[]> {
@@ -411,7 +414,20 @@ export async function searchPeople(query: string): Promise<PersonOption[]> {
     .schema("it")
     .rpc("search_people", { p_query: q, p_limit: 20 });
   if (error) throw new Error(error.message);
-  return data ?? [];
+  const people = data ?? [];
+  if (people.length === 0) return [];
+
+  // Tag people with an open clearance. If this lookup fails the list still shows, untagged.
+  const { data: leaving } = await supabase
+    .schema("hr")
+    .rpc("leaving_people", { p_person_ids: people.map((p) => p.person_id) });
+  const caseOf = new Map(
+    (leaving ?? []).map((l) => [
+      l.person_id,
+      l.case_number,
+    ]),
+  );
+  return people.map((p) => ({ ...p, leaving_case: caseOf.get(p.person_id) ?? null }));
 }
 
 // The latest date a form (assign, send for repair, close repair) may carry. The server runs on UTC,

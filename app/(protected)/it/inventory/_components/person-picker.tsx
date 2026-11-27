@@ -50,7 +50,14 @@ export function PersonPicker({ name }: { name: string }) {
   if (selected) {
     return (
       <div className="flex items-start justify-between gap-2 rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm">
-        <span className="text-slate-900">{describe(selected)}</span>
+        <span className="text-slate-900">
+          {describe(selected)}
+          {selected.leaving_case && (
+            <span className="mt-1 block text-xs font-medium text-amber-700">
+              Leaving ({selected.leaving_case}): assets cannot be assigned to this employee.
+            </span>
+          )}
+        </span>
         <input type="hidden" name={name} value={selected.person_id} />
         <button
           type="button"
@@ -94,6 +101,14 @@ export function PersonPicker({ name }: { name: string }) {
                     className="block w-full px-3 py-2 text-left hover:bg-slate-50"
                   >
                     <span className="text-slate-900">{p.full_name}</span>
+                    {p.leaving_case && (
+                      <span
+                        className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 text-xs font-medium text-amber-800 ring-1 ring-inset ring-amber-200"
+                        title="This employee has an open clearance. Assets cannot be assigned to them."
+                      >
+                        Leaving · {p.leaving_case}
+                      </span>
+                    )}
                     {(p.designation || p.employee_code) && (
                       <span className="block text-xs text-slate-500">
                         {[p.designation, p.employee_code].filter(Boolean).join(" · ")}

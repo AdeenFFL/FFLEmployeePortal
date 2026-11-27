@@ -1790,6 +1790,11 @@ export type Database = {
         };
         Returns: undefined;
       };
+      // talha_hr_0015
+      leaving_people: {
+        Args: { p_person_ids: string[] };
+        Returns: { person_id: string; case_number: string }[];
+      };
     };
   };
   // Cross-schema FKs to public.persons / org_units aren't listed in Relationships (same reason

@@ -29,13 +29,13 @@ const NEW_STATUSES = [
 ] as const;
 
 const inputClass =
-  "rounded-md border border-slate-300 px-2 py-1 text-xs focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
+  "w-full rounded-lg border border-slate-300 px-3 py-2 text-sm focus:border-blue-500 focus:ring-1 focus:ring-blue-500";
 
 // The return form's two buttons: Cancel outlined, Record return filled.
 const cancelButton =
-  "inline-flex items-center gap-1 rounded-md border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center gap-1.5 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60";
 const saveReturnButton =
-  "inline-flex items-center gap-1 rounded-md bg-blue-600 px-3 py-1 text-xs font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60";
+  "inline-flex items-center gap-1.5 rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60";
 
 // A small ⓘ button beside an asset: click to show its details in a little panel.
 function AssetInfo({ asset }: { asset: OpenAsset }) {
@@ -81,12 +81,12 @@ function AssetInfo({ asset }: { asset: OpenAsset }) {
       </button>
       {open && (
         <div
-          className="absolute left-0 top-full z-20 mt-1 w-64 rounded-lg border border-slate-200 bg-white p-3 shadow-lg"
+          className="absolute left-0 top-full z-20 mt-1 w-72 rounded-lg border border-slate-200 bg-white p-3 shadow-lg"
           onKeyDown={(e) => {
             if (e.key === "Escape") setOpen(false);
           }}
         >
-          <dl className="flex flex-col gap-1.5 text-xs">
+          <dl className="flex flex-col gap-2 text-sm">
             {rows.map(([label, value]) => (
               <div key={label} className="flex justify-between gap-3">
                 <dt className="text-slate-500">{label}</dt>
@@ -254,33 +254,42 @@ export function ReturnForm({
   }
 
   return (
-    // One row: what happens, condition, remarks (icon), Cancel, Save. Wraps on a narrow screen.
-    <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-2">
-        <select
-          value={newStatus}
-          onChange={(e) => setNewStatus(e.target.value)}
-          disabled={isPending}
-          aria-label="What happens to the asset"
-          className={`${inputClass} w-56`}
-        >
-          {NEW_STATUSES.map((s) => (
-            <option key={s.value} value={s.value}>
-              {s.label}
-            </option>
-          ))}
-        </select>
-        {!isLost && (
-          <input
-            value={condition}
-            onChange={(e) => setCondition(e.target.value)}
-            maxLength={300}
-            placeholder="Condition on return (e.g. Good)"
-            aria-label="Condition on return"
+    // Two labelled fields side by side (stacked on a phone), then Remarks on the left and
+    // Cancel / Save on the right.
+    <div className="flex flex-col gap-4">
+      <div className="grid gap-4 sm:grid-cols-2">
+        <label className="flex flex-col gap-1.5 text-sm">
+          <span className="font-medium text-slate-700">What happens to it</span>
+          <select
+            value={newStatus}
+            onChange={(e) => setNewStatus(e.target.value)}
             disabled={isPending}
-            className={`${inputClass} w-44`}
-          />
+            className={inputClass}
+          >
+            {NEW_STATUSES.map((s) => (
+              <option key={s.value} value={s.value}>
+                {s.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        {!isLost && (
+          <label className="flex flex-col gap-1.5 text-sm">
+            <span className="font-medium text-slate-700">
+              Condition on return
+            </span>
+            <input
+              value={condition}
+              onChange={(e) => setCondition(e.target.value)}
+              maxLength={300}
+              placeholder="e.g. Good"
+              disabled={isPending}
+              className={inputClass}
+            />
+          </label>
         )}
+      </div>
+      <div className="flex flex-wrap items-center gap-3">
         <RemarksButton
           value={remarks}
           onChange={setRemarks}
@@ -288,31 +297,33 @@ export function ReturnForm({
           required={isLost}
           disabled={isPending}
         />
-        <button
-          type="button"
-          onClick={onClose}
-          disabled={isPending}
-          className={cancelButton}
-        >
-          <XIcon className="h-3.5 w-3.5" />
-          Cancel
-        </button>
-        <button
-          type="button"
-          onClick={handleSave}
-          disabled={isPending || (isLost && !remarks.trim())}
-          className={saveReturnButton}
-        >
-          <CheckIcon className="h-3.5 w-3.5" />
-          {isPending ? "Saving…" : isLost ? "Mark lost" : "Record return"}
-        </button>
+        <div className="ml-auto flex flex-wrap gap-2">
+          <button
+            type="button"
+            onClick={onClose}
+            disabled={isPending}
+            className={cancelButton}
+          >
+            <XIcon className="h-4 w-4" />
+            Cancel
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={isPending || (isLost && !remarks.trim())}
+            className={saveReturnButton}
+          >
+            <CheckIcon className="h-4 w-4" />
+            {isPending ? "Saving…" : isLost ? "Mark lost" : "Record return"}
+          </button>
+        </div>
       </div>
       {isLost && !remarks.trim() && (
-        <p className="text-xs text-slate-500">
+        <p className="text-sm text-slate-500">
           A lost asset needs a remark (💬): what happened?
         </p>
       )}
-      {error && <p className="text-xs text-red-700">{error}</p>}
+      {error && <p className="text-sm text-red-700">{error}</p>}
     </div>
   );
 }

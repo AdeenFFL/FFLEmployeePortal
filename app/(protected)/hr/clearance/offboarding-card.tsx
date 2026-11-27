@@ -8,11 +8,11 @@ import { formatDay, STATUS_TONE } from "../clearance-requests/clearance-view";
 const TZ = "Asia/Karachi";
 
 // "Today" and "one year from today" in Pakistan time (YYYY-MM-DD) for the date input — the same
-// bounds hr.create_clearance_case_internal checks (self: today or later, at most 365 days ahead).
+// bounds hr.create_clearance_case_internal checks (self: today or later, at most 90 days ahead, talha_hr_0015).
 function karachiDateRange() {
   const today = new Intl.DateTimeFormat("en-CA", { timeZone: TZ }).format(new Date());
   const max = new Date(`${today}T00:00:00Z`);
-  max.setUTCDate(max.getUTCDate() + 365);
+  max.setUTCDate(max.getUTCDate() + 90);
   return { min: today, max: max.toISOString().slice(0, 10) };
 }
 
